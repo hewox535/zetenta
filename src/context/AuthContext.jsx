@@ -12,7 +12,13 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      // Al volver a la pestaña, Supabase refresca el token y emite una sesión
+      // nueva del MISMO usuario. Si reemplazamos la referencia, la app entra en
+      // "cargando", desmonta la vista y se pierde lo escrito en formularios.
+      // Solo actualizamos cuando cambia el usuario (login/logout).
+      setSession((prev) => (prev && s && prev.user.id === s.user.id ? prev : s));
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
