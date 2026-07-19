@@ -7,4 +7,6 @@ if (!url || !anonKey) {
   throw new Error('Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en .env');
 }
 
-export const supabase = createClient(url, anonKey);
+export const supabase = createClient(url, anonKey, {
+  auth: { persistSession: false },
+});

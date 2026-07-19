@@ -1,27 +1,31 @@
 // Cálculos del comprobante de retención de IVA.
+// Replica las fórmulas del sheet original:
+//   base imponible = total con IVA / 1.16   (generalizado: (total - exento) / (1 + alícuota))
+//   impuesto IVA   = base * alícuota
+//   IVA retenido   = impuesto * % retención
 // Igual que Excel: los valores se mantienen sin redondear y solo se redondean
 // al mostrarlos (money); redondear pasos intermedios desvía los totales un céntimo.
 
-export function calcLine(line) {
-  const total = Number(line.total_with_vat) || 0;
-  const exempt = Number(line.exempt_amount) || 0;
-  const vatRate = Number(line.vat_rate) || 0;
-  const retentionRate = Number(line.retention_rate) || 0;
+export function calcLinea(linea) {
+  const total = Number(linea.totalConIva) || 0;
+  const exento = Number(linea.exento) || 0;
+  const alicuota = Number(linea.alicuota) || 0;
+  const pctRetencion = Number(linea.pctRetencion) || 0;
 
-  const base = (total - exempt) / (1 + vatRate / 100);
-  const vat = base * (vatRate / 100);
-  const withheld = vat * (retentionRate / 100);
-  return { base, vat, withheld };
+  const base = (total - exento) / (1 + alicuota / 100);
+  const iva = base * (alicuota / 100);
+  const retenido = iva * (pctRetencion / 100);
+  return { base, iva, retenido };
 }
 
-export function calcTotals(lines) {
-  let totalPurchase = 0;
-  let totalWithheld = 0;
-  for (const l of lines) {
-    totalPurchase += Number(l.total_with_vat) || 0;
-    totalWithheld += calcLine(l).withheld;
+export function calcTotales(lineas) {
+  let totalCompra = 0;
+  let totalRetenido = 0;
+  for (const l of lineas) {
+    totalCompra += Number(l.totalConIva) || 0;
+    totalRetenido += calcLinea(l).retenido;
   }
-  return { totalPurchase, totalWithheld, totalPayable: totalPurchase - totalWithheld };
+  return { totalCompra, totalRetenido, totalAPagar: totalCompra - totalRetenido };
 }
 
 const fmt = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -30,13 +34,18 @@ export function money(n) {
   return fmt.format(Number(n) || 0);
 }
 
-// yyyy-mm-dd → dd/mm/yyyy
-export function formatDate(iso) {
-  if (!iso) return '';
-  const [y, m, d] = iso.slice(0, 10).split('-');
-  return `${d}/${m}/${y}`;
+// Número de comprobante SENIAT: AAAAMM + secuencial de 8 dígitos
+export function numeroComprobante(periodo, seq) {
+  return `${periodo}${String(seq).padStart(8, '0')}`;
 }
 
-export function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+// periodo AAAAMM a partir de una fecha ISO (yyyy-mm-dd)
+export function periodoDeFecha(fechaISO) {
+  return fechaISO.slice(0, 7).replace('-', '');
+}
+
+export function formatFecha(fechaISO) {
+  if (!fechaISO) return '';
+  const [y, m, d] = fechaISO.split('-');
+  return `${d}/${m}/${y}`;
 }
