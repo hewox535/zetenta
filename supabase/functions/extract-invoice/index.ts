@@ -2,13 +2,13 @@
 //
 // Secretos (npx supabase secrets set ...):
 //   GEMINI_API_KEY  — clave de https://aistudio.google.com (obligatoria)
-//   GEMINI_MODEL    — opcional, por defecto "gemini-2.5-flash"
+//   GEMINI_MODEL    — opcional, por defecto "gemini-flash-latest"
 //
 // El gateway de Supabase ya exige un JWT válido (verify_jwt), así que solo
 // usuarios autenticados de la plataforma pueden invocarla.
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-const MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash';
+const MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-flash-latest';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
