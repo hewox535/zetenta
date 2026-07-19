@@ -294,20 +294,22 @@ table.sheet td, table.sheet th {
   color: #000;
 }
 
-.negrita { font-weight: 700; }
-.centro { text-align: center; }
+/* Con el prefijo table.sheet para ganar en especificidad a la regla base
+   de las celdas (que fija font-weight 400 y text-align left). */
+.negrita, table.sheet .negrita { font-weight: 700; }
+.centro, table.sheet .centro { text-align: center; }
 table.sheet .num { text-align: right; font-variant-numeric: tabular-nums; }
 .gris { background: #d8d8d8; }             /* relleno de los valores en el sheet */
 .b  { border: 1px solid #000; }
 .bt { border: 1px solid #000; border-bottom: none; } /* caja abierta: etiqueta */
 .bb { border: 1px solid #000; border-top: none; }    /* caja abierta: valor */
 
-.s-titulo { background: #95b3d7; font-size: 17px; font-weight: 700; padding: 3px 7px; }
+table.sheet td.s-titulo { background: #95b3d7; font-size: 17px; font-weight: 700; padding: 3px 7px; }
 /* El texto legal se corta en el borde de la caja del Nro., igual que en el
    export de Google (el texto desborda las columnas A-F y se recorta) */
 table.sheet td.s-legal { font-size: 7.6px; line-height: 1.6; vertical-align: top; padding-right: 16px; }
-.s-lbl-nro { font-size: 7.6px; font-weight: 700; text-align: center; }
-.s-nro { font-size: 11.5px; }
+table.sheet td.s-lbl-nro { font-size: 7.6px; font-weight: 700; text-align: center; }
+table.sheet td.s-nro { font-size: 11.5px; font-weight: 700; }
 
 /* Tabla de operaciones: borde exterior grueso, interior fino (como el sheet) */
 table.sheet .t-head th {
@@ -329,7 +331,7 @@ table.sheet .t-head th {
 .tot-pagar { border: 2px solid #000; border-right: none; }
 .tot-pagar-val { border: 2px solid #000; border-left: none; }
 
-.s-firma { font-size: 12px; font-weight: 700; }
+table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 
 /* ============================================================
    Responsive

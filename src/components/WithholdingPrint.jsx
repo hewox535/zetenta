@@ -53,7 +53,7 @@ export default function WithholdingPrint({ business, withholding }) {
 
           {/* Filas 9-10: agente de retención, RIF y período fiscal */}
           <tr>
-            <td colSpan={5} className="b">2. NOMBRE O RAZON SOCIAL DEL AGENTE DE RETENCION</td>
+            <td colSpan={5} className="b negrita">2. NOMBRE O RAZON SOCIAL DEL AGENTE DE RETENCION</td>
             <td />
             <td colSpan={5} className="b negrita centro">3. REGISTRO DE INFORMACION FISCAL AGENTE DE RETENCION</td>
             <td colSpan={2} className="b negrita centro">4. PERIODO FISCAL</td>
@@ -83,7 +83,7 @@ export default function WithholdingPrint({ business, withholding }) {
           <tr>
             <td colSpan={6} className="bt negrita">6. NOMBRE O RAZON SOCIAL DEL SUJETO RETENIDO</td>
             <td />
-            <td colSpan={6} className="b centro">7. REGISTRO DE INFORMACION FISCAL DEL SUJETO RETENIDO</td>
+            <td colSpan={6} className="b negrita centro">7. REGISTRO DE INFORMACION FISCAL DEL SUJETO RETENIDO</td>
             <td colSpan={2} />
           </tr>
           <tr>
