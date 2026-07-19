@@ -14,12 +14,14 @@ export default function RetentionView() {
     fetchWithholding(id).then(setWithholding).catch((e) => setError(e.message));
   }, [id]);
 
-  // El navegador imprime el título del documento en el encabezado de la hoja;
-  // aquí evitamos que salga "Zetenta" y de paso el PDF se guarda con buen nombre.
+  // El título del documento es el nombre con el que se guarda el PDF:
+  // "{correlativo} {proveedor} {fecha de emisión}", p. ej. "137 Inversiones XYZ 15-07-2026".
   useEffect(() => {
     if (!withholding) return;
     const prev = document.title;
-    document.title = `Comprobante ${withholding.number}`;
+    const seq = String(Number(withholding.number.slice(-8)));
+    const date = (withholding.issue_date || '').split('-').reverse().join('-');
+    document.title = `${seq} ${withholding.supplier_name} ${date}`;
     return () => { document.title = prev; };
   }, [withholding]);
 
