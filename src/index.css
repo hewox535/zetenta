@@ -386,7 +386,9 @@ table.sheet .t-head th {
   .no-print, .sidebar { display: none !important; }
   .content { padding: 0; }
   .page { max-width: none; }
-  .comprobante { border: none; border-radius: 0; padding: 0; overflow: visible; }
+  /* Margen de página 0: elimina el encabezado/pie del navegador (fecha,
+     título y URL). Los márgenes del documento pasan a ser padding propio. */
+  .comprobante { border: none; border-radius: 0; padding: 16mm 22mm; overflow: visible; }
   table.sheet { min-width: 0; }
-  @page { size: legal landscape; margin: 16mm 22mm; }
+  @page { size: legal landscape; margin: 0; }
 }
