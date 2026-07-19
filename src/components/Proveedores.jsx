@@ -1,17 +1,27 @@
 import { useState } from 'react';
 
-export default function Proveedores({ proveedores, setProveedores }) {
+export default function Proveedores({ proveedores, onAgregar, onEliminar }) {
   const [nombre, setNombre] = useState('');
   const [rif, setRif] = useState('');
+  const [agregando, setAgregando] = useState(false);
+  const [error, setError] = useState(null);
 
-  const agregar = () => {
+  const agregar = async () => {
+    setError(null);
     if (!nombre.trim() || !rif.trim()) {
-      alert('Nombre y RIF son obligatorios.');
+      setError('Nombre y RIF son obligatorios.');
       return;
     }
-    setProveedores((prev) => [...prev, { id: crypto.randomUUID(), nombre: nombre.trim(), rif: rif.trim().toUpperCase() }]);
-    setNombre('');
-    setRif('');
+    setAgregando(true);
+    try {
+      await onAgregar({ nombre: nombre.trim(), rif: rif.trim().toUpperCase() });
+      setNombre('');
+      setRif('');
+    } catch (e) {
+      setError('No se pudo agregar el proveedor: ' + (e.message || e));
+    } finally {
+      setAgregando(false);
+    }
   };
 
   return (
@@ -24,9 +34,11 @@ export default function Proveedores({ proveedores, setProveedores }) {
         <label>RIF
           <input value={rif} onChange={(e) => setRif(e.target.value)} placeholder="J-402826257" />
         </label>
-        <button type="button" className="primario" onClick={agregar}>Agregar</button>
+        <button type="button" className="primario" onClick={agregar} disabled={agregando}>
+          {agregando ? 'Agregando…' : 'Agregar'}
+        </button>
       </div>
-
+      {error && <p className="vacio">{error}</p>}
       {proveedores.length === 0 ? (
         <p className="vacio">No hay proveedores guardados todavía.</p>
       ) : (
@@ -42,9 +54,7 @@ export default function Proveedores({ proveedores, setProveedores }) {
                 <td>
                   <button type="button" className="peligro"
                     onClick={() => {
-                      if (confirm(`¿Eliminar a ${p.nombre}?`)) {
-                        setProveedores((prev) => prev.filter((x) => x.id !== p.id));
-                      }
+                      if (confirm(`¿Eliminar a ${p.nombre}?`)) onEliminar(p.id);
                     }}>
                     Eliminar
                   </button>
