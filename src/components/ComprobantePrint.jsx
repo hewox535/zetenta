@@ -1,0 +1,171 @@
+import { calcLinea, calcTotales, money } from '../lib/calc';
+
+// Réplica exacta del Google Sheet original: una sola tabla de 15 columnas
+// (A–O) con los mismos anchos, celdas combinadas, bordes, rellenos y textos
+// literales extraídos del xlsx. Se usa en pantalla y para imprimir / PDF.
+
+// Anchos de columna del sheet (unidades Excel convertidas a %)
+const ANCHOS = [5.77, 6.64, 5.85, 6.25, 6.32, 5.22, 6.32, 6.32, 8.06, 6.32, 10.35, 4.66, 7.43, 6.4, 8.06];
+
+export default function ComprobantePrint({ empresa, comprobante }) {
+  const { lineas } = comprobante;
+  const totales = calcTotales(lineas);
+  const filas = [...lineas];
+  while (filas.length < 5) filas.push(null); // el formato oficial muestra 5 filas
+
+  return (
+    <div className="comprobante">
+      <table className="sheet">
+        <colgroup>
+          {ANCHOS.map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
+        </colgroup>
+        <tbody>
+          {/* Fila 1: nombre de la empresa sobre fondo azul */}
+          <tr>
+            <td colSpan={5} className="s-titulo">{empresa.nombre}</td>
+            <td colSpan={10} />
+          </tr>
+          <tr style={{ height: 8 }}><td colSpan={15} /></tr>
+
+          {/* Filas 3-5: texto legal + Nro. de comprobante + fecha */}
+          <tr>
+            <td colSpan={6} rowSpan={3} className="s-legal">
+              LEY DE IVA ART.11 &quot;SERAN RESPONSABLES DEL PAGO DEL IMPUESTO EN CALIDAD DE AGENTES DE RETENCION,<br />
+              LOS COMPRADORES O ADQUIRIENTES DE DETERMINADOS BIENES MUEBLES E INMUEBLES Y LOS RECEPTORES<br />
+              DE CIERTOS SERVICIOS A QUIENES LA ADMINISTRACION TRIBUTARIA DESIGNE COMO TAL&quot;
+            </td>
+            <td colSpan={4} className="b s-lbl-nro">Nro. DE COMPROBANTE</td>
+            <td />
+            <td colSpan={2} className="b negrita centro">1. FECHA</td>
+            <td colSpan={2} />
+          </tr>
+          <tr>
+            <td colSpan={4} className="b gris centro s-nro">{comprobante.numero}</td>
+            <td />
+            <td colSpan={2} className="b gris centro">{comprobante.fecha}</td>
+            <td colSpan={2} />
+          </tr>
+          <tr><td colSpan={9} /></tr>
+          <tr style={{ height: 32 }}><td colSpan={15} /></tr>
+
+          {/* Filas 9-10: agente de retención, RIF y período fiscal */}
+          <tr>
+            <td colSpan={5} className="b">2. NOMBRE O RAZON SOCIAL DEL AGENTE DE RETENCION</td>
+            <td />
+            <td colSpan={5} className="b negrita centro">3. REGISTRO DE INFORMACION FISCAL AGENTE DE RETENCION</td>
+            <td colSpan={2} className="b negrita centro">4. PERIODO FISCAL</td>
+            <td colSpan={2} />
+          </tr>
+          <tr>
+            <td colSpan={5} className="b gris">{empresa.nombre}</td>
+            <td />
+            <td colSpan={5} className="b gris negrita">{empresa.rif}</td>
+            <td colSpan={2} className="b gris centro">AÑO {comprobante.periodo.slice(0, 4)}/{comprobante.periodo.slice(4)}</td>
+            <td colSpan={2} />
+          </tr>
+          <tr style={{ height: 12 }}><td colSpan={15} /></tr>
+
+          {/* Filas 12-13: dirección del agente */}
+          <tr>
+            <td colSpan={11} className="bt negrita">5. DIRECCION FISCAL DEL AGENTE DE RETENCION</td>
+            <td colSpan={4} />
+          </tr>
+          <tr>
+            <td colSpan={11} className="bb gris">{empresa.direccion}</td>
+            <td colSpan={4} />
+          </tr>
+          <tr style={{ height: 12 }}><td colSpan={15} /></tr>
+
+          {/* Filas 15-16: sujeto retenido y su RIF */}
+          <tr>
+            <td colSpan={6} className="bt negrita">6. NOMBRE O RAZON SOCIAL DEL SUJETO RETENIDO</td>
+            <td />
+            <td colSpan={6} className="b centro">7. REGISTRO DE INFORMACION FISCAL DEL SUJETO RETENIDO</td>
+            <td colSpan={2} />
+          </tr>
+          <tr>
+            <td colSpan={6} className="bb gris negrita">{comprobante.proveedorNombre}</td>
+            <td />
+            <td colSpan={6} className="b gris negrita">{comprobante.proveedorRif}</td>
+            <td colSpan={2} />
+          </tr>
+          <tr style={{ height: 22 }}><td colSpan={15} /></tr>
+
+          {/* Fila 19: cabecera de la tabla de operaciones */}
+          <tr className="t-head">
+            <th>OPER.</th>
+            <th>FECHA</th>
+            <th>Nº DE FACTURA</th>
+            <th>Nº DE CONTROL</th>
+            <th>Nº NOTA DEBITO</th>
+            <th>Nº NOTA CREDITO</th>
+            <th>TIPO DE TRANS.</th>
+            <th>Nº DOC AFECTADO</th>
+            <th>TOTAL COMPRA CON IVA</th>
+            <th>EXENTO</th>
+            <th>BASE IMPONIBLE</th>
+            <th>% ALICUOTA</th>
+            <th>IMPUESTO I.V.A</th>
+            <th>% DE RETENCION</th>
+            <th>I.V.A RETENIDO</th>
+          </tr>
+
+          {/* Filas 20-24: operaciones (siempre 5 filas como el sheet) */}
+          {filas.map((l, i) => {
+            const c = l ? calcLinea(l) : null;
+            return (
+              <tr key={i} className="t-fila">
+                <td className="num">{l ? i + 1 : ' '}</td>
+                <td>{l?.fecha}</td>
+                <td className="num">{l?.nroFactura}</td>
+                <td>{l?.nroControl}</td>
+                <td>{l?.notaDebito}</td>
+                <td>{l?.notaCredito}</td>
+                <td className="centro">{l?.tipoTrans}</td>
+                <td>{l?.docAfectado}</td>
+                <td className="num">{l && money(l.totalConIva)}</td>
+                <td className="num">{l?.exento ? money(l.exento) : ''}</td>
+                <td className="num">{l && money(c.base)}</td>
+                <td className="num">{l && money(l.alicuota)}</td>
+                <td className="num">{l && money(c.iva)}</td>
+                <td className="num">{l && `${Number(l.pctRetencion)}%`}</td>
+                <td className="num">{l && money(c.retenido)}</td>
+              </tr>
+            );
+          })}
+
+          {/* Fila 25: total compra + total IVA retenido */}
+          <tr className="t-tot">
+            <td colSpan={8} />
+            <td className="b num">{money(totales.totalCompra)}</td>
+            <td className="b" />
+            <td colSpan={4} className="tot-iva negrita centro">TOTAL IVA RETENIDO</td>
+            <td className="tot-iva-val num">{money(totales.totalRetenido)}</td>
+          </tr>
+          <tr style={{ height: 10 }}><td colSpan={15} /></tr>
+
+          {/* Fila 27: total a pagar */}
+          <tr className="t-tot">
+            <td colSpan={10} />
+            <td colSpan={4} className="tot-pagar negrita">TOTAL A PAGAR. . . .</td>
+            <td className="tot-pagar-val num negrita">{money(totales.totalAPagar)}</td>
+          </tr>
+
+          {/* Filas 33-36: firmas */}
+          <tr style={{ height: 60 }}><td colSpan={15} /></tr>
+          <tr>
+            <td colSpan={2} />
+            <td colSpan={6} className="s-firma">POR LA EMPRESA</td>
+            <td colSpan={7} className="s-firma">RECIBE:</td>
+          </tr>
+          <tr style={{ height: 29 }}><td colSpan={15} /></tr>
+          <tr>
+            <td colSpan={2} />
+            <td colSpan={6} className="s-firma">{empresa.nombre}</td>
+            <td colSpan={7} className="s-firma">FECHA DE RECEPCION</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}

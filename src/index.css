@@ -1,0 +1,130 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #f2f4f7;
+  color: #1a1a2e;
+}
+
+.app { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+header h1 { font-size: 22px; margin: 8px 0 12px; }
+
+nav { display: flex; gap: 6px; border-bottom: 2px solid #d0d7e2; margin-bottom: 16px; }
+.tab {
+  border: none; background: none; padding: 10px 14px; cursor: pointer;
+  font-size: 14px; color: #4a5568; border-bottom: 3px solid transparent;
+}
+.tab.activa { color: #1a56db; border-bottom-color: #1a56db; font-weight: 600; }
+
+.panel { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.panel h2 { margin-top: 0; font-size: 18px; }
+.panel h3 { font-size: 15px; margin-bottom: 8px; }
+
+.form-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; align-items: end; }
+.form-col { display: flex; flex-direction: column; gap: 12px; max-width: 640px; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: #374151; flex: 1; min-width: 150px; }
+input, select {
+  padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;
+  font-weight: 400; background: #fff; color: inherit;
+}
+input:focus, select:focus { outline: 2px solid #93b4f5; border-color: #1a56db; }
+input.readonly { background: #eef2f7; color: #555; }
+
+fieldset.linea { border: 1px solid #dbe2ec; border-radius: 8px; margin-bottom: 12px; padding: 12px; }
+fieldset.linea legend { font-size: 13px; font-weight: 700; color: #1a56db; padding: 0 6px; }
+
+.calculado { font-size: 13px; color: #374151; background: #f0f6ff; border-radius: 6px; padding: 8px 10px; }
+
+.acciones { display: flex; gap: 8px; margin-bottom: 14px; }
+
+button.primario, button.secundario, button.peligro {
+  padding: 9px 16px; border-radius: 6px; border: none; font-size: 14px; cursor: pointer; font-weight: 600;
+}
+button.primario { background: #1a56db; color: #fff; }
+button.primario:hover { background: #1447b8; }
+button.secundario { background: #e5eaf2; color: #1a1a2e; }
+button.secundario:hover { background: #d6deea; }
+button.peligro { background: #fde8e8; color: #b91c1c; padding: 6px 10px; font-size: 13px; }
+button.peligro:hover { background: #f8d0d0; }
+
+.totales {
+  display: flex; gap: 24px; flex-wrap: wrap; background: #f7f9fc; border: 1px solid #dbe2ec;
+  border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; font-size: 14px;
+}
+
+table.lista { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.lista th { text-align: left; padding: 8px; border-bottom: 2px solid #d0d7e2; font-size: 13px; }
+table.lista td { padding: 8px; border-bottom: 1px solid #e7ecf3; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.vacio { color: #6b7280; font-style: italic; }
+.nota { font-size: 13px; color: #6b7280; }
+
+.barra-vista { display: flex; justify-content: space-between; margin-bottom: 14px; }
+
+/* ---------- Comprobante: réplica exacta del Google Sheet ---------- */
+
+.comprobante {
+  background: #fff; padding: 24px; border: 1px solid #cbd5e1; border-radius: 4px;
+  font-family: Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+
+/* Tamaños = los del sheet escalados a ~72% para llenar carta horizontal
+   (11pt→10.5px, 18pt→17px, 9pt→8.5px, 12pt→12px) */
+table.sheet { width: 100%; border-collapse: collapse; table-layout: fixed; }
+table.sheet td, table.sheet th {
+  padding: 1px 3px; font-size: 10.5px; font-weight: 400; line-height: 1.3;
+  letter-spacing: -0.025em; /* aproxima el ancho de la Calibri del sheet */
+  overflow: hidden; white-space: nowrap; text-align: left; vertical-align: bottom;
+}
+
+.negrita { font-weight: 700; }
+.centro { text-align: center; }
+table.sheet .num { text-align: right; font-variant-numeric: tabular-nums; }
+.gris { background: #d8d8d8; }             /* relleno de los valores en el sheet */
+.b  { border: 1px solid #000; }
+.bt { border: 1px solid #000; border-bottom: none; } /* caja abierta: etiqueta */
+.bb { border: 1px solid #000; border-top: none; }    /* caja abierta: valor */
+
+.s-titulo { background: #95b3d7; font-size: 17px; font-weight: 700; padding: 3px 7px; }
+/* El texto legal se corta en el borde de la caja del Nro., igual que en el
+   export de Google (el texto desborda las columnas A-F y se recorta) */
+table.sheet td.s-legal { font-size: 7.6px; line-height: 2; vertical-align: top; }
+.s-lbl-nro { font-size: 7.6px; font-weight: 700; text-align: center; }
+.s-nro { font-size: 11.5px; }
+
+/* Tabla de operaciones: borde exterior grueso, interior fino (como el sheet) */
+table.sheet .t-head th {
+  border: 1px solid #000; border-top-width: 2px;
+  font-size: 8.5px; font-weight: 700; text-align: center; vertical-align: middle;
+  white-space: normal; height: 38px; padding: 2px;
+}
+.t-head th:first-child { border-left-width: 2px; }
+.t-head th:last-child { border-right-width: 2px; }
+.t-fila td { border: 1px solid #000; height: 16px; }
+.t-fila td:first-child { border-left-width: 2px; }
+.t-fila td:last-child { border-right-width: 2px; }
+
+.tot-iva { border-top: 2px solid #000; border-bottom: 2px solid #000; }
+.tot-iva-val {
+  border: 1px solid #000;
+  border-top-width: 2px; border-bottom-width: 2px; border-right-width: 2px;
+}
+.tot-pagar { border: 2px solid #000; border-right: none; }
+.tot-pagar-val { border: 2px solid #000; border-left: none; }
+
+.s-firma { font-size: 12px; font-weight: 700; }
+
+/* ---------- Impresión / PDF ---------- */
+
+@media print {
+  body { background: #fff; }
+  .no-print { display: none !important; }
+  .app { max-width: none; padding: 0; }
+  .panel { box-shadow: none; padding: 0; }
+  .comprobante { border: none; border-radius: 0; padding: 0; }
+  @page { size: letter landscape; margin: 12mm 10mm; }
+}
