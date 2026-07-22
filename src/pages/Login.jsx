@@ -41,6 +41,7 @@ export default function Login() {
           {error && <div className="form-error">{error}</div>}
           <button className="btn primary lg" disabled={busy}>{busy ? 'Entrando…' : 'Entrar'}</button>
         </form>
+        <p className="auth-alt"><Link to="/forgot-password">¿Olvidaste tu contraseña?</Link></p>
         <p className="auth-alt">¿Tu negocio aún no está en Zetenta? <Link to="/register">Crear cuenta</Link></p>
       </div>
     </div>

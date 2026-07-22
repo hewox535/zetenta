@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Shell from './pages/Shell';
 import Retentions from './pages/Retentions';
 import RetentionNew from './pages/RetentionNew';
@@ -50,6 +52,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<RequireAuth><Shell /></RequireAuth>}>
             <Route index element={<Home />} />
             <Route path="retentions" element={<RequireCapability name="retentions"><Retentions /></RequireCapability>} />

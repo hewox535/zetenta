@@ -1,0 +1,54 @@
+<!-- Plantilla: Recuperación de contraseña (Supabase → Auth → Emails → Reset password) -->
+<!-- Variables de Supabase: {{ .ConfirmationURL }} -->
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f5f5f7;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr>
+    <td align="center">
+      <table width="440" cellpadding="0" cellspacing="0" role="presentation" style="max-width:440px;width:100%;">
+        <tr>
+          <td style="padding:0 8px 18px;">
+            <span style="font-size:22px;font-weight:800;letter-spacing:-1px;color:#1d1d1f;">zetenta</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="background-color:#ffffff;border:1px solid #e4e4e9;border-radius:18px;padding:36px 32px;">
+            <h1 style="margin:0 0 10px;font-size:22px;font-weight:700;color:#1d1d1f;letter-spacing:-0.3px;">
+              Restablece tu contraseña
+            </h1>
+            <p style="margin:0 0 26px;font-size:15px;line-height:1.55;color:#6e6e73;">
+              Recibimos una solicitud para cambiar la contraseña de tu cuenta.
+              Pulsa el botón para crear una nueva. El enlace dura <strong style="color:#1d1d1f;">1 hora</strong> y solo puede usarse una vez.
+            </p>
+            <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 26px;">
+              <tr>
+                <td style="background-color:#0071e3;border-radius:980px;">
+                  <a href="{{ .ConfirmationURL }}" target="_blank"
+                     style="display:inline-block;padding:13px 30px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:980px;">
+                    Crear contraseña nueva
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#6e6e73;">
+              Si el botón no funciona, copia y pega este enlace en tu navegador:
+            </p>
+            <p style="margin:0 0 22px;font-size:12px;line-height:1.5;word-break:break-all;">
+              <a href="{{ .ConfirmationURL }}" style="color:#0071e3;text-decoration:none;">{{ .ConfirmationURL }}</a>
+            </p>
+            <hr style="border:none;border-top:1px solid #e4e4e9;margin:0 0 18px;">
+            <p style="margin:0;font-size:13px;line-height:1.5;color:#6e6e73;">
+              ¿No pediste este cambio? Ignora este correo: tu contraseña seguirá siendo la misma
+              y nadie puede cambiarla sin acceso a este mensaje.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:18px 8px 0;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#9a9aa0;">
+              Zetenta · Tus cuentas, de la A a la Z
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
