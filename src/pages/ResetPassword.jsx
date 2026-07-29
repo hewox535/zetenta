@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import PasswordInput from '../components/PasswordInput';
 
 // Se llega aquí desde el enlace del correo de recuperación. Supabase procesa
 // el token de la URL y crea una sesión temporal; con ella se puede fijar la
@@ -55,12 +56,12 @@ export default function ResetPassword() {
             <form onSubmit={onSubmit} className="auth-form">
               <label>
                 Contraseña nueva
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)}
                   required autoFocus minLength={8} autoComplete="new-password" />
               </label>
               <label>
                 Repite la contraseña
-                <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+                <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)}
                   required minLength={8} autoComplete="new-password" />
               </label>
               {error && <div className="form-error">{error}</div>}

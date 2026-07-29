@@ -11,6 +11,7 @@ const Icon = {
   shield: <svg viewBox="0 0 24 24"><path d="M12 3l7 2.5v5.2c0 4.6-3 8.4-7 10.3-4-1.9-7-5.7-7-10.3V5.5L12 3z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 12l2.2 2.2L15.5 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   cart: <svg viewBox="0 0 24 24"><path d="M4 5h2l1.6 10.4a1 1 0 0 0 1 .85h8.2a1 1 0 0 0 1-.8L20 8H7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><circle cx="9.5" cy="19.5" r="1.4" fill="currentColor"/><circle cx="17" cy="19.5" r="1.4" fill="currentColor"/></svg>,
   chart: <svg viewBox="0 0 24 24"><path d="M4 20V4M4 20h16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M8 20v-6M12 20v-9M16 20v-4M20 20V9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
+  user: <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M4.5 20c.9-3.6 3.6-5.5 7.5-5.5s6.6 1.9 7.5 5.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
 };
 
 export default function Shell() {
@@ -21,15 +22,18 @@ export default function Shell() {
   if (capabilities.orders) {
     items.push({ to: '/orders', label: 'Pedidos', icon: Icon.cart });
   }
+  if (capabilities.inventory) {
+    items.push({ to: '/inventory', label: 'Inventario', icon: Icon.box });
+  }
   if (capabilities.stats) {
     items.push({ to: '/stats', label: 'Estadísticas', icon: Icon.chart });
+  }
+  if (capabilities.customers) {
+    items.push({ to: '/customers', label: 'Clientes', icon: Icon.user });
   }
   if (capabilities.retentions) {
     items.push({ to: '/retentions', label: 'Retenciones', icon: Icon.doc });
     items.push({ to: '/suppliers', label: 'Proveedores', icon: Icon.people });
-  }
-  if (capabilities.inventory) {
-    items.push({ to: '/inventory', label: 'Inventario', icon: Icon.box });
   }
   if (business) {
     items.push({ to: '/settings', label: 'Negocio', icon: Icon.gear });

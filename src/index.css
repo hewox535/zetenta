@@ -392,17 +392,20 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 
 /* ----- Panel lateral (pedido / pago) ----- */
 .pos-panel {
-  position: sticky; top: 20px;
+  position: sticky; top: 20px; height: calc(100vh - 40px);
+  display: flex; flex-direction: column;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
 }
 .pos-panel-bar { display: none; }
-.pos-panel-body { display: flex; flex-direction: column; }
+/* El cuerpo llena la altura; el área central hace scroll y el pie queda fijo abajo */
+.pos-panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pos-panel-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 .pos-panel-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 16px 8px; }
 .pos-panel-head h2 { margin: 0; font-size: 16px; }
 .pos-panel-empty { padding: 24px 16px; color: var(--text-2); font-size: 14px; text-align: center; }
 
-.cart-lines { display: flex; flex-direction: column; max-height: 46vh; overflow-y: auto; }
+.cart-lines { display: flex; flex-direction: column; }
 .cart-line { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--border); }
 .cart-line-info { min-width: 0; }
 .cart-line-name { font-size: 14px; font-weight: 600; line-height: 1.25; }
@@ -420,15 +423,28 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 }
 .qty-stepper input:focus { box-shadow: none; }
 
-.pay-methods { display: flex; flex-direction: column; gap: 10px; padding: 8px 16px; }
-.pay-method { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
-.pay-method-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.pay-method-name { font-size: 14px; font-weight: 600; }
-.pay-method-cur { font-size: 12px; font-weight: 700; color: var(--text-2); }
-.pay-method-input { display: flex; gap: 8px; align-items: center; }
-.pay-method-input input { font-variant-numeric: tabular-nums; }
+/* Métodos de pago como pills seleccionables (varias a la vez) */
+.pay-block { padding: 10px 16px 4px; }
+.pay-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pay-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.pay-pill:hover { border-color: var(--accent-line); }
+.pay-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pay-pill-cur { font-size: 11px; font-weight: 700; opacity: .75; }
+.pay-hint { font-size: 13px; color: var(--text-2); margin-top: 10px; }
 
-.pos-panel-foot { padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); }
+/* Un input por método seleccionado, debajo de la lista de pills */
+.pay-inputs { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 4px; }
+.pay-input-row { display: flex; flex-direction: column; gap: 6px; }
+.pay-input-label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+.pay-input-controls { display: flex; gap: 8px; align-items: center; }
+.pay-input-controls input { font-variant-numeric: tabular-nums; }
+
+.pos-panel-foot { flex: 0 0 auto; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); }
 .pos-panel-foot .totals { margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column; }
 .totals-row.warn { color: var(--danger); font-weight: 600; }
 .totals-row.ok { color: var(--ok); font-weight: 600; }
@@ -437,7 +453,43 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .order-summary-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px 10px; }
 .order-summary-head h2 { margin: 0; }
 .order-summary table.list { width: 100%; }
-.order-customer { padding: 16px 20px 20px; }
+
+/* Selector / creación de cliente en el resumen del pedido */
+.order-customer-block { padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+.oc-label { font-size: 14px; font-weight: 600; }
+.oc-selected {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  border: 1px solid var(--accent-line); background: var(--accent-soft);
+  border-radius: var(--radius-sm); padding: 10px 14px;
+}
+.oc-results { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.oc-results button {
+  text-align: left; padding: 10px 14px; background: var(--surface);
+  border: none; border-top: 1px solid var(--border); cursor: pointer; font-size: 14px; color: var(--text);
+}
+.oc-results button:first-child { border-top: none; }
+.oc-results button:hover { background: var(--accent-soft); }
+.oc-new { display: flex; flex-direction: column; gap: 8px; }
+
+/* Campo de contraseña con ojito */
+.pw-field { position: relative; width: 100%; }
+.pw-field input { width: 100%; padding-right: 44px; }
+.pw-toggle {
+  position: absolute; top: 0; right: 0; height: 100%; width: 42px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer; color: var(--text-2);
+}
+.pw-toggle:hover { color: var(--text); }
+.field-hint { font-size: 12px; color: var(--text-2); margin-top: 4px; }
+
+/* Splash neutro mientras se resuelve la marca del dominio (anti-parpadeo) */
+.brand-splash { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+.brand-spinner {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 3px solid var(--border); border-top-color: var(--accent);
+  animation: zt-spin .7s linear infinite;
+}
+@keyframes zt-spin { to { transform: rotate(360deg); } }
 
 /* ----- Recibo / ticket ----- */
 .receipt-wrap { display: flex; justify-content: center; }
@@ -563,7 +615,7 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
     position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 35;
     border-radius: 18px 18px 0 0; border-bottom: none;
     box-shadow: 0 -6px 30px rgba(0,0,0,.14);
-    max-height: 82vh; display: flex; flex-direction: column;
+    height: auto; max-height: 82vh; display: flex; flex-direction: column;
   }
   .pos-panel-bar {
     display: flex; justify-content: space-between; align-items: center; gap: 12px;

@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { BrandingProvider } from './context/BrandingContext';
+import { BrandingProvider, useBranding } from './context/BrandingContext';
 import Brand from './components/Brand';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -11,6 +11,7 @@ import Retentions from './pages/Retentions';
 import RetentionNew from './pages/RetentionNew';
 import RetentionView from './pages/RetentionView';
 import Suppliers from './pages/Suppliers';
+import Customers from './pages/Customers';
 import Inventory from './pages/Inventory';
 import Orders from './pages/Orders';
 import OrdersHistory from './pages/OrdersHistory';
@@ -21,6 +22,23 @@ import Admin from './pages/Admin';
 
 function Splash() {
   return <div className="splash"><Brand className="splash-brand" /></div>;
+}
+
+// Anti-parpadeo de marca: hasta resolver el white-label del dominio (o tenerlo en
+// caché), mostramos un splash neutro en vez de la marca Zetenta por defecto, para
+// no enseñar una marca y luego cambiarla.
+function BrandGate({ children }) {
+  const { ready, fromCache } = useBranding();
+  if (!ready && !fromCache) return <div className="brand-splash"><span className="brand-spinner" /></div>;
+  return children;
+}
+
+// En dominios white-label (el host resuelve a un negocio) no se permite crear
+// cuentas nuevas: el registro es solo para la plataforma Zetenta.
+function RequirePublicSignup({ children }) {
+  const { businessId } = useBranding();
+  if (businessId) return <Navigate to="/login" replace />;
+  return children;
 }
 
 function RequireAuth({ children }) {
@@ -55,11 +73,12 @@ function Home() {
 export default function App() {
   return (
     <BrandingProvider>
+    <BrandGate>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/register" element={<RequirePublicSignup><Register /></RequirePublicSignup>} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<RequireAuth><Shell /></RequireAuth>}>
@@ -68,6 +87,7 @@ export default function App() {
             <Route path="retentions/new" element={<RequireCapability name="retentions"><RetentionNew /></RequireCapability>} />
             <Route path="retentions/:id" element={<RetentionView />} />
             <Route path="suppliers" element={<RequireCapability name="retentions"><Suppliers /></RequireCapability>} />
+            <Route path="customers" element={<RequireCapability name="customers"><Customers /></RequireCapability>} />
             <Route path="inventory" element={<RequireCapability name="inventory"><Inventory /></RequireCapability>} />
             <Route path="orders" element={<RequireCapability name="orders"><Orders /></RequireCapability>} />
             <Route path="orders/history" element={<RequireCapability name="orders"><OrdersHistory /></RequireCapability>} />
@@ -80,6 +100,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </BrandGate>
     </BrandingProvider>
   );
 }

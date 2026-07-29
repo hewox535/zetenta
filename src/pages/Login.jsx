@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useBranding } from '../context/BrandingContext';
 import Brand from '../components/Brand';
+import PasswordInput from '../components/PasswordInput';
 
 export default function Login() {
   const { signIn } = useAuth();
+  const { businessId } = useBranding();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,13 +40,15 @@ export default function Login() {
           </label>
           <label>
             Contraseña
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+            <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
           </label>
           {error && <div className="form-error">{error}</div>}
           <button className="btn primary lg" disabled={busy}>{busy ? 'Entrando…' : 'Entrar'}</button>
         </form>
         <p className="auth-alt"><Link to="/forgot-password">¿Olvidaste tu contraseña?</Link></p>
-        <p className="auth-alt">¿Tu negocio aún no está en Zetenta? <Link to="/register">Crear cuenta</Link></p>
+        {!businessId && (
+          <p className="auth-alt">¿Tu negocio aún no está en Zetenta? <Link to="/register">Crear cuenta</Link></p>
+        )}
       </div>
     </div>
   );

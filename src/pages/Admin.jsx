@@ -4,9 +4,10 @@ import { formatDate } from '../lib/calc';
 
 const CAPABILITIES = [
   ['orders', 'Pedidos'],
-  ['stats', 'Estadísticas'],
-  ['retentions', 'Retenciones'],
   ['inventory', 'Inventario'],
+  ['stats', 'Estadísticas'],
+  ['customers', 'Clientes'],
+  ['retentions', 'Retenciones'],
 ];
 
 export default function Admin() {

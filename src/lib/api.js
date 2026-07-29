@@ -200,10 +200,31 @@ export async function updateOrderSettings(rateConfig) {
   return unwrap(await supabase.rpc('update_order_settings', { p_rate_config: rateConfig }));
 }
 
+// ---------- Clientes ----------
+
+export async function fetchCustomers() {
+  return unwrap(await supabase.from('customers').select('*').order('name'));
+}
+
+export async function createCustomer(businessId, { name, document, phone, email }) {
+  return unwrap(await supabase.from('customers')
+    .insert({ business_id: businessId, name, document: document || '', phone: phone || '', email: email || '' })
+    .select().single());
+}
+
+export async function updateCustomer(id, patch) {
+  return unwrap(await supabase.from('customers')
+    .update(patch).eq('id', id).select().single());
+}
+
+export async function deleteCustomer(id) {
+  unwrap(await supabase.from('customers').delete().eq('id', id));
+}
+
 // ---------- Pedidos ----------
 
 // items: [{ product_id, quantity }]   payments: [{ method_id, method_name, currency, amount }]
-export async function createOrder({ items, payments, rate, rateSource, customerName, note }) {
+export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note }) {
   return unwrap(await supabase.rpc('create_order', {
     p_items: items,
     p_payments: payments,
@@ -211,6 +232,7 @@ export async function createOrder({ items, payments, rate, rateSource, customerN
     p_rate_source: rateSource,
     p_customer_name: customerName || '',
     p_note: note || '',
+    p_customer_id: customerId || null,
   }));
 }
 

@@ -2,17 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  fetchProducts, fetchTaxonomies, fetchPaymentMethods, createOrder, fetchOrder,
+  fetchProducts, fetchTaxonomies, fetchPaymentMethods, fetchCustomers,
+  createCustomer, createOrder, fetchOrder,
 } from '../lib/api';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { usd, bs, money } from '../lib/calc';
 import OrderReceipt from '../components/OrderReceipt';
+
+const EMPTY_CUST = { name: '', document: '', phone: '', email: '' };
 
 export default function Orders() {
   const { business } = useAuth();
   const [products, setProducts] = useState(null);
   const [taxonomies, setTaxonomies] = useState([]);
   const [methods, setMethods] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [rates, setRates] = useState(null);
   const [rateError, setRateError] = useState(null);
   const [error, setError] = useState(null);
@@ -24,14 +28,22 @@ export default function Orders() {
   const [stage, setStage] = useState('shop');          // 'shop' | 'pay' | 'done'
   const [panelOpen, setPanelOpen] = useState(false);   // hoja inferior en móvil
 
-  const [customerName, setCustomerName] = useState('');
+  // Cliente del pedido: existente (selectedCustomer) o nuevo (newCust)
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [custSearch, setCustSearch] = useState('');
+  const [showNewCust, setShowNewCust] = useState(false);
+  const [newCust, setNewCust] = useState(EMPTY_CUST);
+
+  const [selectedMethods, setSelectedMethods] = useState([]); // ids de métodos activos
   const [payments, setPayments] = useState({});        // { methodId: 'monto' }
   const [busy, setBusy] = useState(false);
   const [finished, setFinished] = useState(null);      // pedido guardado (con ítems/pagos)
 
   useEffect(() => {
-    Promise.all([fetchProducts(), fetchTaxonomies(), fetchPaymentMethods()])
-      .then(([p, t, m]) => { setProducts(p); setTaxonomies(t); setMethods(m.filter((x) => x.active)); })
+    Promise.all([fetchProducts(), fetchTaxonomies(), fetchPaymentMethods(), fetchCustomers()])
+      .then(([p, t, m, c]) => {
+        setProducts(p); setTaxonomies(t); setMethods(m.filter((x) => x.active)); setCustomers(c);
+      })
       .catch((e) => setError(e.message));
     fetchBcvRates().then(setRates).catch((e) => setRateError(e.message));
   }, []);
@@ -54,13 +66,25 @@ export default function Orders() {
   const totalUsd = cart.reduce((s, c) => s + c.price * c.qty, 0);
   const totalVes = totalUsd * rate.value;
 
-  // ------- pagos -------
-  const paidUsd = methods.reduce((s, m) => {
-    const amt = Number(payments[m.id]) || 0;
+  // ------- pagos (solo los métodos seleccionados) -------
+  const paidUsd = selectedMethods.reduce((s, id) => {
+    const m = methods.find((x) => x.id === id);
+    if (!m) return s;
+    const amt = Number(payments[id]) || 0;
     return s + (m.currency === 'USD' ? amt : (rate.value ? amt / rate.value : 0));
   }, 0);
   const remainingUsd = Math.max(0, totalUsd - paidUsd);
   const changeUsd = Math.max(0, paidUsd - totalUsd);
+
+  const toggleMethod = (m) => {
+    setSelectedMethods((prev) => {
+      if (prev.includes(m.id)) {
+        setPayments((p) => { const n = { ...p }; delete n[m.id]; return n; });
+        return prev.filter((x) => x !== m.id);
+      }
+      return [...prev, m.id];
+    });
+  };
 
   const fillExact = (m) => {
     // Completa el restante con este método (convertido a su moneda)
@@ -70,9 +94,19 @@ export default function Orders() {
     setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
   };
 
+  // ------- cliente -------
+  const custMatches = custSearch.trim()
+    ? customers.filter((c) => {
+        const q = custSearch.trim().toLowerCase();
+        return c.name.toLowerCase().includes(q) || (c.document || '').toLowerCase().includes(q);
+      }).slice(0, 6)
+    : [];
+
+  const pickCustomer = (c) => { setSelectedCustomer(c); setCustSearch(''); setShowNewCust(false); };
+  const setNew = (k) => (e) => setNewCust((f) => ({ ...f, [k]: e.target.value }));
+  const resetCustomer = () => { setSelectedCustomer(null); setCustSearch(''); setShowNewCust(false); setNewCust(EMPTY_CUST); };
+
   // ------- categorías / filtros -------
-  const termName = new Map();
-  taxonomies.forEach((t) => t.taxonomy_terms.forEach((term) => termName.set(term.id, term.name)));
   const filterables = taxonomies.filter((t) => t.taxonomy_terms.length > 0);
 
   const visible = (products || []).filter((p) => {
@@ -87,18 +121,33 @@ export default function Orders() {
     if (!rate.value) { setError('No hay tasa de cambio disponible. Configúrala en Negocio → Pedidos.'); return; }
     setBusy(true);
     try {
+      // Resuelve el cliente: existente, nuevo (se crea) o ninguno.
+      let customerId = selectedCustomer?.id || null;
+      let customerName = selectedCustomer?.name || '';
+      if (!selectedCustomer && showNewCust && newCust.name.trim()) {
+        const created = await createCustomer(business.id, {
+          name: newCust.name.trim(), document: newCust.document.trim(),
+          phone: newCust.phone.trim(), email: newCust.email.trim(),
+        });
+        setCustomers((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+        customerId = created.id; customerName = created.name;
+      }
+
       const items = cart.map((c) => ({ product_id: c.id, quantity: c.qty }));
-      const pays = methods
-        .map((m) => ({ methodId: m.id, m, amount: Number(payments[m.id]) || 0 }))
+      const pays = selectedMethods
+        .map((id) => methods.find((x) => x.id === id))
+        .filter(Boolean)
+        .map((m) => ({ m, amount: Number(payments[m.id]) || 0 }))
         .filter((x) => x.amount > 0)
-        .map((x) => ({ method_id: x.methodId, method_name: x.m.name, currency: x.m.currency, amount: x.amount }));
+        .map((x) => ({ method_id: x.m.id, method_name: x.m.name, currency: x.m.currency, amount: x.amount }));
+
       const created = await createOrder({
-        items, payments: pays, rate: rate.value, rateSource: rate.source, customerName,
+        items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName,
       });
       const full = await fetchOrder(created.id);
       setFinished(full);
       setStage('done');
-      setCart([]); setPayments({}); setCustomerName(''); setPanelOpen(false);
+      setCart([]); setPayments({}); setSelectedMethods([]); resetCustomer(); setPanelOpen(false);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -230,10 +279,45 @@ export default function Orders() {
                   ))}
                 </tbody>
               </table>
-              <label className="order-customer">
-                Cliente (opcional)
-                <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Nombre del cliente" />
-              </label>
+
+              {/* -------- Cliente: elegir existente o crear nuevo -------- */}
+              <div className="order-customer-block">
+                <div className="oc-label">Cliente (opcional)</div>
+                {selectedCustomer ? (
+                  <div className="oc-selected">
+                    <div>
+                      <strong>{selectedCustomer.name}</strong>
+                      {selectedCustomer.document && <span className="muted"> · {selectedCustomer.document}</span>}
+                    </div>
+                    <button type="button" className="btn ghost sm" onClick={resetCustomer}>Quitar</button>
+                  </div>
+                ) : showNewCust ? (
+                  <div className="oc-new">
+                    <input placeholder="Nombre" value={newCust.name} onChange={setNew('name')} autoFocus />
+                    <input placeholder="Documento (opcional)" value={newCust.document} onChange={setNew('document')} />
+                    <input placeholder="Teléfono (opcional)" value={newCust.phone} onChange={setNew('phone')} inputMode="tel" />
+                    <input placeholder="Correo (opcional)" value={newCust.email} onChange={setNew('email')} type="email" />
+                    <button type="button" className="btn ghost sm" onClick={() => { setShowNewCust(false); setNewCust(EMPTY_CUST); }}>
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input className="oc-search" placeholder="Buscar cliente por nombre o documento…"
+                      value={custSearch} onChange={(e) => setCustSearch(e.target.value)} />
+                    {custMatches.length > 0 && (
+                      <div className="oc-results">
+                        {custMatches.map((c) => (
+                          <button type="button" key={c.id} onClick={() => pickCustomer(c)}>
+                            {c.name}{c.document && <span className="muted"> · {c.document}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <button type="button" className="btn ghost sm" onClick={() => setShowNewCust(true)}>+ Nuevo cliente</button>
+                  </>
+                )}
+              </div>
             </div>
           )}
         </section>
@@ -247,63 +331,91 @@ export default function Orders() {
           </button>
 
           <div className="pos-panel-body">
-            {stage === 'shop' ? (
-              <>
-                <div className="pos-panel-head">
-                  <h2>Pedido</h2>
-                  {cart.length > 0 && <button className="btn ghost sm" onClick={() => setCart([])}>Vaciar</button>}
-                </div>
-                {cart.length === 0 ? (
-                  <div className="pos-panel-empty">Aún no has agregado productos.</div>
-                ) : (
-                  <div className="cart-lines">
-                    {cart.map((c) => (
-                      <div className="cart-line" key={c.id}>
-                        <div className="cart-line-info">
-                          <div className="cart-line-name">{c.name}</div>
-                          <div className="muted">{usd(c.price)} · {bs(c.price * rate.value)}</div>
-                        </div>
-                        <div className="qty-stepper">
-                          <button onClick={() => setQty(c.id, c.qty - 1)} aria-label="Quitar uno">−</button>
-                          <input value={c.qty} inputMode="numeric"
-                            onChange={(e) => setQty(c.id, Math.max(0, parseInt(e.target.value, 10) || 0))} />
-                          <button onClick={() => setQty(c.id, c.qty + 1)} aria-label="Agregar uno">+</button>
-                        </div>
-                        <div className="cart-line-total">{usd(c.price * c.qty)}</div>
-                      </div>
-                    ))}
+            <div className="pos-panel-scroll">
+              {stage === 'shop' ? (
+                <>
+                  <div className="pos-panel-head">
+                    <h2>Pedido</h2>
+                    {cart.length > 0 && <button className="btn ghost sm" onClick={() => setCart([])}>Vaciar</button>}
                   </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="pos-panel-head">
-                  <h2>Pago</h2>
-                </div>
-                <div className="pay-methods">
-                  {methods.length === 0 && (
+                  {cart.length === 0 ? (
+                    <div className="pos-panel-empty">Aún no has agregado productos.</div>
+                  ) : (
+                    <div className="cart-lines">
+                      {cart.map((c) => (
+                        <div className="cart-line" key={c.id}>
+                          <div className="cart-line-info">
+                            <div className="cart-line-name">{c.name}</div>
+                            <div className="muted">{usd(c.price)} · {bs(c.price * rate.value)}</div>
+                          </div>
+                          <div className="qty-stepper">
+                            <button onClick={() => setQty(c.id, c.qty - 1)} aria-label="Quitar uno">−</button>
+                            <input value={c.qty} inputMode="numeric"
+                              onChange={(e) => setQty(c.id, Math.max(0, parseInt(e.target.value, 10) || 0))} />
+                            <button onClick={() => setQty(c.id, c.qty + 1)} aria-label="Agregar uno">+</button>
+                          </div>
+                          <div className="cart-line-total">{usd(c.price * c.qty)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="pos-panel-head">
+                    <h2>Pago</h2>
+                  </div>
+                  {methods.length === 0 ? (
                     <div className="pos-panel-empty">
                       No hay métodos de pago. Agrégalos en <Link to="/settings">Negocio → Pedidos</Link>.
                     </div>
-                  )}
-                  {methods.map((m) => (
-                    <div className="pay-method" key={m.id}>
-                      <div className="pay-method-head">
-                        <span className="pay-method-name">{m.name}</span>
-                        <span className="pay-method-cur">{m.currency === 'USD' ? '$' : 'Bs'}</span>
+                  ) : (
+                    <>
+                      {/* Métodos como pills: se pueden seleccionar varios */}
+                      <div className="pay-block">
+                        <div className="pay-pills">
+                          {methods.map((m) => (
+                            <button type="button" key={m.id}
+                              className={`pay-pill${selectedMethods.includes(m.id) ? ' active' : ''}`}
+                              onClick={() => toggleMethod(m)}>
+                              {m.name}
+                              <span className="pay-pill-cur">{m.currency === 'USD' ? '$' : 'Bs'}</span>
+                            </button>
+                          ))}
+                        </div>
+                        {selectedMethods.length === 0 && (
+                          <div className="pay-hint">Selecciona uno o varios métodos de pago.</div>
+                        )}
                       </div>
-                      <div className="pay-method-input">
-                        <input inputMode="decimal" placeholder="0,00" value={payments[m.id] || ''}
-                          onChange={(e) => setPayments((prev) => ({ ...prev, [m.id]: e.target.value }))} />
-                        <button type="button" className="btn ghost sm" onClick={() => fillExact(m)}>Exacto</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
 
-            {/* Totales y acción */}
+                      {/* Un input por cada método seleccionado, debajo de la lista */}
+                      {selectedMethods.length > 0 && (
+                        <div className="pay-inputs">
+                          {selectedMethods
+                            .map((id) => methods.find((x) => x.id === id))
+                            .filter(Boolean)
+                            .map((m) => (
+                              <div className="pay-input-row" key={m.id}>
+                                <div className="pay-input-label">
+                                  <span>{m.name}</span>
+                                  <span className="muted">{m.currency === 'USD' ? 'USD' : 'Bs'}</span>
+                                </div>
+                                <div className="pay-input-controls">
+                                  <input inputMode="decimal" placeholder="0,00" value={payments[m.id] || ''}
+                                    onChange={(e) => setPayments((prev) => ({ ...prev, [m.id]: e.target.value }))} />
+                                  <button type="button" className="btn ghost sm" onClick={() => fillExact(m)}>Exacto</button>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Totales y acción (fijos abajo) */}
             <div className="pos-panel-foot">
               <div className="totals">
                 <div className="totals-row grand"><span>Total</span><span>{usd(totalUsd)}</span></div>
