@@ -392,8 +392,7 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 
 /* ----- Panel lateral (pedido / pago) ----- */
 .pos-panel {
-  position: sticky; top: 20px; height: calc(100vh - 40px);
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; min-height: 0;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
 }
@@ -569,6 +568,18 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 /* ============================================================
    Responsive
    ============================================================ */
+
+/* Escritorio: la página de Pedidos se ajusta al alto disponible del viewport.
+   El catálogo y el panel derecho hacen scroll interno, así el botón principal
+   del panel queda siempre fijo abajo y visible sin scrollear la página. */
+@media (min-width: 821px) {
+  .pos-page { height: calc(100vh - 96px); display: flex; flex-direction: column; }
+  .pos-page > .page-head { flex: 0 0 auto; margin-bottom: 16px; }
+  .pos-page > .form-error { flex: 0 0 auto; }
+  .pos { flex: 1; min-height: 0; align-items: stretch; }
+  .pos-main { min-height: 0; overflow-y: auto; padding-right: 4px; }
+  .pos-panel { height: 100%; }
+}
 
 @media (max-width: 820px) {
   .shell { flex-direction: column; }
