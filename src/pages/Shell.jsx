@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import Brand from '../components/Brand';
 
 const Icon = {
   doc: <svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M13.5 3.5V9H19" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>,
@@ -9,8 +8,6 @@ const Icon = {
   box: <svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4V8z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M4 8l8 4 8-4M12 12v8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>,
   gear: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M12 2.8l1.2 2.6 2.8-.5 1 2.7 2.7 1-.5 2.8 2.6 1.2-2.6 1.2.5 2.8-2.7 1-1 2.7-2.8-.5L12 21.2l-1.2-2.6-2.8.5-1-2.7-2.7-1 .5-2.8L2.2 12l2.6-1.2-.5-2.8 2.7-1 1-2.7 2.8.5L12 2.8z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
   shield: <svg viewBox="0 0 24 24"><path d="M12 3l7 2.5v5.2c0 4.6-3 8.4-7 10.3-4-1.9-7-5.7-7-10.3V5.5L12 3z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 12l2.2 2.2L15.5 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
-  cart: <svg viewBox="0 0 24 24"><path d="M4 5h2l1.6 10.4a1 1 0 0 0 1 .85h8.2a1 1 0 0 0 1-.8L20 8H7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><circle cx="9.5" cy="19.5" r="1.4" fill="currentColor"/><circle cx="17" cy="19.5" r="1.4" fill="currentColor"/></svg>,
-  chart: <svg viewBox="0 0 24 24"><path d="M4 20V4M4 20h16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M8 20v-6M12 20v-9M16 20v-4M20 20V9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
 };
 
 export default function Shell() {
@@ -18,12 +15,6 @@ export default function Shell() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const items = [];
-  if (capabilities.orders) {
-    items.push({ to: '/orders', label: 'Pedidos', icon: Icon.cart });
-  }
-  if (capabilities.stats) {
-    items.push({ to: '/stats', label: 'Estadísticas', icon: Icon.chart });
-  }
   if (capabilities.retentions) {
     items.push({ to: '/retentions', label: 'Retenciones', icon: Icon.doc });
     items.push({ to: '/suppliers', label: 'Proveedores', icon: Icon.people });
@@ -45,11 +36,11 @@ export default function Shell() {
         <button className="menu-btn" aria-label="Abrir menú" onClick={() => setMenuOpen(true)}>
           <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
         </button>
-        <Brand className="sidebar-brand" />
+        <div className="sidebar-brand">zetenta</div>
       </header>
       {menuOpen && <div className="sidebar-backdrop no-print" onClick={() => setMenuOpen(false)} />}
       <aside className={`sidebar no-print${menuOpen ? ' open' : ''}`}>
-        <Brand className="sidebar-brand" />
+        <div className="sidebar-brand">zetenta</div>
         <nav className="sidebar-nav">
           {items.map((it) => (
             <NavLink key={it.to} to={it.to} onClick={() => setMenuOpen(false)}

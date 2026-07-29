@@ -1,7 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { BrandingProvider } from './context/BrandingContext';
-import Brand from './components/Brand';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -12,15 +10,11 @@ import RetentionNew from './pages/RetentionNew';
 import RetentionView from './pages/RetentionView';
 import Suppliers from './pages/Suppliers';
 import Inventory from './pages/Inventory';
-import Orders from './pages/Orders';
-import OrdersHistory from './pages/OrdersHistory';
-import OrderView from './pages/OrderView';
-import Stats from './pages/Stats';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
 
 function Splash() {
-  return <div className="splash"><Brand className="splash-brand" /></div>;
+  return <div className="splash"><div className="splash-brand">zetenta</div></div>;
 }
 
 function RequireAuth({ children }) {
@@ -46,7 +40,6 @@ function RequireCapability({ name, children }) {
 function Home() {
   const { isAdmin, capabilities } = useAuth();
   if (isAdmin) return <Navigate to="/admin" replace />;
-  if (capabilities.orders) return <Navigate to="/orders" replace />;
   if (capabilities.retentions) return <Navigate to="/retentions" replace />;
   if (capabilities.inventory) return <Navigate to="/inventory" replace />;
   return <Navigate to="/settings" replace />;
@@ -54,7 +47,6 @@ function Home() {
 
 export default function App() {
   return (
-    <BrandingProvider>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -69,10 +61,6 @@ export default function App() {
             <Route path="retentions/:id" element={<RetentionView />} />
             <Route path="suppliers" element={<RequireCapability name="retentions"><Suppliers /></RequireCapability>} />
             <Route path="inventory" element={<RequireCapability name="inventory"><Inventory /></RequireCapability>} />
-            <Route path="orders" element={<RequireCapability name="orders"><Orders /></RequireCapability>} />
-            <Route path="orders/history" element={<RequireCapability name="orders"><OrdersHistory /></RequireCapability>} />
-            <Route path="orders/:id" element={<RequireCapability name="orders"><OrderView /></RequireCapability>} />
-            <Route path="stats" element={<RequireCapability name="stats"><Stats /></RequireCapability>} />
             <Route path="settings" element={<Settings />} />
             <Route path="admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -80,6 +68,5 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
-    </BrandingProvider>
   );
 }

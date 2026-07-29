@@ -30,16 +30,6 @@ export function money(n) {
   return fmt.format(Number(n) || 0);
 }
 
-// Bolívares con separadores es-VE y sufijo "Bs" (para el módulo de pedidos).
-export function bs(n) {
-  return `Bs ${fmt.format(Number(n) || 0)}`;
-}
-
-// Dólares con prefijo "$".
-export function usd(n) {
-  return `$${fmt.format(Number(n) || 0)}`;
-}
-
 // yyyy-mm-dd → dd/mm/yyyy
 export function formatDate(iso) {
   if (!iso) return '';

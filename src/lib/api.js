@@ -172,69 +172,6 @@ export async function extractInvoice(file) {
   return data.extracted;
 }
 
-// ---------- Métodos de pago ----------
-
-export async function fetchPaymentMethods() {
-  return unwrap(await supabase.from('payment_methods')
-    .select('*').order('sort_order').order('created_at'));
-}
-
-export async function createPaymentMethod(businessId, { name, currency, details }) {
-  return unwrap(await supabase.from('payment_methods')
-    .insert({ business_id: businessId, name, currency, details: details || {} })
-    .select().single());
-}
-
-export async function updatePaymentMethod(id, patch) {
-  return unwrap(await supabase.from('payment_methods')
-    .update(patch).eq('id', id).select().single());
-}
-
-export async function deletePaymentMethod(id) {
-  unwrap(await supabase.from('payment_methods').delete().eq('id', id));
-}
-
-// ---------- Ajustes de pedidos (tasa de cambio) ----------
-
-export async function updateOrderSettings(rateConfig) {
-  return unwrap(await supabase.rpc('update_order_settings', { p_rate_config: rateConfig }));
-}
-
-// ---------- Pedidos ----------
-
-// items: [{ product_id, quantity }]   payments: [{ method_id, method_name, currency, amount }]
-export async function createOrder({ items, payments, rate, rateSource, customerName, note }) {
-  return unwrap(await supabase.rpc('create_order', {
-    p_items: items,
-    p_payments: payments,
-    p_rate: rate,
-    p_rate_source: rateSource,
-    p_customer_name: customerName || '',
-    p_note: note || '',
-  }));
-}
-
-export async function fetchOrders() {
-  return unwrap(await supabase.from('orders')
-    .select('*, order_payments(*)')
-    .order('created_at', { ascending: false }));
-}
-
-export async function fetchOrder(id) {
-  return unwrap(await supabase.from('orders')
-    .select('*, order_items(*), order_payments(*)').eq('id', id).single());
-}
-
-// Pedidos con ítems y pagos en un rango de fechas, para estadísticas.
-export async function fetchOrdersForStats(fromISO, toISO) {
-  let q = supabase.from('orders')
-    .select('*, order_items(*), order_payments(*)')
-    .order('created_at', { ascending: false });
-  if (fromISO) q = q.gte('created_at', fromISO);
-  if (toISO) q = q.lte('created_at', toISO);
-  return unwrap(await q);
-}
-
 // ---------- Administración de la plataforma ----------
 
 export async function fetchBusinesses() {
@@ -244,16 +181,4 @@ export async function fetchBusinesses() {
 export async function updateBusinessCapabilities(id, capabilities) {
   return unwrap(await supabase.from('businesses')
     .update({ capabilities }).eq('id', id).select().single());
-}
-
-// White label: el administrador configura dominio y marca de cada negocio.
-// slug / custom_domain vacíos se guardan como NULL (para no romper el índice único).
-export async function updateBusinessBranding(id, { slug, customDomain, branding }) {
-  return unwrap(await supabase.from('businesses')
-    .update({
-      slug: slug?.trim() ? slug.trim().toLowerCase() : null,
-      custom_domain: customDomain?.trim() ? customDomain.trim().toLowerCase() : null,
-      branding: branding || {},
-    })
-    .eq('id', id).select().single());
 }
