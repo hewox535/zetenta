@@ -7,6 +7,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0071e3" />
     <title>Zetenta</title>
+    <script>
+      // Título (y color) del tab sin parpadeo: se toman de la marca cacheada por
+      // dominio (misma clave que BrandingContext) de forma síncrona, antes del
+      // primer render. Sin caché queda vacío hasta que la app resuelva la marca,
+      // así nunca se muestra una marca equivocada (p. ej. "Zetenta" en el dominio
+      // de un cliente). El <title> estático de arriba es el fallback sin JS/SEO.
+      try {
+        var _b = JSON.parse(localStorage.getItem('zt-brand:' + location.hostname) || 'null');
+        document.title = _b && _b.name && _b.name !== 'zetenta' ? _b.name : (_b ? 'Zetenta' : '');
+        if (_b && _b.accent) {
+          var _m = document.querySelector('meta[name="theme-color"]');
+          if (_m) _m.setAttribute('content', _b.accent);
+        }
+      } catch (e) { /* localStorage no disponible */ }
+    </script>
     <meta name="description" content="Zetenta — gestión de negocio: pedidos, inventario, retenciones y estadísticas en un solo lugar." />
     <meta name="apple-mobile-web-app-title" content="Zetenta" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
