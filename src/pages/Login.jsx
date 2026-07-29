@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Brand from '../components/Brand';
 
 export default function Login() {
   const { signIn } = useAuth();
@@ -26,7 +27,7 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-brand">zetenta</div>
+        <Brand className="auth-brand" />
         <h1>Inicia sesión</h1>
         <p className="auth-sub">Tus cuentas, de la A a la Z.</p>
         <form onSubmit={onSubmit} className="auth-form">
