@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { fetchOrder } from '../lib/api';
+import { fetchOrder, fetchStaff } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import OrderReceipt from '../components/OrderReceipt';
 
@@ -11,7 +11,12 @@ export default function OrderView() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchOrder(id).then(setOrder).catch((e) => setError(e.message));
+    Promise.all([fetchOrder(id), fetchStaff().catch(() => [])])
+      .then(([o, staff]) => {
+        const who = staff.find((s) => s.id === o.created_by);
+        setOrder({ ...o, created_by_name: who ? (who.full_name || who.email) : null });
+      })
+      .catch((e) => setError(e.message));
   }, [id]);
 
   // El título es el nombre con el que se guarda el PDF al imprimir.

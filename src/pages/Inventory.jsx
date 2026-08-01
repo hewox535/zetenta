@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   fetchProducts, createProduct, deleteProduct,
   fetchMovements, createMovement,
   fetchTaxonomies, findOrCreateTerm, setProductTerms,
-  createVariant, deleteVariant,
+  createVariant, updateVariant, deleteVariant,
 } from '../lib/api';
 import { money, formatDate, variantLabel } from '../lib/calc';
 
@@ -46,6 +47,16 @@ export default function Inventory() {
   const [move, setMove] = useState(null);
   // alta de variante en un producto existente: { productId, values: {taxName: ''} }
   const [addVar, setAddVar] = useState(null);
+  // edición de variante: { id, productName, label, sku, price, target }
+  const [varEdit, setVarEdit] = useState(null);
+
+  // Umbral de stock bajo del negocio (%): alerta cuando stock <= objetivo * umbral/100.
+  const lowPct = Number(business?.low_stock_percent) || 0;
+  const isLow = (v) => {
+    const t = Number(v.target_stock);
+    return v.target_stock != null && t > 0 && Number(v.stock) <= (t * lowPct) / 100;
+  };
+  const productHasLow = (p) => variantsOf(p).some(isLow);
 
   async function reload() {
     const [p, m, t] = await Promise.all([fetchProducts(), fetchMovements(), fetchTaxonomies()]);
@@ -187,6 +198,31 @@ export default function Inventory() {
     }
   }
 
+  async function onSubmitVarEdit(e) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await updateVariant(varEdit.id, {
+        sku: varEdit.sku.trim(),
+        price: varEdit.price === '' ? null : Number(varEdit.price),
+        target_stock: varEdit.target === '' ? null : Number(varEdit.target),
+      });
+      await reload();
+      setVarEdit(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const openEdit = (p, v) => setVarEdit({
+    id: v.id, productName: p.name, label: variantLabel(v.attributes, p.variant_axes),
+    sku: v.sku || '', price: v.price != null ? String(v.price) : '',
+    target: v.target_stock != null ? String(v.target_stock) : '',
+  });
+
   const moveButtons = (p, v) => (
     <>
       <button className="btn ghost sm" onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'in', quantity: '', note: '' })}>+ Entrada</button>
@@ -202,7 +238,23 @@ export default function Inventory() {
           <h1>Inventario</h1>
           <p className="page-sub">Productos, variantes y movimientos de stock.</p>
         </div>
+        <div className="page-actions">
+          <Link to="/inventory/history" className="btn ghost">Historial completo</Link>
+        </div>
       </header>
+
+      {products && (() => {
+        const low = products.flatMap((p) => variantsOf(p).filter(isLow).map((v) => ({ p, v })));
+        if (low.length === 0) return null;
+        return (
+          <div className="lowstock-banner">
+            <strong>⚠ {low.length} {low.length === 1 ? 'variante con' : 'variantes con'} stock bajo</strong>
+            <span className="muted"> · {low.slice(0, 6).map(({ p, v }) =>
+              `${p.name}${variantLabel(v.attributes) ? ' (' + variantLabel(v.attributes) + ')' : ''}: ${Number(v.stock)}`).join(' · ')}
+              {low.length > 6 ? '…' : ''}</span>
+          </div>
+        );
+      })()}
 
       <div className="card vsection">
         <h2>Nuevo producto</h2>
@@ -332,10 +384,17 @@ export default function Inventory() {
                       </td>
                       <td className="mono">{p.sku}</td>
                       <td className="num">{money(p.price)}</td>
-                      <td className="num"><strong>{totalStock(p)}</strong> {p.unit}</td>
+                      <td className="num">
+                        <strong>{totalStock(p)}</strong> {p.unit}
+                        {simple && dv && isLow(dv) && <span className="badge low">Bajo</span>}
+                        {!simple && productHasLow(p) && <span className="badge low">Bajo</span>}
+                      </td>
                       <td className="row-actions">
                         {simple && dv ? (
-                          moveButtons(p, dv)
+                          <>
+                            {moveButtons(p, dv)}
+                            <button className="btn ghost sm" onClick={() => openEdit(p, dv)}>Editar</button>
+                          </>
                         ) : (
                           <button className="btn ghost sm" onClick={() => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }))}>
                             {open ? 'Ocultar' : 'Ver variantes'}
@@ -349,9 +408,14 @@ export default function Inventory() {
                         <td className="variant-cell">↳ {variantLabel(v.attributes, p.variant_axes) || 'Estándar'}</td>
                         <td className="mono">{v.sku}</td>
                         <td className="num">{v.price != null ? money(v.price) : <span className="muted">{money(p.price)}</span>}</td>
-                        <td className="num"><strong>{Number(v.stock)}</strong> {p.unit}</td>
+                        <td className="num">
+                          <strong>{Number(v.stock)}</strong> {p.unit}
+                          {isLow(v) && <span className="badge low">Bajo</span>}
+                          {v.target_stock != null && <div className="muted">objetivo {Number(v.target_stock)}</div>}
+                        </td>
                         <td className="row-actions">
                           {moveButtons(p, v)}
+                          <button className="btn ghost sm" onClick={() => openEdit(p, v)}>Editar</button>
                           <button className="btn danger sm" onClick={() => onDeleteVariant(p, v)}>Quitar</button>
                         </td>
                       </tr>
@@ -417,6 +481,35 @@ export default function Inventory() {
               <div className="inline-form-actions">
                 <button className="btn primary" disabled={busy}>Crear variante</button>
                 <button type="button" className="btn ghost" onClick={() => setAddVar(null)}>Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {varEdit && (
+        <div className="modal-backdrop" onClick={() => setVarEdit(null)}>
+          <div className="modal card" onClick={(e) => e.stopPropagation()}>
+            <h2>Editar — {varEdit.productName}{varEdit.label && <span className="muted"> · {varEdit.label}</span>}</h2>
+            <form onSubmit={onSubmitVarEdit} className="vform">
+              <label>
+                SKU
+                <input value={varEdit.sku} onChange={(e) => setVarEdit((s) => ({ ...s, sku: e.target.value }))} placeholder="CAM-OXF-AZ-M" />
+              </label>
+              <label>
+                Precio (dejar vacío = usar el del producto)
+                <input type="number" step="0.01" min="0" value={varEdit.price}
+                  onChange={(e) => setVarEdit((s) => ({ ...s, price: e.target.value }))} placeholder="Hereda del producto" />
+              </label>
+              <label>
+                Stock objetivo (para la alerta de stock bajo)
+                <input type="number" step="0.01" min="0" value={varEdit.target}
+                  onChange={(e) => setVarEdit((s) => ({ ...s, target: e.target.value }))} placeholder="Sin alerta" />
+              </label>
+              <p className="hint">Habrá alerta cuando el stock baje al {lowPct}% del objetivo (configurable en <Link to="/settings">Negocio → Inventario</Link>).</p>
+              <div className="inline-form-actions">
+                <button className="btn primary" disabled={busy}>Guardar</button>
+                <button type="button" className="btn ghost" onClick={() => setVarEdit(null)}>Cancelar</button>
               </div>
             </form>
           </div>

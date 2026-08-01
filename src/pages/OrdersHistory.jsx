@@ -1,15 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchOrders } from '../lib/api';
+import { fetchOrders, fetchStaff } from '../lib/api';
 import { usd, bs, formatDate } from '../lib/calc';
 
 export default function OrdersHistory() {
   const [orders, setOrders] = useState(null);
+  const [staff, setStaff] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchOrders().then(setOrders).catch((e) => setError(e.message));
+    fetchStaff().then(setStaff).catch(() => {});
   }, []);
+
+  const staffName = useMemo(() => {
+    const m = new Map();
+    staff.forEach((s) => m.set(s.id, s.full_name || s.email));
+    return m;
+  }, [staff]);
 
   return (
     <div className="page">
@@ -34,7 +42,7 @@ export default function OrdersHistory() {
           <table className="list">
             <thead>
               <tr>
-                <th>Nº</th><th>Fecha</th><th>Cliente</th>
+                <th>Nº</th><th>Fecha</th><th>Cliente</th><th>Atendió</th>
                 <th>Pago</th><th className="num">Total</th><th />
               </tr>
             </thead>
@@ -44,6 +52,7 @@ export default function OrdersHistory() {
                   <td className="mono">{o.number}</td>
                   <td>{formatDate(o.created_at)}</td>
                   <td>{o.customer_name || <span className="muted">—</span>}</td>
+                  <td className="muted">{staffName.get(o.created_by) || <span className="muted">—</span>}</td>
                   <td className="muted">
                     {(o.order_payments || []).map((p) => p.method_name).join(', ') || '—'}
                   </td>
