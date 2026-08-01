@@ -420,6 +420,15 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .variant-pick.in-cart { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .variant-pick-label { font-size: 14px; font-weight: 600; }
 
+/* Alerta de stock bajo */
+.badge.low { background: var(--danger-bg); color: var(--danger); margin-left: 6px; }
+.lowstock-banner {
+  background: var(--danger-bg); border: 1px solid var(--danger);
+  color: var(--danger); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px;
+  font-size: 13.5px;
+}
+.lowstock-banner .muted { color: inherit; opacity: .8; }
+
 /* ----- Panel lateral (pedido / pago) ----- */
 .pos-panel {
   display: flex; flex-direction: column; min-height: 0;
@@ -566,6 +575,8 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .rank.compact { gap: 8px; }
 .rank-subtitle { font-size: 14px; margin: 16px 0 4px; color: var(--text-2); }
 .rank-row { display: flex; flex-direction: column; gap: 5px; }
+.rank-click { border: none; background: transparent; text-align: left; cursor: pointer; padding: 4px; margin: -4px; border-radius: 8px; width: calc(100% + 8px); }
+.rank-click:hover { background: var(--accent-soft); }
 .rank-info { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
 .rank-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank-bar { height: 6px; background: rgba(0,0,0,.06); border-radius: 999px; overflow: hidden; }

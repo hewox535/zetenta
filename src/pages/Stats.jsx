@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchOrdersForStats } from '../lib/api';
+import { fetchOrdersForStats, fetchProducts } from '../lib/api';
 import { usd, bs, formatDate } from '../lib/calc';
 
 // Rangos preestablecidos → { from, to } en ISO (inclusive por día).
@@ -22,24 +22,32 @@ const PRESETS = [
 export default function Stats() {
   const [preset, setPreset] = useState('30d');
   const [orders, setOrders] = useState(null);
+  const [allProducts, setAllProducts] = useState([]);
   const [error, setError] = useState(null);
+  const [detail, setDetail] = useState(null);   // producto seleccionado (tendencia)
 
   useEffect(() => {
-    setOrders(null);
+    setOrders(null); setDetail(null);
     const { from, to } = rangeFor(preset);
     fetchOrdersForStats(from?.toISOString(), to?.toISOString())
       .then(setOrders).catch((e) => setError(e.message));
   }, [preset]);
 
+  useEffect(() => { fetchProducts().then(setAllProducts).catch(() => {}); }, []);
+
   const stats = useMemo(() => {
     if (!orders) return null;
     let revenueUsd = 0, revenueVes = 0;
+    let receivedVes = 0, receivedUsd = 0;   // ingresos reales por moneda de pago
+    let discountUsd = 0;
     const byProduct = new Map();      // name → { qty, revenue }
     const byMethod = new Map();       // name → usd
     const byDay = new Map();          // yyyy-mm-dd → usd
+    const productDays = new Map();    // name → Map(day → qty)
     for (const o of orders) {
       revenueUsd += Number(o.total_usd) || 0;
       revenueVes += Number(o.total_ves) || 0;
+      discountUsd += Number(o.discount_usd) || 0;
       const day = (o.created_at || '').slice(0, 10);
       byDay.set(day, (byDay.get(day) || 0) + (Number(o.total_usd) || 0));
       for (const it of o.order_items || []) {
@@ -47,23 +55,33 @@ export default function Stats() {
         cur.qty += Number(it.quantity) || 0;
         cur.revenue += Number(it.line_total_usd) || 0;
         byProduct.set(it.name, cur);
+        if (!productDays.has(it.name)) productDays.set(it.name, new Map());
+        const pd = productDays.get(it.name);
+        pd.set(day, (pd.get(day) || 0) + (Number(it.quantity) || 0));
       }
       for (const p of o.order_payments || []) {
         byMethod.set(p.method_name, (byMethod.get(p.method_name) || 0) + (Number(p.amount_usd) || 0));
+        if (p.currency === 'USD') receivedUsd += Number(p.amount) || 0;
+        else receivedVes += Number(p.amount) || 0;
       }
     }
     const products = [...byProduct.entries()].map(([name, v]) => ({ name, ...v }));
     const topProducts = [...products].sort((a, b) => b.qty - a.qty);
     const count = orders.length;
+    // Baja rotación: productos del catálogo sin ninguna venta en el período.
+    const sold = new Set(byProduct.keys());
+    const noSales = allProducts.filter((p) => !sold.has(p.name)).map((p) => p.name);
     return {
-      revenueUsd, revenueVes, count,
+      revenueUsd, revenueVes, count, receivedVes, receivedUsd, discountUsd,
       avgTicket: count ? revenueUsd / count : 0,
       topProducts,
       bottomProducts: [...topProducts].reverse().slice(0, 5),
       methods: [...byMethod.entries()].map(([name, v]) => ({ name, usd: v })).sort((a, b) => b.usd - a.usd),
       days: [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+      productDays,
+      noSales,
     };
-  }, [orders]);
+  }, [orders, allProducts]);
 
   function exportCsv() {
     if (!stats) return;
@@ -132,15 +150,16 @@ export default function Stats() {
               <h2>Más vendidos</h2>
               <div className="rank">
                 {stats.topProducts.slice(0, 8).map((p) => (
-                  <div className="rank-row" key={p.name}>
+                  <button className="rank-row rank-click" key={p.name} onClick={() => setDetail(p.name)}>
                     <div className="rank-info">
                       <span className="rank-name">{p.name}</span>
                       <span className="muted">{p.qty} und · {usd(p.revenue)}</span>
                     </div>
                     <div className="rank-bar"><span style={{ width: `${(p.qty / maxProdQty) * 100}%` }} /></div>
-                  </div>
+                  </button>
                 ))}
               </div>
+              <p className="hint">Toca un producto para ver su tendencia de ventas.</p>
               {stats.topProducts.length > 5 && (
                 <>
                   <h3 className="rank-subtitle">Menos vendidos</h3>
@@ -159,6 +178,17 @@ export default function Stats() {
             </section>
 
             <div className="stats-side">
+              <section className="card vsection">
+                <h2>Ingresos por moneda</h2>
+                <div className="totals">
+                  <div className="totals-row"><span>Recibido en bolívares</span><span>{bs(stats.receivedVes)}</span></div>
+                  <div className="totals-row"><span>Recibido en divisa</span><span>{usd(stats.receivedUsd)}</span></div>
+                  {stats.discountUsd > 0.005 && (
+                    <div className="totals-row ok"><span>Descuento por divisa</span><span>−{usd(stats.discountUsd)}</span></div>
+                  )}
+                </div>
+              </section>
+
               <section className="card vsection">
                 <h2>Por método de pago</h2>
                 <div className="totals">
@@ -186,8 +216,54 @@ export default function Stats() {
               </section>
             </div>
           </div>
+
+          {/* -------- Baja rotación: productos sin ventas en el período -------- */}
+          <section className="card vsection">
+            <h2>Baja rotación</h2>
+            <p className="hint">Productos del catálogo sin ninguna venta en el período seleccionado.</p>
+            {stats.noSales.length === 0 ? (
+              <div className="empty">Todos los productos tuvieron al menos una venta.</div>
+            ) : (
+              <div className="chips">
+                {stats.noSales.map((name) => <span className="chip" key={name}>{name}</span>)}
+              </div>
+            )}
+          </section>
         </>
       )}
+
+      {/* -------- Tendencia de un producto -------- */}
+      {detail && stats && (() => {
+        const days = [...(stats.productDays.get(detail) || new Map()).entries()].sort((a, b) => a[0].localeCompare(b[0]));
+        const max = Math.max(1, ...days.map(([, v]) => v));
+        const total = days.reduce((s, [, v]) => s + v, 0);
+        return (
+          <div className="modal-backdrop" onClick={() => setDetail(null)}>
+            <div className="modal card" onClick={(e) => e.stopPropagation()}>
+              <div className="pos-panel-head">
+                <h2>{detail}</h2>
+                <button className="btn ghost sm" onClick={() => setDetail(null)}>Cerrar</button>
+              </div>
+              <p className="page-sub">{total} unidades vendidas en el período.</p>
+              {days.length === 0 ? (
+                <div className="empty">Sin ventas en el período.</div>
+              ) : (
+                <div className="rank compact">
+                  {days.map(([day, v]) => (
+                    <div className="rank-row" key={day}>
+                      <div className="rank-info">
+                        <span className="rank-name">{formatDate(day)}</span>
+                        <span className="muted">{v} und</span>
+                      </div>
+                      <div className="rank-bar"><span style={{ width: `${(v / max) * 100}%` }} /></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
