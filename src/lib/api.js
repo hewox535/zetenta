@@ -78,12 +78,13 @@ export async function deleteWithholding(id) {
 
 export async function fetchProducts() {
   return unwrap(await supabase.from('products')
-    .select('*, product_terms(term_id)').order('name'));
+    .select('*, product_terms(term_id), product_variants(*)').order('name'));
 }
 
-export async function createProduct(businessId, { name, sku, unit, price }) {
+export async function createProduct(businessId, { name, sku, unit, price, variantAxes }) {
   return unwrap(await supabase.from('products')
-    .insert({ business_id: businessId, name, sku, unit, price }).select().single());
+    .insert({ business_id: businessId, name, sku, unit, price, variant_axes: variantAxes || [] })
+    .select().single());
 }
 
 export async function updateProduct(id, patch) {
@@ -95,16 +96,36 @@ export async function deleteProduct(id) {
   unwrap(await supabase.from('products').delete().eq('id', id));
 }
 
+// ---------- Variantes de producto ----------
+
+export async function createVariant(businessId, productId, { sku, price, stock, attributes }) {
+  return unwrap(await supabase.from('product_variants')
+    .insert({
+      business_id: businessId, product_id: productId,
+      sku: sku || '', price: price ?? null, stock: stock ?? 0, attributes: attributes || {},
+    })
+    .select().single());
+}
+
+export async function updateVariant(id, patch) {
+  return unwrap(await supabase.from('product_variants')
+    .update(patch).eq('id', id).select().single());
+}
+
+export async function deleteVariant(id) {
+  unwrap(await supabase.from('product_variants').delete().eq('id', id));
+}
+
 export async function fetchMovements(limit = 30) {
   return unwrap(await supabase.from('inventory_movements')
-    .select('*, products(name)')
+    .select('*, products(name), product_variants(attributes)')
     .order('created_at', { ascending: false })
     .limit(limit));
 }
 
-export async function createMovement(businessId, { productId, type, quantity, note }) {
+export async function createMovement(businessId, { productId, variantId, type, quantity, note }) {
   return unwrap(await supabase.from('inventory_movements')
-    .insert({ business_id: businessId, product_id: productId, type, quantity, note })
+    .insert({ business_id: businessId, product_id: productId, variant_id: variantId, type, quantity, note })
     .select().single());
 }
 
@@ -223,7 +244,7 @@ export async function deleteCustomer(id) {
 
 // ---------- Pedidos ----------
 
-// items: [{ product_id, quantity }]   payments: [{ method_id, method_name, currency, amount }]
+// items: [{ variant_id, quantity }]   payments: [{ method_id, method_name, currency, amount }]
 export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note }) {
   return unwrap(await supabase.rpc('create_order', {
     p_items: items,

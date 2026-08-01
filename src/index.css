@@ -390,6 +390,36 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 }
 .stock-badge.out { color: var(--text-2); background: rgba(0,0,0,.06); }
 
+/* ----- Variantes ----- */
+.product-card-meta { gap: 6px; align-items: center; }
+.variant-count {
+  font-size: 11px; font-weight: 600; color: var(--text-2);
+  background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; margin-left: 6px;
+}
+.tree-toggle {
+  border: none; background: transparent; cursor: pointer; color: var(--text-2);
+  font-size: 12px; padding: 0 6px 0 0; line-height: 1;
+}
+.variant-row td { background: var(--accent-soft); }
+.variant-cell { padding-left: 22px !important; color: var(--text); font-weight: 500; }
+.variant-config { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+.variant-axis-pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+
+/* Selector de variante en el POS */
+.variant-picker { max-width: 560px; }
+.variant-pick-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 12px;
+}
+.variant-pick {
+  position: relative; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px; display: flex; flex-direction: column; gap: 6px;
+  transition: transform .12s ease, border-color .12s ease;
+}
+.variant-pick:hover { transform: translateY(-2px); border-color: var(--accent-line); }
+.variant-pick.in-cart { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.variant-pick-label { font-size: 14px; font-weight: 600; }
+
 /* ----- Panel lateral (pedido / pago) ----- */
 .pos-panel {
   display: flex; flex-direction: column; min-height: 0;

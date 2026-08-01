@@ -50,3 +50,11 @@ export function formatDate(iso) {
 export function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
+
+// Etiqueta legible de una variante a partir de sus atributos, ordenada por eje
+// para que coincida con variant_label del servidor. { Color:'Azul', Talla:'M' } → 'Azul · M'
+export function variantLabel(attributes, axes) {
+  const attrs = attributes || {};
+  const keys = axes && axes.length ? axes : Object.keys(attrs).sort();
+  return keys.map((k) => attrs[k]).filter(Boolean).join(' · ');
+}

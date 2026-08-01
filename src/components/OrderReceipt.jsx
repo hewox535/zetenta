@@ -28,7 +28,7 @@ export default function OrderReceipt({ business, order }) {
             <tr key={it.id}>
               <td className="receipt-qty">{Number(it.quantity)}×</td>
               <td>
-                {it.name}
+                {it.name}{it.variant_label ? ` · ${it.variant_label}` : ''}
                 <div className="receipt-muted receipt-unitprice">{usd(it.unit_price_usd)} c/u</div>
               </td>
               <td className="receipt-amt">{usd(it.line_total_usd)}</td>

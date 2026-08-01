@@ -6,10 +6,17 @@ import {
   createCustomer, createOrder, fetchOrder,
 } from '../lib/api';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
-import { usd, bs, money } from '../lib/calc';
+import { usd, bs, money, variantLabel } from '../lib/calc';
 import OrderReceipt from '../components/OrderReceipt';
 
 const EMPTY_CUST = { name: '', document: '', phone: '', email: '' };
+
+const variantsOf = (p) => p.product_variants || [];
+const totalStock = (p) => variantsOf(p).reduce((s, v) => s + Number(v.stock || 0), 0);
+const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).length === 0;
+const defaultVariant = (p) =>
+  variantsOf(p).find((v) => Object.keys(v.attributes || {}).length === 0) || variantsOf(p)[0];
+const variantPrice = (p, v) => (v.price != null ? Number(v.price) : Number(p.price));
 
 export default function Orders() {
   const { business } = useAuth();
@@ -24,7 +31,8 @@ export default function Orders() {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({});          // { taxonomyId: termId }
 
-  const [cart, setCart] = useState([]);                // [{ id, name, price, unit, stock, qty }]
+  const [cart, setCart] = useState([]);                // [{ id(variantId), productId, name, label, price, unit, stock, qty }]
+  const [picker, setPicker] = useState(null);          // producto cuyo selector de variante está abierto
   const [stage, setStage] = useState('shop');          // 'shop' | 'pay' | 'done'
   const [panelOpen, setPanelOpen] = useState(false);   // hoja inferior en móvil
 
@@ -50,14 +58,27 @@ export default function Orders() {
 
   const rate = useMemo(() => resolveRate(business?.rate_config, rates), [business, rates]);
 
-  // ------- carrito -------
-  const addToCart = (p) => {
+  // ------- carrito (por variante) -------
+  const addVariant = (p, v) => {
     setCart((prev) => {
-      const found = prev.find((c) => c.id === p.id);
-      if (found) return prev.map((c) => (c.id === p.id ? { ...c, qty: c.qty + 1 } : c));
-      return [...prev, { id: p.id, name: p.name, price: Number(p.price), unit: p.unit, stock: Number(p.stock), qty: 1 }];
+      const found = prev.find((c) => c.id === v.id);
+      if (found) return prev.map((c) => (c.id === v.id ? { ...c, qty: c.qty + 1 } : c));
+      return [...prev, {
+        id: v.id, productId: p.id, name: p.name, label: variantLabel(v.attributes, p.variant_axes),
+        price: variantPrice(p, v), unit: p.unit, stock: Number(v.stock), qty: 1,
+      }];
     });
   };
+  // Tocar un producto: si es simple lo agrega directo; si tiene variantes abre el selector.
+  const onTapProduct = (p) => {
+    if (isSimple(p)) {
+      const dv = defaultVariant(p);
+      if (dv) addVariant(p, dv);
+    } else {
+      setPicker(p);
+    }
+  };
+  const cartQtyForProduct = (p) => cart.filter((c) => c.productId === p.id).reduce((s, c) => s + c.qty, 0);
   const setQty = (id, qty) => {
     if (qty <= 0) return setCart((prev) => prev.filter((c) => c.id !== id));
     setCart((prev) => prev.map((c) => (c.id === id ? { ...c, qty } : c)));
@@ -133,7 +154,7 @@ export default function Orders() {
         customerId = created.id; customerName = created.name;
       }
 
-      const items = cart.map((c) => ({ product_id: c.id, quantity: c.qty }));
+      const items = cart.map((c) => ({ variant_id: c.id, quantity: c.qty }));
       const pays = selectedMethods
         .map((id) => methods.find((x) => x.id === id))
         .filter(Boolean)
@@ -236,15 +257,17 @@ export default function Orders() {
               ) : (
                 <div className="product-grid">
                   {visible.map((p) => {
-                    const inCart = cart.find((c) => c.id === p.id);
+                    const qty = cartQtyForProduct(p);
+                    const stock = totalStock(p);
                     return (
-                      <button key={p.id} className={`product-card${inCart ? ' in-cart' : ''}`} onClick={() => addToCart(p)}>
-                        {inCart && <span className="product-qty-badge">{inCart.qty}</span>}
+                      <button key={p.id} className={`product-card${qty ? ' in-cart' : ''}`} onClick={() => onTapProduct(p)}>
+                        {qty > 0 && <span className="product-qty-badge">{qty}</span>}
                         <div className="product-card-name">{p.name}</div>
                         <div className="product-card-meta">
-                          <span className={`stock-badge${Number(p.stock) <= 0 ? ' out' : ''}`}>
-                            {Number(p.stock)} {p.unit}
+                          <span className={`stock-badge${stock <= 0 ? ' out' : ''}`}>
+                            {stock} {p.unit}
                           </span>
+                          {!isSimple(p) && <span className="variant-count">{variantsOf(p).length} variantes</span>}
                         </div>
                         <div className="product-card-prices">
                           <strong>{usd(p.price)}</strong>
@@ -268,7 +291,7 @@ export default function Orders() {
                   {cart.map((c) => (
                     <tr key={c.id}>
                       <td>
-                        {c.name}
+                        {c.name}{c.label && <span className="muted"> · {c.label}</span>}
                         <div className="muted">{c.qty} × {usd(c.price)}</div>
                       </td>
                       <td className="num">
@@ -345,7 +368,7 @@ export default function Orders() {
                       {cart.map((c) => (
                         <div className="cart-line" key={c.id}>
                           <div className="cart-line-info">
-                            <div className="cart-line-name">{c.name}</div>
+                            <div className="cart-line-name">{c.name}{c.label && <span className="muted"> · {c.label}</span>}</div>
                             <div className="muted">{usd(c.price)} · {bs(c.price * rate.value)}</div>
                           </div>
                           <div className="qty-stepper">
@@ -444,6 +467,38 @@ export default function Orders() {
           </div>
         </aside>
       </div>
+
+      {/* -------- Selector de variante (color + talla) -------- */}
+      {picker && (
+        <div className="modal-backdrop" onClick={() => setPicker(null)}>
+          <div className="modal card variant-picker" onClick={(e) => e.stopPropagation()}>
+            <div className="pos-panel-head">
+              <h2>{picker.name}</h2>
+              <button className="btn ghost sm" onClick={() => setPicker(null)}>Listo</button>
+            </div>
+            <p className="page-sub">Elige la variante a agregar.</p>
+            <div className="variant-pick-grid">
+              {variantsOf(picker).map((v) => {
+                const inCart = cart.find((c) => c.id === v.id);
+                const out = Number(v.stock) <= 0;
+                return (
+                  <button key={v.id} type="button" className={`variant-pick${inCart ? ' in-cart' : ''}`}
+                    onClick={() => addVariant(picker, v)}>
+                    {inCart && <span className="product-qty-badge">{inCart.qty}</span>}
+                    <div className="variant-pick-label">{variantLabel(v.attributes, picker.variant_axes) || 'Estándar'}</div>
+                    <div className="product-card-meta">
+                      <span className={`stock-badge${out ? ' out' : ''}`}>{Number(v.stock)} {picker.unit}</span>
+                    </div>
+                    <div className="product-card-prices">
+                      <strong>{usd(variantPrice(picker, v))}</strong>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
