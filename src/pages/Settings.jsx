@@ -4,13 +4,14 @@ import {
   updateBusinessProfile, setWithholdingSeq,
   fetchTaxonomies, createTaxonomy, deleteTaxonomy, deleteTerm,
   fetchPaymentMethods, createPaymentMethod, updatePaymentMethod, deletePaymentMethod,
-  updateOrderSettings,
+  updateOrderSettings, updateBusinessSettings,
+  fetchStaff, createStaff, deleteStaff, setStaffRole,
 } from '../lib/api';
 import { fetchBcvRates } from '../lib/rates';
 import { money } from '../lib/calc';
 
 export default function Settings() {
-  const { business, capabilities, refreshBusiness } = useAuth();
+  const { business, capabilities, refreshBusiness, profile } = useAuth();
   const [section, setSection] = useState('fiscal');
 
   if (!business) {
@@ -22,6 +23,7 @@ export default function Settings() {
     capabilities?.retentions && { key: 'retentions', label: 'Retenciones' },
     capabilities?.inventory && { key: 'inventory', label: 'Inventario' },
     capabilities?.orders && { key: 'orders', label: 'Pedidos' },
+    { key: 'staff', label: 'Personal' },
   ].filter(Boolean);
 
   return (
@@ -42,8 +44,9 @@ export default function Settings() {
 
       {section === 'fiscal' && <FiscalSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'retentions' && <RetentionSection business={business} refreshBusiness={refreshBusiness} />}
-      {section === 'inventory' && <InventorySection business={business} />}
+      {section === 'inventory' && <InventorySection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'orders' && <OrdersSection business={business} refreshBusiness={refreshBusiness} />}
+      {section === 'staff' && <StaffSection profile={profile} />}
     </div>
   );
 }
@@ -124,13 +127,30 @@ function RetentionSection({ business, refreshBusiness }) {
   );
 }
 
-// ---------- Inventario: categorías de productos ----------
-function InventorySection({ business }) {
+// ---------- Inventario: umbral de stock bajo + categorías de productos ----------
+function InventorySection({ business, refreshBusiness }) {
   const [taxonomies, setTaxonomies] = useState([]);
   const [newTax, setNewTax] = useState('');
   const [taxError, setTaxError] = useState(null);
 
+  const [lowPct, setLowPct] = useState(String(business.low_stock_percent ?? 20));
+  const [lowBusy, setLowBusy] = useState(false);
+  const [lowSaved, setLowSaved] = useState(false);
+  const [lowError, setLowError] = useState(null);
+
   useEffect(() => { fetchTaxonomies().then(setTaxonomies).catch((e) => setTaxError(e.message)); }, []);
+
+  async function saveLowStock() {
+    setLowError(null); setLowSaved(false); setLowBusy(true);
+    try {
+      await updateBusinessSettings({
+        foreignDiscountPercent: business.foreign_discount_percent ?? 0,
+        lowStockPercent: Number(lowPct) || 0,
+      });
+      await refreshBusiness();
+      setLowSaved(true);
+    } catch (e) { setLowError(e.message); } finally { setLowBusy(false); }
+  }
 
   async function onAddTaxonomy() {
     const name = newTax.trim();
@@ -162,6 +182,26 @@ function InventorySection({ business }) {
   }
 
   return (
+    <div className="vform">
+    <section className="card vsection">
+      <h2>Alerta de stock bajo</h2>
+      <p className="hint">
+        Se marca una variante como stock bajo cuando su existencia cae al porcentaje
+        indicado de su <strong>stock objetivo</strong> (el objetivo se define por
+        variante en Inventario). Las variantes sin objetivo no generan alerta.
+      </p>
+      <label className="short">
+        Umbral (%)
+        <input type="number" min="0" max="100" step="1" value={lowPct}
+          onChange={(e) => setLowPct(e.target.value)} />
+      </label>
+      {lowError && <div className="form-error">{lowError}</div>}
+      {lowSaved && <div className="form-ok">Umbral guardado.</div>}
+      <button type="button" className="btn primary" disabled={lowBusy} onClick={saveLowStock}>
+        {lowBusy ? 'Guardando…' : 'Guardar umbral'}
+      </button>
+    </section>
+
     <section className="card vsection tax-section">
       <h2>Categorías de productos</h2>
       <p className="hint">
@@ -197,6 +237,7 @@ function InventorySection({ business }) {
       </div>
       {taxError && <div className="form-error">{taxError}</div>}
     </section>
+    </div>
   );
 }
 
@@ -216,10 +257,27 @@ function OrdersSection({ business, refreshBusiness }) {
   const [mCurrency, setMCurrency] = useState('VES');
   const [mError, setMError] = useState(null);
 
+  const [discount, setDiscount] = useState(String(business.foreign_discount_percent ?? 0));
+  const [discBusy, setDiscBusy] = useState(false);
+  const [discSaved, setDiscSaved] = useState(false);
+  const [discError, setDiscError] = useState(null);
+
   useEffect(() => {
     fetchBcvRates().then(setBcv).catch(() => {});
     fetchPaymentMethods().then(setMethods).catch((e) => setMError(e.message));
   }, []);
+
+  async function saveDiscount() {
+    setDiscError(null); setDiscSaved(false); setDiscBusy(true);
+    try {
+      await updateBusinessSettings({
+        foreignDiscountPercent: Number(discount) || 0,
+        lowStockPercent: business.low_stock_percent ?? 20,
+      });
+      await refreshBusiness();
+      setDiscSaved(true);
+    } catch (e) { setDiscError(e.message); } finally { setDiscBusy(false); }
+  }
 
   async function saveRate() {
     setRateError(null); setRateSaved(false); setRateBusy(true);
@@ -296,8 +354,31 @@ function OrdersSection({ business, refreshBusiness }) {
       </section>
 
       <section className="card vsection">
+        <h2>Descuento por pago en divisa</h2>
+        <p className="hint">
+          Descuento que se aplica <strong>solo</strong> a la parte del pedido que se paga
+          en divisa (métodos en dólares). La parte pagada en bolívares no recibe descuento.
+          Se calcula sobre el saldo pendiente que se liquida en divisa, no sobre el total.
+        </p>
+        <label className="short">
+          Descuento (%)
+          <input type="number" min="0" max="100" step="0.5" value={discount}
+            onChange={(e) => setDiscount(e.target.value)} placeholder="0" />
+        </label>
+        {discError && <div className="form-error">{discError}</div>}
+        {discSaved && <div className="form-ok">Descuento guardado.</div>}
+        <button type="button" className="btn primary" disabled={discBusy} onClick={saveDiscount}>
+          {discBusy ? 'Guardando…' : 'Guardar descuento'}
+        </button>
+      </section>
+
+      <section className="card vsection">
         <h2>Métodos de pago</h2>
-        <p className="hint">Los que aparecen al cobrar un pedido. Desactiva los que no uses.</p>
+        <p className="hint">
+          Los que aparecen al cobrar un pedido. Desactiva los que no uses. Para separar
+          submétodos de divisa (Binance, efectivo, Zelle…), crea uno por cada uno en
+          <strong> Dólares</strong>: cada método se registra y reporta por separado.
+        </p>
         <div className="method-list">
           {methods.map((m) => (
             <div className={`method-row${m.active ? '' : ' inactive'}`} key={m.id}>
@@ -328,6 +409,116 @@ function OrdersSection({ business, refreshBusiness }) {
           </div>
         </div>
         {mError && <div className="form-error">{mError}</div>}
+      </section>
+    </div>
+  );
+}
+
+// ---------- Personal: administradores y vendedoras ----------
+const EMPTY_STAFF = { email: '', password: '', fullName: '' };
+const ROLE_LABEL = { admin: 'Administrador', seller: 'Vendedora' };
+
+function StaffSection({ profile }) {
+  const [staff, setStaff] = useState(null);
+  const [form, setForm] = useState(EMPTY_STAFF);
+  const [showNew, setShowNew] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [ok, setOk] = useState(null);
+
+  useEffect(() => { fetchStaff().then(setStaff).catch((e) => setError(e.message)); }, []);
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  async function onCreate(e) {
+    e.preventDefault();
+    setError(null); setOk(null); setBusy(true);
+    try {
+      await createStaff({ email: form.email.trim(), password: form.password, fullName: form.fullName.trim() });
+      setStaff(await fetchStaff());
+      setForm(EMPTY_STAFF); setShowNew(false);
+      setOk('Vendedora creada. Ya puede iniciar sesión con ese correo y contraseña.');
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+
+  async function onChangeRole(u, role) {
+    setError(null); setOk(null);
+    try {
+      await setStaffRole(u.id, role);
+      setStaff((prev) => prev.map((x) => (x.id === u.id ? { ...x, business_role: role } : x)));
+    } catch (err) { setError(err.message); }
+  }
+
+  async function onDelete(u) {
+    if (!confirm(`¿Eliminar a ${u.full_name || u.email}? Perderá el acceso.`)) return;
+    setError(null); setOk(null);
+    try {
+      await deleteStaff(u.id);
+      setStaff((prev) => prev.filter((x) => x.id !== u.id));
+    } catch (err) { setError(err.message); }
+  }
+
+  return (
+    <div className="vform">
+      <section className="card vsection">
+        <h2>Personal</h2>
+        <p className="hint">
+          El <strong>administrador</strong> tiene acceso completo (inventario, estadísticas,
+          configuración). La <strong>vendedora</strong> solo accede a Pedidos y Clientes.
+        </p>
+        {staff === null ? (
+          <div className="empty">Cargando…</div>
+        ) : (
+          <div className="method-list">
+            {staff.map((u) => {
+              const isMe = u.id === profile?.id;
+              const isPlatform = u.role === 'platform_admin';
+              return (
+                <div className="method-row" key={u.id}>
+                  <div className="method-info">
+                    <span className="method-name">
+                      {u.full_name || u.email}{isMe && <span className="muted"> · tú</span>}
+                    </span>
+                    <span className="muted">{u.email}</span>
+                  </div>
+                  <div className="method-actions">
+                    {isPlatform ? (
+                      <span className="badge adjustment">Plataforma</span>
+                    ) : (
+                      <select value={u.business_role} disabled={isMe}
+                        onChange={(e) => onChangeRole(u, e.target.value)}>
+                        <option value="admin">{ROLE_LABEL.admin}</option>
+                        <option value="seller">{ROLE_LABEL.seller}</option>
+                      </select>
+                    )}
+                    {!isMe && !isPlatform && (
+                      <button type="button" className="btn danger sm" onClick={() => onDelete(u)}>Eliminar</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {error && <div className="form-error">{error}</div>}
+        {ok && <div className="form-ok">{ok}</div>}
+
+        {showNew ? (
+          <form onSubmit={onCreate} className="vform" style={{ marginTop: 16 }}>
+            <label>Nombre<input value={form.fullName} onChange={set('fullName')} placeholder="Nombre de la vendedora" /></label>
+            <label>Correo<input type="email" value={form.email} onChange={set('email')} required placeholder="vendedora@correo.com" /></label>
+            <label>Contraseña<input type="text" value={form.password} onChange={set('password')} required minLength={6} placeholder="Mínimo 6 caracteres" /></label>
+            <div className="inline-form-actions">
+              <button className="btn primary" disabled={busy}>{busy ? 'Creando…' : 'Crear vendedora'}</button>
+              <button type="button" className="btn ghost" onClick={() => { setShowNew(false); setForm(EMPTY_STAFF); }}>Cancelar</button>
+            </div>
+          </form>
+        ) : (
+          <button type="button" className="btn primary" style={{ marginTop: 12 }} onClick={() => setShowNew(true)}>
+            + Agregar vendedora
+          </button>
+        )}
       </section>
     </div>
   );
