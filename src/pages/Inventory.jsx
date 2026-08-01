@@ -2,10 +2,10 @@ import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  fetchProducts, createProduct, deleteProduct,
+  fetchProducts, deleteProduct,
   fetchMovements, createMovement,
-  fetchTaxonomies, findOrCreateTerm, setProductTerms,
-  createVariant, updateVariant, deleteVariant,
+  fetchTaxonomies,
+  createProductWithVariants, addProductVariant, updateVariant, deleteVariant,
 } from '../lib/api';
 import { money, formatDate, variantLabel } from '../lib/calc';
 
@@ -22,35 +22,32 @@ const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).leng
 const defaultVariant = (p) =>
   variantsOf(p).find((v) => Object.keys(v.attributes || {}).length === 0) || variantsOf(p)[0];
 
+const EMPTY_ROW = () => ({ key: Math.random().toString(36).slice(2), values: {}, stock: '', sku: '', price: '' });
+const emptyNewProd = () => ({
+  name: '', price: '', sku: '', unit: 'und',
+  categories: {}, mode: 'simple', simpleStock: '',
+  axisIds: [], genValues: {}, rows: [EMPTY_ROW()],
+});
+
 export default function Inventory() {
   const { business } = useAuth();
   const [products, setProducts] = useState(null);
   const [movements, setMovements] = useState([]);
   const [error, setError] = useState(null);
-
-  // formulario de producto
-  const [pName, setPName] = useState('');
-  const [pSku, setPSku] = useState('');
-  const [pUnit, setPUnit] = useState('und');
-  const [pPrice, setPPrice] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // taxonomías del negocio (Marca, Modelo, Talla, Color…)
   const [taxonomies, setTaxonomies] = useState([]);
-  const [termValues, setTermValues] = useState({});   // { taxonomyId: 'Toyota' } etiquetas del producto
-  const [axisIds, setAxisIds] = useState([]);          // taxonomías usadas como eje de variante
-  const [axisValues, setAxisValues] = useState({});    // { taxonomyId: 'S, M, L' }
-  const [filters, setFilters] = useState({});          // { taxonomyId: termId } sobre la lista
+  const [filters, setFilters] = useState({});         // { taxonomyId: termId } sobre la lista
 
-  const [expanded, setExpanded] = useState({});        // { productId: true } desglose de variantes
-  // movimiento en curso: { productId, variantId, label, type, quantity, note }
-  const [move, setMove] = useState(null);
-  // alta de variante en un producto existente: { productId, values: {taxName: ''} }
-  const [addVar, setAddVar] = useState(null);
-  // edición de variante: { id, productName, label, sku, price, target }
-  const [varEdit, setVarEdit] = useState(null);
+  const [expanded, setExpanded] = useState({});       // { productId: true }
+  const [move, setMove] = useState(null);             // { productId, variantId, label, type, quantity, note }
+  const [addVar, setAddVar] = useState(null);         // { productId, values, stock, sku, price }
+  const [varEdit, setVarEdit] = useState(null);       // { id, productName, label, sku, price, target }
+  const [newProd, setNewProd] = useState(null);       // modal de alta
 
-  // Umbral de stock bajo del negocio (%): alerta cuando stock <= objetivo * umbral/100.
+  const catTax = taxonomies.filter((t) => t.kind !== 'variant');
+  const varTax = taxonomies.filter((t) => t.kind === 'variant');
+
   const lowPct = Number(business?.low_stock_percent) || 0;
   const isLow = (v) => {
     const t = Number(v.target_stock);
@@ -62,68 +59,7 @@ export default function Inventory() {
     const [p, m, t] = await Promise.all([fetchProducts(), fetchMovements(), fetchTaxonomies()]);
     setProducts(p); setMovements(m); setTaxonomies(t);
   }
-
-  useEffect(() => {
-    reload().catch((e) => setError(e.message));
-  }, []);
-
-  const toggleAxis = (id) =>
-    setAxisIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-
-  async function onAddProduct(e) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      const axisTaxonomies = taxonomies.filter((t) => axisIds.includes(t.id));
-      const axisNames = axisTaxonomies.map((t) => t.name);
-
-      const created = await createProduct(business.id, {
-        name: pName.trim(), sku: pSku.trim(), unit: pUnit.trim() || 'und',
-        price: Number(pPrice) || 0, variantAxes: axisNames,
-      });
-
-      // Etiquetas del producto: taxonomías que NO son eje de variante.
-      const termIds = [];
-      for (const t of taxonomies) {
-        if (axisIds.includes(t.id)) continue;
-        const value = (termValues[t.id] || '').trim();
-        if (!value) continue;
-        const term = await findOrCreateTerm(t.id, value);
-        termIds.push(term.id);
-      }
-      await setProductTerms(created.id, termIds);
-
-      // Variantes: producto cartesiano de los valores de cada eje.
-      if (axisTaxonomies.length > 0) {
-        const valuesPerAxis = axisTaxonomies.map((t) =>
-          (axisValues[t.id] || '').split(',').map((v) => v.trim()).filter(Boolean));
-        if (valuesPerAxis.some((vs) => vs.length === 0)) {
-          throw new Error('Escribe al menos un valor para cada eje de variante (separados por coma).');
-        }
-        for (const combo of cartesian(valuesPerAxis)) {
-          const attributes = {};
-          combo.forEach((val, i) => { attributes[axisNames[i]] = val; });
-          await createVariant(business.id, created.id, { attributes });
-          // Alimenta el vocabulario de la taxonomía para autocompletar luego.
-          for (let i = 0; i < axisTaxonomies.length; i++) {
-            await findOrCreateTerm(axisTaxonomies[i].id, combo[i]);
-          }
-        }
-      } else {
-        // Producto simple: una variante por defecto.
-        await createVariant(business.id, created.id, { attributes: {}, sku: pSku.trim() });
-      }
-
-      await reload();
-      setPName(''); setPSku(''); setPUnit('und'); setPPrice('');
-      setTermValues({}); setAxisIds([]); setAxisValues({});
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  useEffect(() => { reload().catch((e) => setError(e.message)); }, []);
 
   // nombre de cada término, para etiquetas y filtros
   const termName = new Map();
@@ -135,31 +71,143 @@ export default function Inventory() {
   );
   const filterables = taxonomies.filter((t) => t.taxonomy_terms.length > 0);
 
-  async function onDeleteProduct(p) {
-    if (!confirm(`¿Eliminar ${p.name}, sus variantes y su historial de movimientos?`)) return;
+  // ---------- Alta de producto ----------
+  const np = newProd;
+  const setNp = (patch) => setNewProd((s) => ({ ...s, ...patch }));
+  const axisTaxOfNew = () => varTax.filter((t) => np.axisIds.includes(t.id));
+
+  function toggleNewAxis(id) {
+    setNewProd((s) => {
+      const on = s.axisIds.includes(id);
+      const axisIds = on ? s.axisIds.filter((x) => x !== id) : [...s.axisIds, id];
+      // al cambiar ejes, limpiamos las filas para evitar valores huérfanos
+      return { ...s, axisIds, rows: [EMPTY_ROW()], genValues: {} };
+    });
+  }
+  function genCombinations() {
+    const axes = axisTaxOfNew();
+    const valuesPerAxis = axes.map((t) =>
+      (np.genValues[t.id] || '').split(',').map((v) => v.trim()).filter(Boolean));
+    if (valuesPerAxis.some((vs) => vs.length === 0)) {
+      setError('Escribe al menos un valor para cada eje antes de generar.');
+      return;
+    }
+    setError(null);
+    const rows = cartesian(valuesPerAxis).map((combo) => {
+      const values = {};
+      axes.forEach((t, i) => { values[t.name] = combo[i]; });
+      return { ...EMPTY_ROW(), values };
+    });
+    setNp({ rows });
+  }
+
+  async function onCreateProduct(e) {
+    e.preventDefault();
+    setError(null); setBusy(true);
     try {
-      await deleteProduct(p.id);
+      const categories = {};
+      for (const t of catTax) {
+        const val = (np.categories[t.id] || '').trim();
+        if (val) categories[t.name] = val;
+      }
+
+      let variants;
+      let variantAxes = [];
+      if (np.mode === 'simple') {
+        variants = [{ attributes: {}, stock: Number(np.simpleStock) || 0 }];
+      } else {
+        const axes = axisTaxOfNew();
+        if (axes.length === 0) throw new Error('Elige al menos un eje de variación (Color, Talla…).');
+        variantAxes = axes.map((t) => t.name);
+        const seen = new Set();
+        variants = np.rows.map((r) => {
+          const attributes = {};
+          for (const t of axes) {
+            const val = (r.values[t.name] || '').trim();
+            if (!val) throw new Error('Cada variación debe tener todos sus valores (Color, Talla…).');
+            attributes[t.name] = val;
+          }
+          const sig = axes.map((t) => attributes[t.name]).join('|');
+          if (seen.has(sig)) throw new Error(`Variación repetida: ${axes.map((t) => attributes[t.name]).join(' · ')}.`);
+          seen.add(sig);
+          return {
+            attributes, stock: Number(r.stock) || 0,
+            sku: r.sku.trim(), price: r.price === '' ? null : Number(r.price),
+          };
+        });
+        if (variants.length === 0) throw new Error('Agrega al menos una variación.');
+      }
+
+      await createProductWithVariants({
+        name: np.name.trim(), sku: np.sku.trim(), unit: np.unit.trim() || 'und',
+        price: Number(np.price) || 0, categories, variantAxes, variants,
+      });
       await reload();
-    } catch (e) {
-      setError(e.message);
+      setNewProd(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
+  // ---------- Variaciones de un producto existente ----------
+  async function onSubmitAddVariant(e) {
+    e.preventDefault();
+    setError(null); setBusy(true);
+    try {
+      const p = products.find((x) => x.id === addVar.productId);
+      const attributes = {};
+      for (const ax of (p.variant_axes || [])) {
+        const val = (addVar.values[ax] || '').trim();
+        if (!val) throw new Error(`Falta el valor de ${ax}.`);
+        attributes[ax] = val;
+      }
+      await addProductVariant(p.id, {
+        attributes, sku: addVar.sku.trim(),
+        price: addVar.price === '' ? null : Number(addVar.price), stock: Number(addVar.stock) || 0,
+      });
+      await reload();
+      setAddVar(null);
+    } catch (err) {
+      setError(err.message.includes('duplicate') || err.message.includes('unique')
+        ? 'Ya existe una variación con esa combinación.' : err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSubmitVarEdit(e) {
+    e.preventDefault();
+    setError(null); setBusy(true);
+    try {
+      await updateVariant(varEdit.id, {
+        sku: varEdit.sku.trim(),
+        price: varEdit.price === '' ? null : Number(varEdit.price),
+        target_stock: varEdit.target === '' ? null : Number(varEdit.target),
+      });
+      await reload();
+      setVarEdit(null);
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+  const openEdit = (p, v) => setVarEdit({
+    id: v.id, productName: p.name, label: variantLabel(v.attributes, p.variant_axes),
+    sku: v.sku || '', price: v.price != null ? String(v.price) : '',
+    target: v.target_stock != null ? String(v.target_stock) : '',
+  });
+
+  async function onDeleteProduct(p) {
+    if (!confirm(`¿Eliminar ${p.name}, sus variantes y su historial de movimientos?`)) return;
+    try { await deleteProduct(p.id); await reload(); } catch (e) { setError(e.message); }
+  }
   async function onDeleteVariant(p, v) {
     if (variantsOf(p).length <= 1) { setError('Un producto debe tener al menos una variante.'); return; }
     if (!confirm(`¿Eliminar la variante ${variantLabel(v.attributes) || 'estándar'} de ${p.name}?`)) return;
-    try {
-      await deleteVariant(v.id);
-      await reload();
-    } catch (e) {
-      setError(e.message);
-    }
+    try { await deleteVariant(v.id); await reload(); } catch (e) { setError(e.message); }
   }
-
   async function onSubmitMove(e) {
     e.preventDefault();
-    setError(null);
-    setBusy(true);
+    setError(null); setBusy(true);
     try {
       await createMovement(business.id, {
         productId: move.productId, variantId: move.variantId, type: move.type,
@@ -169,59 +217,8 @@ export default function Inventory() {
       setMove(null);
     } catch (err) {
       setError(err.message.includes('Insufficient stock') ? 'No hay stock suficiente para esa salida.' : err.message);
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
-
-  async function onSubmitAddVariant(e) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      const p = products.find((x) => x.id === addVar.productId);
-      const axes = p.variant_axes || [];
-      const attributes = {};
-      for (const ax of axes) {
-        const val = (addVar.values[ax] || '').trim();
-        if (!val) throw new Error(`Falta el valor de ${ax}.`);
-        attributes[ax] = val;
-      }
-      await createVariant(business.id, p.id, { attributes });
-      await reload();
-      setAddVar(null);
-    } catch (err) {
-      setError(err.message.includes('duplicate') || err.message.includes('unique')
-        ? 'Ya existe una variante con esa combinación.' : err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onSubmitVarEdit(e) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      await updateVariant(varEdit.id, {
-        sku: varEdit.sku.trim(),
-        price: varEdit.price === '' ? null : Number(varEdit.price),
-        target_stock: varEdit.target === '' ? null : Number(varEdit.target),
-      });
-      await reload();
-      setVarEdit(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const openEdit = (p, v) => setVarEdit({
-    id: v.id, productName: p.name, label: variantLabel(v.attributes, p.variant_axes),
-    sku: v.sku || '', price: v.price != null ? String(v.price) : '',
-    target: v.target_stock != null ? String(v.target_stock) : '',
-  });
 
   const moveButtons = (p, v) => (
     <>
@@ -240,6 +237,7 @@ export default function Inventory() {
         </div>
         <div className="page-actions">
           <Link to="/inventory/history" className="btn ghost">Historial completo</Link>
+          <button className="btn primary" onClick={() => { setError(null); setNewProd(emptyNewProd()); }}>+ Nuevo producto</button>
         </div>
       </header>
 
@@ -256,90 +254,12 @@ export default function Inventory() {
         );
       })()}
 
-      <div className="card vsection">
-        <h2>Nuevo producto</h2>
-        <form onSubmit={onAddProduct} className="vform">
-          <div className="inline-form">
-            <label>
-              Nombre
-              <input value={pName} onChange={(e) => setPName(e.target.value)} required placeholder="Camisa Oxford" />
-            </label>
-            <label className="short">
-              Precio
-              <input type="number" step="0.01" min="0" value={pPrice} onChange={(e) => setPPrice(e.target.value)} placeholder="0,00" />
-            </label>
-            <div className="inline-form-actions">
-              <button className="btn primary" disabled={busy}>Agregar</button>
-            </div>
-          </div>
-          <details className="vmore">
-            <summary>Configuración avanzada</summary>
-            <div className="vgrid">
-              <label>
-                SKU
-                <input value={pSku} onChange={(e) => setPSku(e.target.value)} placeholder="CAM-OXF" />
-              </label>
-              <label>
-                Unidad de medida
-                <input value={pUnit} onChange={(e) => setPUnit(e.target.value)} placeholder="und, kg, cajas…" />
-              </label>
-              {taxonomies.filter((t) => !axisIds.includes(t.id)).map((t) => (
-                <label key={t.id}>
-                  {t.name}
-                  <input list={`terms-${t.id}`} value={termValues[t.id] || ''}
-                    onChange={(e) => setTermValues((v) => ({ ...v, [t.id]: e.target.value }))}
-                    placeholder={t.name === 'Marca' ? 'Toyota' : t.name === 'Modelo' ? 'Corolla' : ''} />
-                  <datalist id={`terms-${t.id}`}>
-                    {t.taxonomy_terms.map((term) => <option key={term.id} value={term.name} />)}
-                  </datalist>
-                </label>
-              ))}
-            </div>
-
-            {/* -------- Variantes -------- */}
-            <div className="variant-config">
-              <div className="oc-label">Variantes (color, talla…)</div>
-              <p className="hint">Marca los ejes por los que varía este producto; se creará una variante por cada combinación.</p>
-              <div className="variant-axis-pills">
-                {taxonomies.map((t) => (
-                  <button type="button" key={t.id}
-                    className={`pay-pill${axisIds.includes(t.id) ? ' active' : ''}`}
-                    onClick={() => toggleAxis(t.id)}>
-                    {t.name}
-                  </button>
-                ))}
-                {taxonomies.length === 0 && (
-                  <span className="muted">Crea taxonomías (Talla, Color…) en <a href="/settings">Negocio</a>.</span>
-                )}
-              </div>
-              {axisIds.length > 0 && (
-                <div className="vgrid">
-                  {taxonomies.filter((t) => axisIds.includes(t.id)).map((t) => (
-                    <label key={t.id}>
-                      {t.name} (valores separados por coma)
-                      <input list={`axis-${t.id}`} value={axisValues[t.id] || ''}
-                        onChange={(e) => setAxisValues((v) => ({ ...v, [t.id]: e.target.value }))}
-                        placeholder={t.name === 'Talla' ? 'S, M, L, XL' : t.name === 'Color' ? 'Negro, Blanco, Azul' : ''} />
-                      <datalist id={`axis-${t.id}`}>
-                        {t.taxonomy_terms.map((term) => <option key={term.id} value={term.name} />)}
-                      </datalist>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-            <p className="hint">
-              El valor se crea solo si no existe. Gestiona las categorías en <a href="/settings">Negocio</a>.
-            </p>
-          </details>
-        </form>
-        {error && <div className="form-error">{error}</div>}
-      </div>
+      {error && !newProd && <div className="form-error">{error}</div>}
 
       {products === null ? (
         <div className="empty">Cargando…</div>
       ) : products.length === 0 ? (
-        <div className="empty">Aún no tienes productos. Agrega el primero arriba.</div>
+        <div className="empty">Aún no tienes productos. Usa <strong>+ Nuevo producto</strong> para agregar el primero.</div>
       ) : (
         <>
         {filterables.length > 0 && (
@@ -424,8 +344,8 @@ export default function Inventory() {
                       <tr className="variant-row">
                         <td colSpan={5}>
                           <button className="btn ghost sm" onClick={() =>
-                            setAddVar({ productId: p.id, values: Object.fromEntries((p.variant_axes || []).map((a) => [a, ''])) })}>
-                            + Agregar variante
+                            setAddVar({ productId: p.id, values: Object.fromEntries((p.variant_axes || []).map((a) => [a, ''])), stock: '', sku: '', price: '' })}>
+                            + Agregar variación
                           </button>
                         </td>
                       </tr>
@@ -439,6 +359,140 @@ export default function Inventory() {
         </>
       )}
 
+      {/* ============ Modal: nuevo producto ============ */}
+      {newProd && (
+        <div className="modal-backdrop" onClick={() => setNewProd(null)}>
+          <div className="modal card modal-wide" onClick={(e) => e.stopPropagation()}>
+            <div className="pos-panel-head">
+              <h2>Nuevo producto</h2>
+              <button className="btn ghost sm" onClick={() => setNewProd(null)}>Cerrar</button>
+            </div>
+            <form onSubmit={onCreateProduct} className="vform">
+              <div className="np-grid">
+                <label className="np-name">Nombre
+                  <input value={np.name} onChange={(e) => setNp({ name: e.target.value })} required autoFocus placeholder="Camisa Oxford" />
+                </label>
+                <label>Precio (USD)
+                  <input type="number" step="0.01" min="0" value={np.price} onChange={(e) => setNp({ price: e.target.value })} placeholder="0,00" />
+                </label>
+                <label>SKU
+                  <input value={np.sku} onChange={(e) => setNp({ sku: e.target.value })} placeholder="CAM-OXF" />
+                </label>
+                <label>Unidad
+                  <input value={np.unit} onChange={(e) => setNp({ unit: e.target.value })} placeholder="und" />
+                </label>
+              </div>
+
+              {catTax.length > 0 && (
+                <div className="np-block">
+                  <div className="oc-label">Categorías</div>
+                  <div className="np-grid">
+                    {catTax.map((t) => (
+                      <label key={t.id}>{t.name}
+                        <input list={`cat-${t.id}`} value={np.categories[t.id] || ''}
+                          onChange={(e) => setNp({ categories: { ...np.categories, [t.id]: e.target.value } })}
+                          placeholder={t.name === 'Categoría' ? 'Camisas' : ''} />
+                        <datalist id={`cat-${t.id}`}>
+                          {t.taxonomy_terms.map((term) => <option key={term.id} value={term.name} />)}
+                        </datalist>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="np-block">
+                <div className="seg">
+                  <button type="button" className={`seg-btn${np.mode === 'simple' ? ' active' : ''}`} onClick={() => setNp({ mode: 'simple' })}>Producto simple</button>
+                  <button type="button" className={`seg-btn${np.mode === 'variants' ? ' active' : ''}`} onClick={() => setNp({ mode: 'variants' })}>Con variaciones</button>
+                </div>
+
+                {np.mode === 'simple' ? (
+                  <label className="short" style={{ marginTop: 12 }}>Stock inicial
+                    <input type="number" step="0.01" min="0" value={np.simpleStock}
+                      onChange={(e) => setNp({ simpleStock: e.target.value })} placeholder="0" />
+                  </label>
+                ) : (
+                  <div className="np-variants">
+                    {varTax.length === 0 ? (
+                      <p className="hint">No hay ejes de variación configurados. Créalos en <Link to="/settings">Negocio → Inventario → Variaciones</Link> (p. ej. Color, Talla).</p>
+                    ) : (
+                      <>
+                        <div className="oc-label">Varía por</div>
+                        <div className="variant-axis-pills">
+                          {varTax.map((t) => (
+                            <button type="button" key={t.id}
+                              className={`pay-pill${np.axisIds.includes(t.id) ? ' active' : ''}`}
+                              onClick={() => toggleNewAxis(t.id)}>{t.name}</button>
+                          ))}
+                        </div>
+
+                        {axisTaxOfNew().length > 0 && (
+                          <>
+                            <div className="np-gen">
+                              {axisTaxOfNew().map((t) => (
+                                <label key={t.id} className="short">{t.name} (coma)
+                                  <input list={`gen-${t.id}`} value={np.genValues[t.id] || ''}
+                                    onChange={(e) => setNp({ genValues: { ...np.genValues, [t.id]: e.target.value } })}
+                                    placeholder={t.name === 'Talla' ? 'S, M, L' : t.name === 'Color' ? 'Negro, Blanco' : ''} />
+                                  <datalist id={`gen-${t.id}`}>
+                                    {t.taxonomy_terms.map((term) => <option key={term.id} value={term.name} />)}
+                                  </datalist>
+                                </label>
+                              ))}
+                              <button type="button" className="btn sm" onClick={genCombinations}>Generar combinaciones</button>
+                            </div>
+
+                            <div className="var-rows">
+                              <div className="var-rows-head">
+                                {axisTaxOfNew().map((t) => <span key={t.id}>{t.name}</span>)}
+                                <span>Stock</span><span>SKU</span><span>Precio</span><span />
+                              </div>
+                              {np.rows.map((r, i) => (
+                                <div className="var-row" key={r.key}>
+                                  {axisTaxOfNew().map((t) => (
+                                    <input key={t.id} list={`row-${t.id}`} value={r.values[t.name] || ''}
+                                      placeholder={t.name}
+                                      onChange={(e) => setNp({ rows: np.rows.map((x, j) => j === i ? { ...x, values: { ...x.values, [t.name]: e.target.value } } : x) })} />
+                                  ))}
+                                  <input type="number" min="0" step="1" value={r.stock} placeholder="0"
+                                    onChange={(e) => setNp({ rows: np.rows.map((x, j) => j === i ? { ...x, stock: e.target.value } : x) })} />
+                                  <input value={r.sku} placeholder="opcional"
+                                    onChange={(e) => setNp({ rows: np.rows.map((x, j) => j === i ? { ...x, sku: e.target.value } : x) })} />
+                                  <input type="number" min="0" step="0.01" value={r.price} placeholder="hereda"
+                                    onChange={(e) => setNp({ rows: np.rows.map((x, j) => j === i ? { ...x, price: e.target.value } : x) })} />
+                                  <button type="button" className="var-row-del" aria-label="Quitar"
+                                    onClick={() => setNp({ rows: np.rows.length > 1 ? np.rows.filter((_, j) => j !== i) : [EMPTY_ROW()] })}>×</button>
+                                </div>
+                              ))}
+                              {axisTaxOfNew().map((t) => (
+                                <datalist key={t.id} id={`row-${t.id}`}>
+                                  {t.taxonomy_terms.map((term) => <option key={term.id} value={term.name} />)}
+                                </datalist>
+                              ))}
+                              <button type="button" className="btn ghost sm" onClick={() => setNp({ rows: [...np.rows, EMPTY_ROW()] })}>
+                                + Agregar variación
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {error && <div className="form-error">{error}</div>}
+              <div className="inline-form-actions">
+                <button className="btn primary lg" disabled={busy}>{busy ? 'Guardando…' : 'Guardar producto'}</button>
+                <button type="button" className="btn ghost" onClick={() => setNewProd(null)}>Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============ Modal: movimiento ============ */}
       {move && (
         <div className="modal-backdrop" onClick={() => setMove(null)}>
           <div className="modal card" onClick={(e) => e.stopPropagation()}>
@@ -452,8 +506,7 @@ export default function Inventory() {
                 <input type="number" step="0.01" min="0" autoFocus required value={move.quantity}
                   onChange={(e) => setMove((m) => ({ ...m, quantity: e.target.value }))} />
               </label>
-              <label>
-                Nota (opcional)
+              <label>Nota (opcional)
                 <input value={move.note} placeholder={move.type === 'out' ? 'Venta, factura #…' : 'Compra, conteo físico…'}
                   onChange={(e) => setMove((m) => ({ ...m, note: e.target.value }))} />
               </label>
@@ -466,20 +519,31 @@ export default function Inventory() {
         </div>
       )}
 
+      {/* ============ Modal: agregar variación a producto existente ============ */}
       {addVar && (
         <div className="modal-backdrop" onClick={() => setAddVar(null)}>
           <div className="modal card" onClick={(e) => e.stopPropagation()}>
-            <h2>Nueva variante — {products.find((p) => p.id === addVar.productId)?.name}</h2>
+            <h2>Nueva variación — {products.find((p) => p.id === addVar.productId)?.name}</h2>
             <form onSubmit={onSubmitAddVariant} className="vform">
               {(products.find((p) => p.id === addVar.productId)?.variant_axes || []).map((ax) => (
-                <label key={ax}>
-                  {ax}
-                  <input autoFocus required value={addVar.values[ax] || ''}
+                <label key={ax}>{ax}
+                  <input required value={addVar.values[ax] || ''}
                     onChange={(e) => setAddVar((s) => ({ ...s, values: { ...s.values, [ax]: e.target.value } }))} />
                 </label>
               ))}
+              <label>Stock inicial
+                <input type="number" min="0" step="1" value={addVar.stock}
+                  onChange={(e) => setAddVar((s) => ({ ...s, stock: e.target.value }))} placeholder="0" />
+              </label>
+              <label>SKU (opcional)
+                <input value={addVar.sku} onChange={(e) => setAddVar((s) => ({ ...s, sku: e.target.value }))} />
+              </label>
+              <label>Precio (opcional, hereda del producto)
+                <input type="number" min="0" step="0.01" value={addVar.price}
+                  onChange={(e) => setAddVar((s) => ({ ...s, price: e.target.value }))} placeholder="hereda" />
+              </label>
               <div className="inline-form-actions">
-                <button className="btn primary" disabled={busy}>Crear variante</button>
+                <button className="btn primary" disabled={busy}>Crear variación</button>
                 <button type="button" className="btn ghost" onClick={() => setAddVar(null)}>Cancelar</button>
               </div>
             </form>
@@ -487,22 +551,20 @@ export default function Inventory() {
         </div>
       )}
 
+      {/* ============ Modal: editar variación ============ */}
       {varEdit && (
         <div className="modal-backdrop" onClick={() => setVarEdit(null)}>
           <div className="modal card" onClick={(e) => e.stopPropagation()}>
             <h2>Editar — {varEdit.productName}{varEdit.label && <span className="muted"> · {varEdit.label}</span>}</h2>
             <form onSubmit={onSubmitVarEdit} className="vform">
-              <label>
-                SKU
+              <label>SKU
                 <input value={varEdit.sku} onChange={(e) => setVarEdit((s) => ({ ...s, sku: e.target.value }))} placeholder="CAM-OXF-AZ-M" />
               </label>
-              <label>
-                Precio (dejar vacío = usar el del producto)
+              <label>Precio (vacío = usar el del producto)
                 <input type="number" step="0.01" min="0" value={varEdit.price}
                   onChange={(e) => setVarEdit((s) => ({ ...s, price: e.target.value }))} placeholder="Hereda del producto" />
               </label>
-              <label>
-                Stock objetivo (para la alerta de stock bajo)
+              <label>Stock objetivo (para la alerta de stock bajo)
                 <input type="number" step="0.01" min="0" value={varEdit.target}
                   onChange={(e) => setVarEdit((s) => ({ ...s, target: e.target.value }))} placeholder="Sin alerta" />
               </label>

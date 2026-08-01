@@ -87,6 +87,30 @@ export async function createProduct(businessId, { name, sku, unit, price, varian
     .select().single());
 }
 
+// Alta atómica: producto + categorías + variaciones con stock inicial.
+// categories: { taxonomyName: value }   variants: [{ attributes, sku, price, stock }]
+export async function createProductWithVariants({ name, sku, unit, price, categories, variantAxes, variants }) {
+  return unwrap(await supabase.rpc('create_product_with_variants', {
+    p_name: name,
+    p_sku: sku || '',
+    p_unit: unit || 'und',
+    p_price: Number(price) || 0,
+    p_categories: categories || {},
+    p_variant_axes: variantAxes || [],
+    p_variants: variants || [],
+  }));
+}
+
+export async function addProductVariant(productId, { attributes, sku, price, stock }) {
+  return unwrap(await supabase.rpc('add_product_variant', {
+    p_product_id: productId,
+    p_attributes: attributes || {},
+    p_sku: sku || '',
+    p_price: price ?? null,
+    p_stock: Number(stock) || 0,
+  }));
+}
+
 export async function updateProduct(id, patch) {
   return unwrap(await supabase.from('products')
     .update(patch).eq('id', id).select().single());
@@ -139,9 +163,9 @@ export async function fetchTaxonomies() {
     .select('*, taxonomy_terms(*)').order('created_at'));
 }
 
-export async function createTaxonomy(businessId, name) {
+export async function createTaxonomy(businessId, name, kind = 'category') {
   return unwrap(await supabase.from('taxonomies')
-    .insert({ business_id: businessId, name }).select('*, taxonomy_terms(*)').single());
+    .insert({ business_id: businessId, name, kind }).select('*, taxonomy_terms(*)').single());
 }
 
 export async function deleteTaxonomy(id) {

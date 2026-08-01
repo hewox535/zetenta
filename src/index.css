@@ -429,6 +429,32 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 }
 .lowstock-banner .muted { color: inherit; opacity: .8; }
 
+/* ----- Modal de alta de producto ----- */
+.modal { max-height: 90vh; overflow-y: auto; }
+.modal-wide { max-width: 720px; }
+.np-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.np-grid .np-name { grid-column: 1 / -1; }
+.np-block { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.np-block .oc-label { margin-bottom: 8px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+.seg-btn { padding: 8px 18px; border: none; background: transparent; cursor: pointer; font-weight: 600; font-size: 13px; color: var(--text); }
+.seg-btn.active { background: var(--accent); color: #fff; }
+.np-variants { margin-top: 14px; }
+.np-gen { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 12px 0; padding: 12px; background: var(--accent-soft); border-radius: var(--radius); }
+.np-gen label { flex: 1 1 120px; }
+.var-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.var-rows-head { display: flex; gap: 8px; font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; padding: 0 2px; }
+.var-rows-head span { flex: 1 1 90px; }
+.var-rows-head span:last-child { flex: 0 0 32px; }
+.var-row { display: flex; gap: 8px; align-items: center; }
+.var-row input { flex: 1 1 90px; min-width: 60px; }
+.var-row-del { flex: 0 0 32px; width: 32px; height: 32px; border: none; background: transparent; color: var(--danger); font-size: 20px; line-height: 1; cursor: pointer; border-radius: 8px; }
+.var-row-del:hover { background: var(--danger-bg); }
+@media (max-width: 640px) {
+  .var-rows-head { display: none; }
+  .var-row { flex-wrap: wrap; }
+}
+
 /* ----- Panel lateral (pedido / pago) ----- */
 .pos-panel {
   display: flex; flex-direction: column; min-height: 0;

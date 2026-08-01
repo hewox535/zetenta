@@ -127,10 +127,11 @@ function RetentionSection({ business, refreshBusiness }) {
   );
 }
 
-// ---------- Inventario: umbral de stock bajo + categorías de productos ----------
+// ---------- Inventario: umbral de stock bajo + categorías + variaciones ----------
 function InventorySection({ business, refreshBusiness }) {
   const [taxonomies, setTaxonomies] = useState([]);
-  const [newTax, setNewTax] = useState('');
+  const [newCat, setNewCat] = useState('');
+  const [newVar, setNewVar] = useState('');
   const [taxError, setTaxError] = useState(null);
 
   const [lowPct, setLowPct] = useState(String(business.low_stock_percent ?? 20));
@@ -152,20 +153,21 @@ function InventorySection({ business, refreshBusiness }) {
     } catch (e) { setLowError(e.message); } finally { setLowBusy(false); }
   }
 
-  async function onAddTaxonomy() {
-    const name = newTax.trim();
+  async function onAddTaxonomy(kind) {
+    const name = (kind === 'variant' ? newVar : newCat).trim();
     if (!name) return;
     setTaxError(null);
     try {
-      const created = await createTaxonomy(business.id, name);
+      const created = await createTaxonomy(business.id, name, kind);
       setTaxonomies((prev) => [...prev, created]);
-      setNewTax('');
+      if (kind === 'variant') setNewVar(''); else setNewCat('');
     } catch (e) {
-      setTaxError(e.message.includes('duplicate') ? `Ya existe una categoría llamada "${name}".` : e.message);
+      setTaxError(e.message.includes('duplicate') ? `Ya existe algo llamado "${name}".` : e.message);
     }
   }
   async function onDeleteTaxonomy(t) {
-    if (!confirm(`¿Eliminar la categoría "${t.name}" y todos sus valores? Los productos perderán esa clasificación.`)) return;
+    const what = t.kind === 'variant' ? 'el eje de variación' : 'la categoría';
+    if (!confirm(`¿Eliminar ${what} "${t.name}" y todos sus valores? Los productos perderán esa clasificación.`)) return;
     try {
       await deleteTaxonomy(t.id);
       setTaxonomies((prev) => prev.filter((x) => x.id !== t.id));
@@ -202,12 +204,38 @@ function InventorySection({ business, refreshBusiness }) {
       </button>
     </section>
 
+    <TaxGroup
+      title="Categorías de productos"
+      hint="Cómo clasificas el producto (Marca, Modelo, Categoría…). Aparecen como campos al crear un producto."
+      taxonomies={taxonomies.filter((t) => t.kind !== 'variant')}
+      placeholder="Categoría, Marca, Modelo…"
+      addLabel="Nueva categoría"
+      value={newCat} onChange={setNewCat} onAdd={() => onAddTaxonomy('category')}
+      onDeleteTaxonomy={onDeleteTaxonomy} onDeleteTerm={onDeleteTerm}
+    />
+
+    <TaxGroup
+      title="Variaciones (ejes)"
+      hint="Por qué varía un producto (Color, Talla…) y sus valores posibles. Al crear un producto eliges por cuáles varía y agregas cada combinación con su stock."
+      taxonomies={taxonomies.filter((t) => t.kind === 'variant')}
+      placeholder="Color, Talla…"
+      addLabel="Nuevo eje de variación"
+      value={newVar} onChange={setNewVar} onAdd={() => onAddTaxonomy('variant')}
+      onDeleteTaxonomy={onDeleteTaxonomy} onDeleteTerm={onDeleteTerm}
+    />
+
+    {taxError && <div className="form-error">{taxError}</div>}
+    </div>
+  );
+}
+
+// Grupo reutilizable de taxonomías (categorías o ejes de variación).
+function TaxGroup({ title, hint, taxonomies, placeholder, addLabel, value, onChange, onAdd, onDeleteTaxonomy, onDeleteTerm }) {
+  return (
     <section className="card vsection tax-section">
-      <h2>Categorías de productos</h2>
-      <p className="hint">
-        Cómo clasificas tu inventario (Marca, Modelo, Talla…). Los valores se crean al
-        escribirlos en el formulario de nuevo producto; aquí puedes eliminarlos.
-      </p>
+      <h2>{title}</h2>
+      <p className="hint">{hint}</p>
+      {taxonomies.length === 0 && <p className="hint">Aún no hay nada aquí.</p>}
       {taxonomies.map((t) => (
         <div className="tax-row" key={t.id}>
           <div className="tax-head">
@@ -227,17 +255,15 @@ function InventorySection({ business, refreshBusiness }) {
       ))}
       <div className="inline-form">
         <label>
-          Nueva categoría
-          <input value={newTax} onChange={(e) => setNewTax(e.target.value)} placeholder="Talla, Color, Categoría…"
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAddTaxonomy(); } }} />
+          {addLabel}
+          <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAdd(); } }} />
         </label>
         <div className="inline-form-actions">
-          <button type="button" className="btn" onClick={onAddTaxonomy}>Agregar</button>
+          <button type="button" className="btn" onClick={onAdd}>Agregar</button>
         </div>
       </div>
-      {taxError && <div className="form-error">{taxError}</div>}
     </section>
-    </div>
   );
 }
 
