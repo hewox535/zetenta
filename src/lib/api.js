@@ -116,11 +116,14 @@ export async function deleteVariant(id) {
   unwrap(await supabase.from('product_variants').delete().eq('id', id));
 }
 
-export async function fetchMovements(limit = 30) {
-  return unwrap(await supabase.from('inventory_movements')
+export async function fetchMovements(limit = 30, { productId, type } = {}) {
+  let q = supabase.from('inventory_movements')
     .select('*, products(name), product_variants(attributes)')
     .order('created_at', { ascending: false })
-    .limit(limit));
+    .limit(limit);
+  if (productId) q = q.eq('product_id', productId);
+  if (type) q = q.eq('type', type);
+  return unwrap(await q);
 }
 
 export async function createMovement(businessId, { productId, variantId, type, quantity, note }) {
@@ -219,6 +222,52 @@ export async function deletePaymentMethod(id) {
 
 export async function updateOrderSettings(rateConfig) {
   return unwrap(await supabase.rpc('update_order_settings', { p_rate_config: rateConfig }));
+}
+
+// Descuento por pago en divisa (%) y umbral de stock bajo (%).
+export async function updateBusinessSettings({ foreignDiscountPercent, lowStockPercent }) {
+  return unwrap(await supabase.rpc('update_business_settings', {
+    p_foreign_discount_percent: foreignDiscountPercent,
+    p_low_stock_percent: lowStockPercent,
+  }));
+}
+
+// ---------- Personal del negocio (roles) ----------
+
+export async function fetchStaff() {
+  return unwrap(await supabase.from('profiles')
+    .select('id, full_name, email, business_role, role')
+    .not('business_id', 'is', null)
+    .order('full_name'));
+}
+
+export async function createStaff({ email, password, fullName }) {
+  const { data, error } = await supabase.functions.invoke('staff', {
+    body: { action: 'create', email, password, full_name: fullName },
+  });
+  if (error) {
+    let msg = error.message;
+    try { const b = await error.context.json(); if (b?.error) msg = b.error; } catch { /* sin JSON */ }
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data.user;
+}
+
+export async function deleteStaff(userId) {
+  const { data, error } = await supabase.functions.invoke('staff', {
+    body: { action: 'delete', user_id: userId },
+  });
+  if (error) {
+    let msg = error.message;
+    try { const b = await error.context.json(); if (b?.error) msg = b.error; } catch { /* sin JSON */ }
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+}
+
+export async function setStaffRole(userId, role) {
+  return unwrap(await supabase.rpc('set_staff_role', { p_user: userId, p_role: role }));
 }
 
 // ---------- Clientes ----------
