@@ -146,6 +146,7 @@ export default function Stats() {
           </div>
 
           <div className="stats-cols">
+            <div className="stats-main-col">
             <section className="card vsection">
               <h2>Más vendidos</h2>
               <div className="rank">
@@ -176,6 +177,19 @@ export default function Stats() {
                 </>
               )}
             </section>
+
+            <section className="card vsection">
+              <h2>Baja rotación</h2>
+              <p className="hint">Productos del catálogo sin ninguna venta en el período seleccionado.</p>
+              {stats.noSales.length === 0 ? (
+                <div className="empty">Todos los productos tuvieron al menos una venta.</div>
+              ) : (
+                <div className="chips">
+                  {stats.noSales.map((name) => <span className="chip" key={name}>{name}</span>)}
+                </div>
+              )}
+            </section>
+            </div>
 
             <div className="stats-side">
               <section className="card vsection">
@@ -216,19 +230,6 @@ export default function Stats() {
               </section>
             </div>
           </div>
-
-          {/* -------- Baja rotación: productos sin ventas en el período -------- */}
-          <section className="card vsection">
-            <h2>Baja rotación</h2>
-            <p className="hint">Productos del catálogo sin ninguna venta en el período seleccionado.</p>
-            {stats.noSales.length === 0 ? (
-              <div className="empty">Todos los productos tuvieron al menos una venta.</div>
-            ) : (
-              <div className="chips">
-                {stats.noSales.map((name) => <span className="chip" key={name}>{name}</span>)}
-              </div>
-            )}
-          </section>
         </>
       )}
 
