@@ -7,8 +7,10 @@ export default function OrderReceipt({ business, order }) {
   const items = order.order_items || [];
   const payments = order.order_payments || [];
   const rate = Number(order.rate) || 0;
+  const discount = Number(order.discount_usd) || 0;
+  const effectiveTotal = (Number(order.total_usd) || 0) - discount;
   const paidUsd = payments.reduce((s, p) => s + (Number(p.amount_usd) || 0), 0);
-  const change = paidUsd - (Number(order.total_usd) || 0);
+  const change = paidUsd - effectiveTotal;
 
   return (
     <div className="receipt">
@@ -18,6 +20,7 @@ export default function OrderReceipt({ business, order }) {
         <div className="receipt-muted">Pedido Nº {order.number}</div>
         <div className="receipt-muted">{formatDate(order.created_at)}</div>
         {order.customer_name && <div className="receipt-muted">Cliente: {order.customer_name}</div>}
+        {order.created_by_name && <div className="receipt-muted">Atendido por: {order.created_by_name}</div>}
       </div>
 
       <div className="receipt-divider" />
@@ -40,10 +43,22 @@ export default function OrderReceipt({ business, order }) {
       <div className="receipt-divider" />
 
       <div className="receipt-totals">
-        <div className="receipt-total-row grand">
+        <div className={`receipt-total-row${discount > 0.005 ? '' : ' grand'}`}>
           <span>Total</span>
           <span>{usd(order.total_usd)}</span>
         </div>
+        {discount > 0.005 && (
+          <>
+            <div className="receipt-total-row">
+              <span>Descuento divisa</span>
+              <span>−{usd(discount)}</span>
+            </div>
+            <div className="receipt-total-row grand">
+              <span>Total a pagar</span>
+              <span>{usd(effectiveTotal)}</span>
+            </div>
+          </>
+        )}
         <div className="receipt-total-row grand bs">
           <span>Total Bs</span>
           <span>{bs(order.total_ves)}</span>

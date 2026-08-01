@@ -88,14 +88,27 @@ export default function Orders() {
   const totalVes = totalUsd * rate.value;
 
   // ------- pagos (solo los métodos seleccionados) -------
-  const paidUsd = selectedMethods.reduce((s, id) => {
+  // Descuento por divisa: el pago en USD "rinde" más (amt / (1-d)); los Bs no.
+  const d = Math.min(0.99, Math.max(0, (Number(business?.foreign_discount_percent) || 0) / 100));
+  const vesCredit = selectedMethods.reduce((s, id) => {
     const m = methods.find((x) => x.id === id);
-    if (!m) return s;
+    if (!m || m.currency === 'USD') return s;
     const amt = Number(payments[id]) || 0;
-    return s + (m.currency === 'USD' ? amt : (rate.value ? amt / rate.value : 0));
+    return s + (rate.value ? amt / rate.value : 0);
   }, 0);
+  const usdPaid = selectedMethods.reduce((s, id) => {
+    const m = methods.find((x) => x.id === id);
+    if (!m || m.currency !== 'USD') return s;
+    return s + (Number(payments[id]) || 0);
+  }, 0);
+  const paidUsd = vesCredit + (d > 0 ? usdPaid / (1 - d) : usdPaid);
   const remainingUsd = Math.max(0, totalUsd - paidUsd);
   const changeUsd = Math.max(0, paidUsd - totalUsd);
+  // Descuento concedido (igual criterio que el servidor).
+  const pendingForUsd = Math.max(0, totalUsd - vesCredit);
+  const usdNeeded = pendingForUsd * (1 - d);
+  const discountUsd = d <= 0 ? 0
+    : (usdPaid + 0.005 >= usdNeeded ? pendingForUsd * d : (usdPaid * d) / (1 - d));
 
   const toggleMethod = (m) => {
     setSelectedMethods((prev) => {
@@ -108,10 +121,14 @@ export default function Orders() {
   };
 
   const fillExact = (m) => {
-    // Completa el restante con este método (convertido a su moneda)
-    const remaining = totalUsd - (paidUsd - (Number(payments[m.id]) || 0));
+    // Restante en USD (lista) sin contar lo ya escrito en este método.
+    const creditOfThis = m.currency === 'USD'
+      ? (d > 0 ? (Number(payments[m.id]) || 0) / (1 - d) : (Number(payments[m.id]) || 0))
+      : (rate.value ? (Number(payments[m.id]) || 0) / rate.value : 0);
+    const remaining = totalUsd - (paidUsd - creditOfThis);
     if (remaining <= 0) return;
-    const amount = m.currency === 'USD' ? remaining : remaining * rate.value;
+    // En divisa se cobra el saldo con descuento: remaining*(1-d). En Bs, sin descuento.
+    const amount = m.currency === 'USD' ? remaining * (1 - d) : remaining * rate.value;
     setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
   };
 
@@ -445,6 +462,9 @@ export default function Orders() {
                 <div className="totals-row"><span>Total Bs</span><span>{bs(totalVes)}</span></div>
                 {stage === 'pay' && (
                   <>
+                    {discountUsd > 0.005 && (
+                      <div className="totals-row ok"><span>Descuento divisa</span><span>−{usd(discountUsd)}</span></div>
+                    )}
                     <div className="totals-row"><span>Pagado</span><span>{usd(paidUsd)}</span></div>
                     {remainingUsd > 0.001
                       ? <div className="totals-row warn"><span>Restante</span><span>{usd(remainingUsd)}</span></div>
