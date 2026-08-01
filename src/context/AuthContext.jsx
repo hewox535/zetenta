@@ -50,11 +50,11 @@ export function AuthProvider({ children }) {
 
   const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
 
-  const signUp = (email, password, { businessName, fullName }) =>
+  const signUp = (email, password, { businessName, fullName, businessType }) =>
     supabase.auth.signUp({
       email,
       password,
-      options: { data: { business_name: businessName, full_name: fullName } },
+      options: { data: { business_name: businessName, full_name: fullName, business_type: businessType || 'general' } },
     });
 
   const signOut = () => supabase.auth.signOut();
