@@ -15,32 +15,36 @@ const Icon = {
 };
 
 export default function Shell() {
-  const { profile, business, capabilities, isAdmin, signOut } = useAuth();
+  const { profile, business, capabilities, isAdmin, isBusinessAdmin, isSeller, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const items = [];
   if (capabilities.orders) {
     items.push({ to: '/orders', label: 'Pedidos', icon: Icon.cart });
   }
-  if (capabilities.inventory) {
-    items.push({ to: '/inventory', label: 'Inventario', icon: Icon.box });
-  }
-  if (capabilities.stats) {
-    items.push({ to: '/stats', label: 'Estadísticas', icon: Icon.chart });
-  }
   if (capabilities.customers) {
     items.push({ to: '/customers', label: 'Clientes', icon: Icon.user });
   }
-  if (capabilities.retentions) {
-    items.push({ to: '/retentions', label: 'Retenciones', icon: Icon.doc });
-    items.push({ to: '/suppliers', label: 'Proveedores', icon: Icon.people });
-  }
-  if (business) {
-    items.push({ to: '/settings', label: 'Negocio', icon: Icon.gear });
+  // Módulos de administración del negocio: ocultos para la vendedora.
+  if (isBusinessAdmin) {
+    if (capabilities.inventory) {
+      items.push({ to: '/inventory', label: 'Inventario', icon: Icon.box });
+    }
+    if (capabilities.stats) {
+      items.push({ to: '/stats', label: 'Estadísticas', icon: Icon.chart });
+    }
+    if (capabilities.retentions) {
+      items.push({ to: '/retentions', label: 'Retenciones', icon: Icon.doc });
+      items.push({ to: '/suppliers', label: 'Proveedores', icon: Icon.people });
+    }
+    if (business) {
+      items.push({ to: '/settings', label: 'Negocio', icon: Icon.gear });
+    }
   }
   if (isAdmin) {
     items.push({ to: '/admin', label: 'Administración', icon: Icon.shield });
   }
+  const roleLabel = isAdmin ? 'Administrador de la plataforma' : isSeller ? 'Vendedora' : business?.name;
 
   return (
     <div className="shell">
@@ -66,7 +70,7 @@ export default function Shell() {
         <div className="sidebar-footer">
           <div className="sidebar-user">
             <div className="sidebar-user-name">{profile?.full_name || profile?.email}</div>
-            <div className="sidebar-user-biz">{isAdmin ? 'Administrador de la plataforma' : business?.name}</div>
+            <div className="sidebar-user-biz">{roleLabel}{isSeller && business ? ` · ${business.name}` : ''}</div>
           </div>
           <button className="btn ghost sm" onClick={signOut}>Cerrar sesión</button>
         </div>

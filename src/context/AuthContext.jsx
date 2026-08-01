@@ -66,6 +66,10 @@ export function AuthProvider({ children }) {
     profile,
     business,
     isAdmin: profile?.role === 'platform_admin',
+    // Rol dentro del negocio: 'admin' (acceso completo) | 'seller' (solo ventas).
+    businessRole: profile?.business_role ?? 'admin',
+    isBusinessAdmin: profile?.role === 'platform_admin' || profile?.business_role === 'admin',
+    isSeller: profile?.role !== 'platform_admin' && profile?.business_role === 'seller',
     capabilities: business?.capabilities ?? {},
     refreshBusiness,
     signIn,
