@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   updateBusinessProfile, setWithholdingSeq,
-  fetchTaxonomies, createTaxonomy, deleteTaxonomy, deleteTerm,
+  fetchTaxonomies, createTaxonomy, deleteTaxonomy, createTerm, updateTerm, deleteTerm,
   fetchPaymentMethods, createPaymentMethod, updatePaymentMethod, deletePaymentMethod,
   updateOrderSettings, updateBusinessSettings,
   fetchStaff, createStaff, deleteStaff, setStaffRole,
@@ -182,6 +182,32 @@ function InventorySection({ business, refreshBusiness }) {
       )));
     } catch (e) { setTaxError(e.message); }
   }
+  async function onAddTerm(t, name) {
+    const value = name.trim();
+    if (!value) return;
+    setTaxError(null);
+    try {
+      const created = await createTerm(t.id, value);
+      setTaxonomies((prev) => prev.map((x) => (
+        x.id === t.id ? { ...x, taxonomy_terms: [...x.taxonomy_terms, created] } : x
+      )));
+    } catch (e) {
+      setTaxError(e.message.includes('duplicate') ? `"${value}" ya existe en ${t.name}.` : e.message);
+    }
+  }
+  async function onRenameTerm(t, term, name) {
+    const value = name.trim();
+    if (!value || value === term.name) return;
+    setTaxError(null);
+    try {
+      const updated = await updateTerm(term.id, value);
+      setTaxonomies((prev) => prev.map((x) => (
+        x.id === t.id ? { ...x, taxonomy_terms: x.taxonomy_terms.map((y) => (y.id === term.id ? updated : y)) } : x
+      )));
+    } catch (e) {
+      setTaxError(e.message.includes('duplicate') ? `"${value}" ya existe en ${t.name}.` : e.message);
+    }
+  }
 
   return (
     <div className="vform">
@@ -206,22 +232,22 @@ function InventorySection({ business, refreshBusiness }) {
 
     <TaxGroup
       title="Categorías de productos"
-      hint="Cómo clasificas el producto (Marca, Modelo, Categoría…). Aparecen como campos al crear un producto."
+      hint="Cómo clasificas el producto (Marca, Modelo, Categoría…). Aparecen como campos al crear/editar un producto."
       taxonomies={taxonomies.filter((t) => t.kind !== 'variant')}
       placeholder="Categoría, Marca, Modelo…"
       addLabel="Nueva categoría"
       value={newCat} onChange={setNewCat} onAdd={() => onAddTaxonomy('category')}
-      onDeleteTaxonomy={onDeleteTaxonomy} onDeleteTerm={onDeleteTerm}
+      onDeleteTaxonomy={onDeleteTaxonomy} onAddTerm={onAddTerm} onRenameTerm={onRenameTerm} onDeleteTerm={onDeleteTerm}
     />
 
     <TaxGroup
       title="Variaciones (ejes)"
-      hint="Por qué varía un producto (Color, Talla…) y sus valores posibles. Al crear un producto eliges por cuáles varía y agregas cada combinación con su stock."
+      hint="Por qué varía un producto (Color, Talla…) y sus valores. Al crear un producto eliges por cuáles varía y agregas cada combinación con su stock."
       taxonomies={taxonomies.filter((t) => t.kind === 'variant')}
       placeholder="Color, Talla…"
       addLabel="Nuevo eje de variación"
       value={newVar} onChange={setNewVar} onAdd={() => onAddTaxonomy('variant')}
-      onDeleteTaxonomy={onDeleteTaxonomy} onDeleteTerm={onDeleteTerm}
+      onDeleteTaxonomy={onDeleteTaxonomy} onAddTerm={onAddTerm} onRenameTerm={onRenameTerm} onDeleteTerm={onDeleteTerm}
     />
 
     {taxError && <div className="form-error">{taxError}</div>}
@@ -229,8 +255,12 @@ function InventorySection({ business, refreshBusiness }) {
   );
 }
 
-// Grupo reutilizable de taxonomías (categorías o ejes de variación).
-function TaxGroup({ title, hint, taxonomies, placeholder, addLabel, value, onChange, onAdd, onDeleteTaxonomy, onDeleteTerm }) {
+// Grupo reutilizable de taxonomías con gestión de valores (agregar/editar/eliminar).
+function TaxGroup({ title, hint, taxonomies, placeholder, addLabel, value, onChange, onAdd, onDeleteTaxonomy, onAddTerm, onRenameTerm, onDeleteTerm }) {
+  const [newVals, setNewVals] = useState({});      // { taxId: 'texto' }
+  const [editing, setEditing] = useState(null);    // { termId, text }
+  const setVal = (id, v) => setNewVals((s) => ({ ...s, [id]: v }));
+
   return (
     <section className="card vsection tax-section">
       <h2>{title}</h2>
@@ -245,11 +275,30 @@ function TaxGroup({ title, hint, taxonomies, placeholder, addLabel, value, onCha
           <div className="chips">
             {t.taxonomy_terms.length === 0 && <span className="hint">Sin valores todavía.</span>}
             {[...t.taxonomy_terms].sort((a, b) => a.name.localeCompare(b.name)).map((term) => (
-              <span className="chip" key={term.id}>
-                {term.name}
-                <button type="button" aria-label={`Eliminar ${term.name}`} onClick={() => onDeleteTerm(t, term)}>×</button>
-              </span>
+              editing?.termId === term.id ? (
+                <span className="chip editing" key={term.id}>
+                  <input autoFocus value={editing.text}
+                    onChange={(e) => setEditing({ termId: term.id, text: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); onRenameTerm(t, term, editing.text); setEditing(null); }
+                      if (e.key === 'Escape') setEditing(null);
+                    }}
+                    onBlur={() => { onRenameTerm(t, term, editing.text); setEditing(null); }} />
+                </span>
+              ) : (
+                <span className="chip" key={term.id}>
+                  <button type="button" className="chip-name" title="Editar valor"
+                    onClick={() => setEditing({ termId: term.id, text: term.name })}>{term.name}</button>
+                  <button type="button" aria-label={`Eliminar ${term.name}`} onClick={() => onDeleteTerm(t, term)}>×</button>
+                </span>
+              )
             ))}
+          </div>
+          <div className="tax-add-term">
+            <input value={newVals[t.id] || ''} placeholder={`Agregar valor a ${t.name}…`}
+              onChange={(e) => setVal(t.id, e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAddTerm(t, newVals[t.id] || ''); setVal(t.id, ''); } }} />
+            <button type="button" className="btn sm" onClick={() => { onAddTerm(t, newVals[t.id] || ''); setVal(t.id, ''); }}>+ Valor</button>
           </div>
         </div>
       ))}

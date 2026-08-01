@@ -257,6 +257,12 @@ input::placeholder { color: #b0b0b6; }
   font-size: 14px; line-height: 1; padding: 0 2px; opacity: .7;
 }
 .chip button:hover { opacity: 1; }
+.chip .chip-name { font-weight: 600; opacity: 1; padding: 0; font-size: 12.5px; }
+.chip .chip-name:hover { text-decoration: underline; }
+.chip.editing { padding: 2px 4px; }
+.chip.editing input { width: 90px; border: 1px solid var(--accent); border-radius: 999px; padding: 2px 8px; font-size: 12.5px; }
+.tax-add-term { display: flex; gap: 8px; margin-top: 8px; }
+.tax-add-term input { flex: 1; max-width: 260px; }
 
 /* ---------- Modal ---------- */
 
@@ -450,9 +456,22 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .var-row input { flex: 1 1 90px; min-width: 60px; }
 .var-row-del { flex: 0 0 32px; width: 32px; height: 32px; border: none; background: transparent; color: var(--danger); font-size: 20px; line-height: 1; cursor: pointer; border-radius: 8px; }
 .var-row-del:hover { background: var(--danger-bg); }
+.term-select { display: flex; gap: 4px; }
+.term-select input { flex: 1; min-width: 0; }
+.term-select-back { flex: 0 0 auto; width: 34px; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; cursor: pointer; color: var(--text-2); }
+.term-select-back:hover { border-color: var(--accent-line); }
+
+.edit-variants { display: flex; flex-direction: column; gap: 8px; }
+.edit-var-head { display: flex; gap: 8px; font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; padding: 0 2px; }
+.edit-var-head span { flex: 1 1 60px; }
+.edit-var-head span:first-child { flex: 1 1 120px; }
+.edit-var-row { display: flex; gap: 8px; align-items: center; }
+.edit-var-row input { flex: 1 1 60px; min-width: 52px; }
+.edit-var-label { flex: 1 1 120px; font-weight: 600; font-size: 13px; }
+
 @media (max-width: 640px) {
-  .var-rows-head { display: none; }
-  .var-row { flex-wrap: wrap; }
+  .var-rows-head, .edit-var-head { display: none; }
+  .var-row, .edit-var-row { flex-wrap: wrap; }
 }
 
 /* ----- Panel lateral (pedido / pago) ----- */

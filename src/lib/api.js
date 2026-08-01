@@ -116,6 +116,14 @@ export async function updateProduct(id, patch) {
     .update(patch).eq('id', id).select().single());
 }
 
+// Editar datos del producto + reemplazar sus categorías (atómico).
+export async function updateProductDetails(id, { name, sku, unit, price, categories }) {
+  return unwrap(await supabase.rpc('update_product_details', {
+    p_id: id, p_name: name, p_sku: sku || '', p_unit: unit || 'und',
+    p_price: Number(price) || 0, p_categories: categories || {},
+  }));
+}
+
 export async function deleteProduct(id) {
   unwrap(await supabase.from('products').delete().eq('id', id));
 }
@@ -174,6 +182,16 @@ export async function deleteTaxonomy(id) {
 
 export async function deleteTerm(id) {
   unwrap(await supabase.from('taxonomy_terms').delete().eq('id', id));
+}
+
+export async function createTerm(taxonomyId, name) {
+  return unwrap(await supabase.from('taxonomy_terms')
+    .insert({ taxonomy_id: taxonomyId, name }).select().single());
+}
+
+export async function updateTerm(id, name) {
+  return unwrap(await supabase.from('taxonomy_terms')
+    .update({ name }).eq('id', id).select().single());
 }
 
 // Devuelve el término con ese nombre, creándolo si no existe.
