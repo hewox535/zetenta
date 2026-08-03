@@ -70,72 +70,15 @@ export async function createWithholding({ supplierId, issueDate, lines }) {
   }));
 }
 
-// Corrige un comprobante ya emitido conservando su número.
-export async function updateWithholding({ id, supplierId, issueDate, lines }) {
-  return unwrap(await supabase.rpc('update_withholding', {
-    p_id: id,
-    p_supplier_id: supplierId,
-    p_issue_date: issueDate,
-    p_lines: lines,
-  }));
-}
-
-// Vía RPC para que, si se borra el último comprobante, el correlativo retroceda
-// y el siguiente reutilice ese número.
 export async function deleteWithholding(id) {
-  unwrap(await supabase.rpc('delete_withholding', { p_id: id }));
+  unwrap(await supabase.from('withholdings').delete().eq('id', id));
 }
 
 // ---------- Inventario ----------
 
 export async function fetchProducts() {
   return unwrap(await supabase.from('products')
-    .select('*, product_terms(term_id), product_variants(*), product_media(*)').order('name'));
-}
-
-// ---------- Medios de producto (imágenes) ----------
-
-// URL pública a partir de los metadatos guardados (provider/bucket/path).
-// Centralizar aquí hace trivial migrar de storage: solo cambia este switch.
-export function mediaUrl(media) {
-  if (!media?.path) return null;
-  if (media.provider === 'supabase' || !media.provider) {
-    return supabase.storage.from(media.bucket || 'product-media').getPublicUrl(media.path).data.publicUrl;
-  }
-  return null;
-}
-
-// Reduce la imagen a máx. 1200px y la convierte a JPEG (ahorra storage/ancho de banda).
-async function compressToBlob(file, maxSize = 1200) {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.82));
-    return blob || file;
-  } catch { return file; }
-}
-
-export async function uploadProductImage(businessId, productId, file, { variantId = null, sortOrder = 0 } = {}) {
-  const blob = await compressToBlob(file);
-  const path = `${businessId}/${productId}/${crypto.randomUUID()}.jpg`;
-  const { error: upErr } = await supabase.storage.from('product-media')
-    .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
-  if (upErr) throw new Error(upErr.message);
-  return unwrap(await supabase.from('product_media')
-    .insert({ business_id: businessId, product_id: productId, variant_id: variantId,
-      provider: 'supabase', bucket: 'product-media', path, sort_order: sortOrder })
-    .select().single());
-}
-
-export async function deleteProductMedia(media) {
-  if ((media.provider === 'supabase' || !media.provider) && media.path) {
-    await supabase.storage.from(media.bucket || 'product-media').remove([media.path]);
-  }
-  unwrap(await supabase.from('product_media').delete().eq('id', media.id));
+    .select('*, product_terms(term_id), product_variants(*)').order('name'));
 }
 
 export async function createProduct(businessId, { name, sku, unit, price, variantAxes }) {

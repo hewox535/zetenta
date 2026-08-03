@@ -7,7 +7,6 @@ export default function Register() {
   const { signUp } = useAuth();
   const navigate = useNavigate();
   const [businessName, setBusinessName] = useState('');
-  const [businessType, setBusinessType] = useState('general');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +21,6 @@ export default function Register() {
     const { data, error: err } = await signUp(email.trim(), password, {
       businessName: businessName.trim(),
       fullName: fullName.trim(),
-      businessType,
     });
     setBusy(false);
     if (err) { setError(err.message); return; }
@@ -53,18 +51,6 @@ export default function Register() {
           <label>
             Nombre del negocio
             <input value={businessName} onChange={(e) => setBusinessName(e.target.value)} required autoFocus placeholder="Auto Vidrios Duglaris, C.A." />
-          </label>
-          <label>
-            Tipo de negocio
-            <select value={businessType} onChange={(e) => setBusinessType(e.target.value)}>
-              <option value="general">General</option>
-              <option value="ropa">Tienda de ropa / moda</option>
-            </select>
-            <span className="field-hint">
-              {businessType === 'ropa'
-                ? 'Te dejamos listas las tallas (S–XXL) y colores comunes como variaciones.'
-                : 'Empiezas con Marca y Modelo; puedes configurar variaciones luego.'}
-            </span>
           </label>
           <label>
             Tu nombre

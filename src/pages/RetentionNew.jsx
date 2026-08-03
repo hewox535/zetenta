@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import {
-  fetchSuppliers, createSupplier, createWithholding, updateWithholding,
-  fetchWithholding, extractInvoice,
-} from '../lib/api';
+import { Link, useNavigate } from 'react-router-dom';
+import { fetchSuppliers, createSupplier, createWithholding, extractInvoice } from '../lib/api';
 import { calcLine, calcTotals, money, todayISO } from '../lib/calc';
 import { useAuth } from '../context/AuthContext';
 
@@ -21,34 +18,13 @@ const EMPTY_LINE = {
   retention_rate: '75',
 };
 
-// Convierte una línea guardada (números y decimales) al formato del formulario.
-function lineToForm(l) {
-  return {
-    operation_date: l.operation_date || '',
-    invoice_number: l.invoice_number || '',
-    control_number: l.control_number || '',
-    debit_note: l.debit_note || '',
-    credit_note: l.credit_note || '',
-    transaction_type: l.transaction_type || '01-Reg.',
-    affected_document: l.affected_document || '',
-    total_with_vat: Number(l.total_with_vat) ? String(Number(l.total_with_vat)) : '',
-    exempt_amount: Number(l.exempt_amount) ? String(Number(l.exempt_amount)) : '',
-    vat_rate: String(Number(l.vat_rate) || 16),
-    retention_rate: String(Number(l.retention_rate) || 75),
-  };
-}
-
 export default function RetentionNew() {
   const navigate = useNavigate();
-  const { id } = useParams();
-  const isEdit = Boolean(id);
-  const { business, refreshBusiness } = useAuth();
+  const { business } = useAuth();
   const [suppliers, setSuppliers] = useState([]);
   const [supplierId, setSupplierId] = useState('');
   const [issueDate, setIssueDate] = useState(todayISO());
   const [lines, setLines] = useState([{ ...EMPTY_LINE, operation_date: todayISO() }]);
-  const [number, setNumber] = useState(null); // Nº del comprobante en edición
-  const [loaded, setLoaded] = useState(!isEdit);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -60,19 +36,6 @@ export default function RetentionNew() {
   useEffect(() => {
     fetchSuppliers().then(setSuppliers).catch((e) => setError(e.message));
   }, []);
-
-  // Modo edición: carga el comprobante existente y precarga el formulario.
-  useEffect(() => {
-    if (!isEdit) return;
-    fetchWithholding(id).then((w) => {
-      setSupplierId(w.supplier_id || '');
-      setIssueDate(w.issue_date || todayISO());
-      setNumber(w.number);
-      const rows = (w.withholding_lines || []).slice().sort((a, b) => a.line_number - b.line_number);
-      setLines(rows.length ? rows.map(lineToForm) : [{ ...EMPTY_LINE, operation_date: w.issue_date }]);
-      setLoaded(true);
-    }).catch((e) => { setError(e.message); setLoaded(true); });
-  }, [id, isEdit]);
 
   function setLine(i, field, value) {
     setLines((prev) => prev.map((l, j) => (j === i ? { ...l, [field]: value } : l)));
@@ -158,46 +121,32 @@ export default function RetentionNew() {
     if (!supplierId) { setError('Selecciona el proveedor.'); return; }
     if (valid.length === 0) { setError('Registra al menos una factura con monto.'); return; }
     setBusy(true);
-    const payloadLines = valid.map((l) => ({ ...l, operation_date: l.operation_date || issueDate }));
     try {
-      if (isEdit) {
-        await updateWithholding({ id, supplierId, issueDate, lines: payloadLines });
-        navigate(`/retentions/${id}`, { replace: true });
-      } else {
-        const w = await createWithholding({ supplierId, issueDate, lines: payloadLines });
-        // Mantiene el correlativo de Ajustes al día tras consumir un número.
-        refreshBusiness().catch(() => {});
-        navigate(`/retentions/${w.id}`, { replace: true });
-      }
+      const w = await createWithholding({
+        supplierId,
+        issueDate,
+        lines: valid.map((l) => ({ ...l, operation_date: l.operation_date || issueDate })),
+      });
+      navigate(`/retentions/${w.id}`, { replace: true });
     } catch (err) {
       setError(err.message);
       setBusy(false);
     }
   }
 
-  if (isEdit && !loaded) {
-    return <div className="page narrow"><div className="empty">Cargando…</div></div>;
-  }
-
   return (
     <div className="page narrow">
       <header className="page-head">
         <div>
-          <h1>{isEdit ? 'Editar comprobante' : 'Nuevo comprobante'}</h1>
-          <p className="page-sub">
-            {isEdit
-              ? `Corrige los datos del comprobante Nº ${number}. Conserva su número al guardar.`
-              : 'Retención de IVA a un proveedor.'}
-          </p>
+          <h1>Nuevo comprobante</h1>
+          <p className="page-sub">Retención de IVA a un proveedor.</p>
         </div>
         <div className="page-actions">
-          {!isEdit && (
-            <label className="btn primary">
-              {scanning ? 'Leyendo factura…' : '📷 Escanear factura'}
-              <input type="file" accept="image/*" hidden onChange={onScan} disabled={scanning} />
-            </label>
-          )}
-          <Link to={isEdit ? `/retentions/${id}` : '/retentions'} className="btn ghost">Cancelar</Link>
+          <label className="btn primary">
+            {scanning ? 'Leyendo factura…' : '📷 Escanear factura'}
+            <input type="file" accept="image/*" hidden onChange={onScan} disabled={scanning} />
+          </label>
+          <Link to="/retentions" className="btn ghost">Cancelar</Link>
         </div>
       </header>
 
@@ -341,9 +290,7 @@ export default function RetentionNew() {
 
         {error && <div className="form-error">{error}</div>}
         <button className="btn primary lg block" disabled={busy}>
-          {busy
-            ? (isEdit ? 'Guardando…' : 'Emitiendo…')
-            : (isEdit ? 'Guardar cambios' : 'Emitir comprobante')}
+          {busy ? 'Emitiendo…' : 'Emitir comprobante'}
         </button>
       </form>
     </div>

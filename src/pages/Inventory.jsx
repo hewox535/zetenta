@@ -7,15 +7,12 @@ import {
   fetchTaxonomies,
   createProductWithVariants, updateProductDetails,
   addProductVariant, updateVariant, deleteVariant,
-  mediaUrl, uploadProductImage, deleteProductMedia,
 } from '../lib/api';
 import { money, formatDate, variantLabel } from '../lib/calc';
 
 const MOVE_LABELS = { in: 'Entrada', out: 'Salida', adjustment: 'Ajuste' };
 
 const variantsOf = (p) => p.product_variants || [];
-const mediaOf = (p) => (p.product_media || []).slice().sort((a, b) => a.sort_order - b.sort_order);
-const productImg = (p) => { const m = mediaOf(p).find((x) => !x.variant_id) || mediaOf(p)[0]; return m ? mediaUrl(m) : null; };
 const totalStock = (p) => variantsOf(p).reduce((s, v) => s + Number(v.stock || 0), 0);
 const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).length === 0;
 const defaultVariant = (p) =>
@@ -92,7 +89,7 @@ export default function Inventory() {
     setError(null);
     setModal({
       mode: 'create', name: '', price: '', sku: '', unit: 'und', categories: {},
-      cmode: 'simple', simpleStock: '', axisIds: [], rows: [newRow()], stagedFiles: [],
+      cmode: 'simple', simpleStock: '', axisIds: [], rows: [newRow()],
     });
   }
   function openEdit(p) {
@@ -113,27 +110,8 @@ export default function Inventory() {
         sku: v.sku || '', price: v.price != null ? String(v.price) : '',
         target: v.target_stock != null ? String(v.target_stock) : '',
       })),
-      newRows: [], media: mediaOf(p),
+      newRows: [],
     });
-  }
-
-  // Subida/borrado de imágenes (modo edición: inmediato, el producto ya existe).
-  async function onUploadImage(file, variantId = null) {
-    if (!file) return;
-    setBusy(true); setError(null);
-    try {
-      const m = await uploadProductImage(business.id, modal.id, file, {
-        variantId, sortOrder: (modal.media?.length || 0),
-      });
-      setModal((s) => ({ ...s, media: [...(s.media || []), m] }));
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
-  }
-  async function onRemoveImage(m) {
-    setBusy(true); setError(null);
-    try {
-      await deleteProductMedia(m);
-      setModal((s) => ({ ...s, media: (s.media || []).filter((x) => x.id !== m.id) }));
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
   const setM = (patch) => setModal((s) => ({ ...s, ...patch }));
 
@@ -158,13 +136,10 @@ export default function Inventory() {
           variantAxes = axes.map((t) => t.name);
           variants = buildVariants(modal.rows, axes.map((t) => t.name));
         }
-        const created = await createProductWithVariants({
+        await createProductWithVariants({
           name: modal.name.trim(), sku: modal.sku.trim(), unit: modal.unit.trim() || 'und',
           price: Number(modal.price) || 0, categories, variantAxes, variants,
         });
-        for (let i = 0; i < (modal.stagedFiles || []).length; i++) {
-          await uploadProductImage(business.id, created.id, modal.stagedFiles[i], { sortOrder: i });
-        }
       } else {
         // EDIT
         await updateProductDetails(modal.id, {
@@ -321,9 +296,6 @@ export default function Inventory() {
                             {open ? '▾' : '▸'}
                           </button>
                         )}
-                        <span className="list-thumb">
-                          {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
-                        </span>
                         {p.name}
                         {!simple && <span className="variant-count">{variantsOf(p).length} variantes</span>}
                         {(p.product_terms || []).length > 0 && (
@@ -413,36 +385,6 @@ export default function Inventory() {
                 </div>
               )}
 
-              {/* -------- Imágenes -------- */}
-              <div className="np-block">
-                <div className="oc-label">Imágenes del producto</div>
-                <div className="img-grid">
-                  {modal.mode === 'create'
-                    ? (modal.stagedFiles || []).map((f, i) => (
-                        <div className="img-thumb" key={i}>
-                          <img src={URL.createObjectURL(f)} alt="" />
-                          <button type="button" className="img-del" onClick={() => setM({ stagedFiles: modal.stagedFiles.filter((_, j) => j !== i) })}>×</button>
-                        </div>
-                      ))
-                    : (modal.media || []).filter((m) => !m.variant_id).map((m) => (
-                        <div className="img-thumb" key={m.id}>
-                          <img src={mediaUrl(m)} alt="" />
-                          <button type="button" className="img-del" onClick={() => onRemoveImage(m)}>×</button>
-                        </div>
-                      ))}
-                  <label className="img-add">
-                    <input type="file" accept="image/*" multiple={modal.mode === 'create'} hidden disabled={busy}
-                      onChange={(e) => {
-                        const files = [...e.target.files];
-                        if (modal.mode === 'create') setM({ stagedFiles: [...(modal.stagedFiles || []), ...files] });
-                        else if (files[0]) onUploadImage(files[0], null);
-                        e.target.value = '';
-                      }} />
-                    <span>＋ Foto</span>
-                  </label>
-                </div>
-              </div>
-
               {/* -------- Variaciones -------- */}
               {modal.mode === 'create' ? (
                 <div className="np-block">
@@ -488,17 +430,10 @@ export default function Inventory() {
                   <div className="oc-label">Variantes</div>
                   <div className="edit-variants">
                     <div className="edit-var-head">
-                      <span className="evh-img" /><span>Variante</span><span>Stock</span><span>SKU</span><span>Precio</span><span>Objetivo</span>
+                      <span>Variante</span><span>Stock</span><span>SKU</span><span>Precio</span><span>Objetivo</span>
                     </div>
-                    {modal.variants.map((v, i) => {
-                      const vm = (modal.media || []).find((m) => m.variant_id === v.id);
-                      return (
+                    {modal.variants.map((v, i) => (
                       <div className="edit-var-row" key={v.id}>
-                        <label className="var-img" title="Imagen de la variación">
-                          {vm ? <img src={mediaUrl(vm)} alt="" /> : <span className="thumb-ph">＋</span>}
-                          <input type="file" accept="image/*" hidden disabled={busy}
-                            onChange={async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (vm) await onRemoveImage(vm); await onUploadImage(f, v.id); }} />
-                        </label>
                         <span className="edit-var-label">{v.label || 'Estándar'}</span>
                         <input type="number" min="0" step="1" value={v.stock}
                           onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, stock: e.target.value } : x) })} />
@@ -509,7 +444,7 @@ export default function Inventory() {
                         <input type="number" min="0" step="1" value={v.target} placeholder="—"
                           onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, target: e.target.value } : x) })} />
                       </div>
-                    ); })}
+                    ))}
                   </div>
                   <p className="hint">Cambiar el stock aquí registra un ajuste de inventario. Para separar entradas y salidas usa los botones de la tabla.</p>
 

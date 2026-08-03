@@ -37,7 +37,6 @@ export default function RetentionView() {
         </div>
         <div className="page-actions">
           <Link to="/retentions" className="btn ghost">Volver</Link>
-          <Link to={`/retentions/${withholding.id}/edit`} className="btn ghost">Editar</Link>
           <button className="btn primary" onClick={() => window.print()}>Imprimir</button>
         </div>
       </header>

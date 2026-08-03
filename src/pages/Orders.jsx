@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   fetchProducts, fetchTaxonomies, fetchPaymentMethods, fetchCustomers,
-  createCustomer, createOrder, fetchOrder, mediaUrl,
+  createCustomer, createOrder, fetchOrder,
 } from '../lib/api';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { usd, bs, money, variantLabel } from '../lib/calc';
@@ -17,12 +17,6 @@ const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).leng
 const defaultVariant = (p) =>
   variantsOf(p).find((v) => Object.keys(v.attributes || {}).length === 0) || variantsOf(p)[0];
 const variantPrice = (p, v) => (v.price != null ? Number(v.price) : Number(p.price));
-const mediaOf = (p) => (p.product_media || []).slice().sort((a, b) => a.sort_order - b.sort_order);
-const productImg = (p) => { const m = mediaOf(p).find((x) => !x.variant_id) || mediaOf(p)[0]; return m ? mediaUrl(m) : null; };
-const variantImg = (p, v) => {
-  const m = mediaOf(p).find((x) => x.variant_id === v.id);
-  return m ? mediaUrl(m) : productImg(p);
-};
 
 export default function Orders() {
   const { business } = useAuth();
@@ -117,16 +111,13 @@ export default function Orders() {
     : (usdPaid + 0.005 >= usdNeeded ? pendingForUsd * d : (usdPaid * d) / (1 - d));
 
   const toggleMethod = (m) => {
-    if (selectedMethods.includes(m.id)) {
-      setPayments((p) => { const n = { ...p }; delete n[m.id]; return n; });
-      setSelectedMethods((prev) => prev.filter((x) => x !== m.id));
-      return;
-    }
-    // Al agregar un método adicional (ya hay al menos uno seleccionado),
-    // autocompleta su input con el saldo exacto pendiente en la moneda del
-    // método —con o sin descuento por divisa— sin tener que pulsar "Exacto".
-    if (selectedMethods.length >= 1) fillExact(m);
-    setSelectedMethods((prev) => [...prev, m.id]);
+    setSelectedMethods((prev) => {
+      if (prev.includes(m.id)) {
+        setPayments((p) => { const n = { ...p }; delete n[m.id]; return n; });
+        return prev.filter((x) => x !== m.id);
+      }
+      return [...prev, m.id];
+    });
   };
 
   const fillExact = (m) => {
@@ -285,36 +276,21 @@ export default function Orders() {
                   {visible.map((p) => {
                     const qty = cartQtyForProduct(p);
                     const stock = totalStock(p);
-                    const simple = isSimple(p);
-                    const dv = simple ? defaultVariant(p) : null;
-                    const img = productImg(p);
-                    const inCartLine = dv ? cart.find((c) => c.id === dv.id) : null;
                     return (
-                      <div key={p.id} className={`product-card${qty ? ' in-cart' : ''}`}
-                        onClick={() => { if (!(simple && inCartLine)) onTapProduct(p); }}
-                        role="button" tabIndex={0}>
+                      <button key={p.id} className={`product-card${qty ? ' in-cart' : ''}`} onClick={() => onTapProduct(p)}>
                         {qty > 0 && <span className="product-qty-badge">{qty}</span>}
-                        <div className="product-card-thumb">
-                          {img ? <img src={img} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
-                        </div>
                         <div className="product-card-name">{p.name}</div>
                         <div className="product-card-meta">
-                          <span className={`stock-badge${stock <= 0 ? ' out' : ''}`}>{stock} {p.unit}</span>
-                          {!simple && <span className="variant-count">{variantsOf(p).length} variantes</span>}
+                          <span className={`stock-badge${stock <= 0 ? ' out' : ''}`}>
+                            {stock} {p.unit}
+                          </span>
+                          {!isSimple(p) && <span className="variant-count">{variantsOf(p).length} variantes</span>}
                         </div>
                         <div className="product-card-prices">
                           <strong>{usd(p.price)}</strong>
                           <span className="product-card-bs">{bs(Number(p.price) * rate.value)}</span>
                         </div>
-                        {simple && inCartLine && (
-                          <div className="qty-stepper card-stepper" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => setQty(dv.id, inCartLine.qty - 1)} aria-label="Quitar uno">−</button>
-                            <input value={inCartLine.qty} inputMode="numeric"
-                              onChange={(e) => setQty(dv.id, Math.max(0, parseInt(e.target.value, 10) || 0))} />
-                            <button onClick={() => addVariant(p, dv)} aria-label="Agregar uno">+</button>
-                          </div>
-                        )}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -525,15 +501,10 @@ export default function Orders() {
               {variantsOf(picker).map((v) => {
                 const inCart = cart.find((c) => c.id === v.id);
                 const out = Number(v.stock) <= 0;
-                const img = variantImg(picker, v);
                 return (
-                  <div key={v.id} className={`variant-pick${inCart ? ' in-cart' : ''}`}
-                    role="button" tabIndex={0}
-                    onClick={() => { if (!inCart) addVariant(picker, v); }}>
+                  <button key={v.id} type="button" className={`variant-pick${inCart ? ' in-cart' : ''}`}
+                    onClick={() => addVariant(picker, v)}>
                     {inCart && <span className="product-qty-badge">{inCart.qty}</span>}
-                    <div className="product-card-thumb sm">
-                      {img ? <img src={img} alt="" loading="lazy" /> : <span className="thumb-ph">{(variantLabel(v.attributes) || picker.name).slice(0, 1)}</span>}
-                    </div>
                     <div className="variant-pick-label">{variantLabel(v.attributes, picker.variant_axes) || 'Estándar'}</div>
                     <div className="product-card-meta">
                       <span className={`stock-badge${out ? ' out' : ''}`}>{Number(v.stock)} {picker.unit}</span>
@@ -541,15 +512,7 @@ export default function Orders() {
                     <div className="product-card-prices">
                       <strong>{usd(variantPrice(picker, v))}</strong>
                     </div>
-                    {inCart && (
-                      <div className="qty-stepper card-stepper" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => setQty(v.id, inCart.qty - 1)} aria-label="Quitar uno">−</button>
-                        <input value={inCart.qty} inputMode="numeric"
-                          onChange={(e) => setQty(v.id, Math.max(0, parseInt(e.target.value, 10) || 0))} />
-                        <button onClick={() => addVariant(picker, v)} aria-label="Agregar uno">+</button>
-                      </div>
-                    )}
-                  </div>
+                  </button>
                 );
               })}
             </div>

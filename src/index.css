@@ -396,18 +396,6 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 }
 .stock-badge.out { color: var(--text-2); background: rgba(0,0,0,.06); }
 
-/* Miniaturas e imágenes en el POS */
-.product-card-thumb {
-  width: 100%; height: 88px; border-radius: 10px; overflow: hidden;
-  background: var(--accent-soft); display: grid; place-items: center;
-}
-.product-card-thumb.sm { height: 70px; }
-.product-card-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.thumb-ph { font-size: 26px; font-weight: 700; color: var(--accent); opacity: .45; }
-.card-stepper { display: flex; width: 100%; margin-top: 4px; }
-.card-stepper button { flex: 0 0 auto; }
-.card-stepper input { flex: 1; min-width: 0; }
-
 /* ----- Variantes ----- */
 .product-card-meta { gap: 6px; align-items: center; }
 .variant-count {
@@ -480,21 +468,6 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .edit-var-row { display: flex; gap: 8px; align-items: center; }
 .edit-var-row input { flex: 1 1 60px; min-width: 52px; }
 .edit-var-label { flex: 1 1 120px; font-weight: 600; font-size: 13px; }
-
-/* Imágenes de producto */
-.list-thumb { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; overflow: hidden; background: var(--accent-soft); vertical-align: middle; margin-right: 8px; }
-.list-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.list-thumb .thumb-ph { font-size: 14px; font-weight: 700; color: var(--accent); opacity: .45; }
-.img-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
-.img-thumb { position: relative; width: 76px; height: 76px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
-.img-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.img-del { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border: none; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 13px; line-height: 1; }
-.img-add { width: 76px; height: 76px; border: 1px dashed var(--border); border-radius: 10px; display: grid; place-items: center; cursor: pointer; color: var(--text-2); font-size: 13px; font-weight: 600; }
-.img-add:hover { border-color: var(--accent-line); color: var(--accent); }
-.var-img { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); display: grid; place-items: center; cursor: pointer; background: var(--accent-soft); }
-.var-img img { width: 100%; height: 100%; object-fit: cover; }
-.var-img .thumb-ph { font-size: 16px; color: var(--accent); opacity: .5; }
-.edit-var-head .evh-img { flex: 0 0 44px; }
 
 @media (max-width: 640px) {
   .var-rows-head, .edit-var-head { display: none; }
@@ -642,7 +615,6 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .kpi-sub { font-size: 13px; color: var(--text-2); margin-top: 2px; font-variant-numeric: tabular-nums; }
 
 .stats-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
-.stats-main-col { display: flex; flex-direction: column; gap: 16px; }
 .stats-side { display: flex; flex-direction: column; gap: 16px; }
 .rank { display: flex; flex-direction: column; gap: 12px; }
 .rank.compact { gap: 8px; }
