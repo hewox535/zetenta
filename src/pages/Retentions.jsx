@@ -64,6 +64,7 @@ export default function Retentions() {
                     <td className="num">{money(totals.totalWithheld)}</td>
                     <td className="row-actions" onClick={(e) => e.stopPropagation()}>
                       <Link className="btn ghost sm" to={`/retentions/${w.id}`}>Ver</Link>
+                      <Link className="btn ghost sm" to={`/retentions/${w.id}/edit`}>Editar</Link>
                       <button className="btn danger sm" onClick={() => onDelete(w)}>Eliminar</button>
                     </td>
                   </tr>

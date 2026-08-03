@@ -95,6 +95,7 @@ export default function App() {
             <Route index element={<Home />} />
             <Route path="retentions" element={<RequireBusinessAdmin><RequireCapability name="retentions"><Retentions /></RequireCapability></RequireBusinessAdmin>} />
             <Route path="retentions/new" element={<RequireBusinessAdmin><RequireCapability name="retentions"><RetentionNew /></RequireCapability></RequireBusinessAdmin>} />
+            <Route path="retentions/:id/edit" element={<RequireBusinessAdmin><RequireCapability name="retentions"><RetentionNew /></RequireCapability></RequireBusinessAdmin>} />
             <Route path="retentions/:id" element={<RequireBusinessAdmin><RetentionView /></RequireBusinessAdmin>} />
             <Route path="suppliers" element={<RequireBusinessAdmin><RequireCapability name="retentions"><Suppliers /></RequireCapability></RequireBusinessAdmin>} />
             <Route path="customers" element={<RequireCapability name="customers"><Customers /></RequireCapability>} />

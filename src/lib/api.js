@@ -70,8 +70,20 @@ export async function createWithholding({ supplierId, issueDate, lines }) {
   }));
 }
 
+// Corrige un comprobante ya emitido conservando su número.
+export async function updateWithholding({ id, supplierId, issueDate, lines }) {
+  return unwrap(await supabase.rpc('update_withholding', {
+    p_id: id,
+    p_supplier_id: supplierId,
+    p_issue_date: issueDate,
+    p_lines: lines,
+  }));
+}
+
+// Vía RPC para que, si se borra el último comprobante, el correlativo retroceda
+// y el siguiente reutilice ese número.
 export async function deleteWithholding(id) {
-  unwrap(await supabase.from('withholdings').delete().eq('id', id));
+  unwrap(await supabase.rpc('delete_withholding', { p_id: id }));
 }
 
 // ---------- Inventario ----------

@@ -117,13 +117,16 @@ export default function Orders() {
     : (usdPaid + 0.005 >= usdNeeded ? pendingForUsd * d : (usdPaid * d) / (1 - d));
 
   const toggleMethod = (m) => {
-    setSelectedMethods((prev) => {
-      if (prev.includes(m.id)) {
-        setPayments((p) => { const n = { ...p }; delete n[m.id]; return n; });
-        return prev.filter((x) => x !== m.id);
-      }
-      return [...prev, m.id];
-    });
+    if (selectedMethods.includes(m.id)) {
+      setPayments((p) => { const n = { ...p }; delete n[m.id]; return n; });
+      setSelectedMethods((prev) => prev.filter((x) => x !== m.id));
+      return;
+    }
+    // Al agregar un método adicional (ya hay al menos uno seleccionado),
+    // autocompleta su input con el saldo exacto pendiente en la moneda del
+    // método —con o sin descuento por divisa— sin tener que pulsar "Exacto".
+    if (selectedMethods.length >= 1) fillExact(m);
+    setSelectedMethods((prev) => [...prev, m.id]);
   };
 
   const fillExact = (m) => {
