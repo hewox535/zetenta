@@ -48,6 +48,7 @@ export default function RetentionNew() {
   const [issueDate, setIssueDate] = useState(todayISO());
   const [lines, setLines] = useState([{ ...EMPTY_LINE, operation_date: todayISO() }]);
   const [number, setNumber] = useState(null); // Nº del comprobante en edición
+  const [seq, setSeq] = useState(''); // correlativo editable (solo edición)
   const [loaded, setLoaded] = useState(!isEdit);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -68,6 +69,7 @@ export default function RetentionNew() {
       setSupplierId(w.supplier_id || '');
       setIssueDate(w.issue_date || todayISO());
       setNumber(w.number);
+      setSeq(String(Number(w.number.slice(-8))));
       const rows = (w.withholding_lines || []).slice().sort((a, b) => a.line_number - b.line_number);
       setLines(rows.length ? rows.map(lineToForm) : [{ ...EMPTY_LINE, operation_date: w.issue_date }]);
       setLoaded(true);
@@ -157,11 +159,15 @@ export default function RetentionNew() {
     const valid = lines.filter((l) => Number(l.total_with_vat) > 0);
     if (!supplierId) { setError('Selecciona el proveedor.'); return; }
     if (valid.length === 0) { setError('Registra al menos una factura con monto.'); return; }
+    const seqNum = Number(seq);
+    if (isEdit && (!Number.isInteger(seqNum) || seqNum < 1)) {
+      setError('El correlativo debe ser un número entero mayor que cero.'); return;
+    }
     setBusy(true);
     const payloadLines = valid.map((l) => ({ ...l, operation_date: l.operation_date || issueDate }));
     try {
       if (isEdit) {
-        await updateWithholding({ id, supplierId, issueDate, lines: payloadLines });
+        await updateWithholding({ id, supplierId, issueDate, lines: payloadLines, seq: seqNum });
         navigate(`/retentions/${id}`, { replace: true });
       } else {
         const w = await createWithholding({ supplierId, issueDate, lines: payloadLines });
@@ -186,7 +192,7 @@ export default function RetentionNew() {
           <h1>{isEdit ? 'Editar comprobante' : 'Nuevo comprobante'}</h1>
           <p className="page-sub">
             {isEdit
-              ? `Corrige los datos del comprobante Nº ${number}. Conserva su número al guardar.`
+              ? `Corrige los datos del comprobante Nº ${number}, incluido su correlativo.`
               : 'Retención de IVA a un proveedor.'}
           </p>
         </div>
@@ -236,6 +242,17 @@ export default function RetentionNew() {
             Fecha de emisión
             <input type="date" value={issueDate} onChange={(e) => onIssueDateChange(e.target.value)} required />
           </label>
+          {isEdit && (
+            <label>
+              Correlativo (Nº de comprobante)
+              <input type="number" min="1" max="99999999" step="1" value={seq}
+                onChange={(e) => setSeq(e.target.value)} required />
+              <span className="hint">
+                Solo el número correlativo; el período se toma de la fecha. No puede coincidir
+                con el de otro comprobante.
+              </span>
+            </label>
+          )}
         </section>
 
         {lines.map((l, i) => {
