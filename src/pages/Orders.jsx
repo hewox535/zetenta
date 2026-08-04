@@ -52,10 +52,10 @@ const parseAmt = (s) => Number(String(s ?? '').replace(',', '.')) || 0;
 const round2 = (x) => Math.round(x * 100) / 100;
 const fmtAmt = (x) => (x ? String(round2(x)) : '');
 
-// Fila de monto de un método de pago con DOS inputs sincronizados: el de la moneda
-// del método y su equivalente en la otra moneda. El monto que se envía a create_order
-// se guarda SIEMPRE en la moneda del método (el input secundario es solo captura).
-// Editar cualquiera de los dos ajusta el otro al instante con la tasa vigente.
+// Fila de monto de un método de pago. Los métodos en Bs muestran DOS inputs
+// sincronizados (Bs y su equivalente en $) para capturar cómodo; los métodos en
+// dólares muestran solo el input en $. El monto que se envía a create_order se
+// guarda SIEMPRE en la moneda del método (el input secundario es solo captura).
 function PayAmountRow({ m, rate, amount, onAmount, onExact }) {
   const [focus, setFocus] = useState(null); // 'main' | 'alt' | null
   const [draft, setDraft] = useState('');
@@ -89,13 +89,15 @@ function PayAmountRow({ m, rate, amount, onAmount, onExact }) {
               onBlur={() => setFocus(null)}
               onChange={(e) => { setDraft(e.target.value); onAmount(e.target.value); }} />
           </label>
-          <label className="pay-amt alt">
-            <span className="pay-amt-cur">{altCur}</span>
-            <input inputMode="decimal" placeholder="0,00" value={altVal}
-              onFocus={() => { setFocus('alt'); setDraft(toAlt(amount)); }}
-              onBlur={() => setFocus(null)}
-              onChange={(e) => { setDraft(e.target.value); onAmount(toCanon(e.target.value)); }} />
-          </label>
+          {isVes && (
+            <label className="pay-amt alt">
+              <span className="pay-amt-cur">{altCur}</span>
+              <input inputMode="decimal" placeholder="0,00" value={altVal}
+                onFocus={() => { setFocus('alt'); setDraft(toAlt(amount)); }}
+                onBlur={() => setFocus(null)}
+                onChange={(e) => { setDraft(e.target.value); onAmount(toCanon(e.target.value)); }} />
+            </label>
+          )}
         </div>
         <button type="button" className="btn ghost sm" onClick={onExact}>Exacto</button>
       </div>
