@@ -23,6 +23,16 @@ const defaultVariant = (p) =>
 
 const newRow = () => ({ key: Math.random().toString(36).slice(2), values: {}, stock: '', sku: '', price: '' });
 
+// Iconos limpios para acciones de la tabla.
+const ICON = {
+  chevron: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  edit: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16v4z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.6"/></svg>,
+  trash: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M6 7l1 12a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9L18 7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  plus: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg>,
+  minus: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12h14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg>,
+  adjust: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 8h11M19 8h1M4 16h1M9 16h11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><circle cx="17" cy="8" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.6"/><circle cx="7" cy="16" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.6"/></svg>,
+};
+
 // Selector con las opciones existentes + "＋ Otro…" para escribir un valor nuevo.
 function TermSelect({ terms, value, onChange, placeholder }) {
   const names = terms.map((t) => t.name);
@@ -57,6 +67,7 @@ export default function Inventory() {
 
   const [taxonomies, setTaxonomies] = useState([]);
   const [filters, setFilters] = useState({});
+  const [ptype, setPtype] = useState('all');   // 'all' | 'variants' | 'simple'
   const [expanded, setExpanded] = useState({});
   const [move, setMove] = useState(null);
   const [modal, setModal] = useState(null);   // modal crear/editar producto
@@ -81,10 +92,12 @@ export default function Inventory() {
   const termName = new Map();
   taxonomies.forEach((t) => t.taxonomy_terms.forEach((term) => termName.set(term.id, term.name)));
 
-  const visibleProducts = (products || []).filter((p) =>
-    Object.entries(filters).every(([, termId]) =>
-      !termId || (p.product_terms || []).some((pt) => pt.term_id === termId))
-  );
+  const visibleProducts = (products || []).filter((p) => {
+    if (ptype === 'variants' && isSimple(p)) return false;
+    if (ptype === 'simple' && !isSimple(p)) return false;
+    return Object.entries(filters).every(([, termId]) =>
+      !termId || (p.product_terms || []).some((pt) => pt.term_id === termId));
+  });
   const filterables = taxonomies.filter((t) => t.taxonomy_terms.length > 0);
 
   // ---------- Abrir modal ----------
@@ -247,9 +260,12 @@ export default function Inventory() {
 
   const moveButtons = (p, v) => (
     <>
-      <button className="btn ghost sm" onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'in', quantity: '', note: '' })}>+ Entrada</button>
-      <button className="btn ghost sm" onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'out', quantity: '', note: '' })}>− Salida</button>
-      <button className="btn ghost sm" onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'adjustment', quantity: String(v.stock), note: '' })}>Ajustar</button>
+      <button className="icon-btn" title="Entrada (sumar stock)"
+        onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'in', quantity: '', note: '' })}>{ICON.plus}</button>
+      <button className="icon-btn" title="Salida (restar stock)"
+        onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'out', quantity: '', note: '' })}>{ICON.minus}</button>
+      <button className="icon-btn" title="Ajustar stock"
+        onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'adjustment', quantity: String(v.stock), note: '' })}>{ICON.adjust}</button>
     </>
   );
 
@@ -289,19 +305,25 @@ export default function Inventory() {
         <div className="empty">Aún no tienes productos. Usa <strong>+ Nuevo producto</strong> para agregar el primero.</div>
       ) : (
         <>
-        {filterables.length > 0 && (
-          <div className="filters">
-            {filterables.map((t) => (
-              <select key={t.id} value={filters[t.id] || ''}
-                onChange={(e) => setFilters((f) => ({ ...f, [t.id]: e.target.value }))}>
-                <option value="">{t.name}: todas</option>
-                {t.taxonomy_terms.map((term) => (
-                  <option key={term.id} value={term.id}>{term.name}</option>
-                ))}
-              </select>
-            ))}
+        <div className="inv-filters">
+          <div className="seg sm">
+            <button type="button" className={`seg-btn${ptype === 'all' ? ' active' : ''}`} onClick={() => setPtype('all')}>Todos</button>
+            <button type="button" className={`seg-btn${ptype === 'variants' ? ' active' : ''}`} onClick={() => setPtype('variants')}>Con variantes</button>
+            <button type="button" className={`seg-btn${ptype === 'simple' ? ' active' : ''}`} onClick={() => setPtype('simple')}>Simples</button>
           </div>
-        )}
+          {filterables.map((t) => (
+            <select key={t.id} value={filters[t.id] || ''}
+              onChange={(e) => setFilters((f) => ({ ...f, [t.id]: e.target.value }))}>
+              <option value="">{t.name}: todas</option>
+              {t.taxonomy_terms.map((term) => (
+                <option key={term.id} value={term.id}>{term.name}</option>
+              ))}
+            </select>
+          ))}
+        </div>
+        {visibleProducts.length === 0 ? (
+          <div className="empty">Ningún producto coincide con el filtro.</div>
+        ) : (
         <div className="card table-card">
           <table className="list">
             <thead>
@@ -316,21 +338,29 @@ export default function Inventory() {
                   <Fragment key={p.id}>
                     <tr>
                       <td>
-                        {!simple && (
-                          <button className="tree-toggle" onClick={() => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }))}>
-                            {open ? '▾' : '▸'}
-                          </button>
-                        )}
-                        <span className="list-thumb">
-                          {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
-                        </span>
-                        {p.name}
-                        {!simple && <span className="variant-count">{variantsOf(p).length} variantes</span>}
-                        {(p.product_terms || []).length > 0 && (
-                          <div className="product-tags">
-                            {p.product_terms.map((pt) => termName.get(pt.term_id)).filter(Boolean).join(' · ')}
+                        <div className="prod-cell">
+                          {simple ? (
+                            <span className="tree-spacer" />
+                          ) : (
+                            <button className={`tree-toggle${open ? ' open' : ''}`}
+                              title={open ? 'Ocultar variantes' : 'Ver variantes'}
+                              onClick={() => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }))}>{ICON.chevron}</button>
+                          )}
+                          <span className="list-thumb">
+                            {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
+                          </span>
+                          <div className="prod-info">
+                            <div className="prod-name">
+                              {p.name}
+                              {!simple && <span className="variant-count">{variantsOf(p).length} variantes</span>}
+                            </div>
+                            {(p.product_terms || []).length > 0 && (
+                              <div className="product-tags">
+                                {p.product_terms.map((pt) => termName.get(pt.term_id)).filter(Boolean).join(' · ')}
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </td>
                       <td className="mono">{p.sku}</td>
                       <td className="num">{money(p.price)}</td>
@@ -340,13 +370,9 @@ export default function Inventory() {
                         {!simple && productHasLow(p) && <span className="badge low">Bajo</span>}
                       </td>
                       <td className="row-actions">
-                        {simple && dv ? moveButtons(p, dv) : (
-                          <button className="btn ghost sm" onClick={() => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }))}>
-                            {open ? 'Ocultar' : 'Ver variantes'}
-                          </button>
-                        )}
-                        <button className="btn ghost sm" onClick={() => openEdit(p)}>Editar</button>
-                        <button className="btn danger sm" onClick={() => onDeleteProduct(p)}>Eliminar</button>
+                        {simple && dv && moveButtons(p, dv)}
+                        <button className="icon-btn" title="Editar producto" onClick={() => openEdit(p)}>{ICON.edit}</button>
+                        <button className="icon-btn danger" title="Eliminar producto" onClick={() => onDeleteProduct(p)}>{ICON.trash}</button>
                       </td>
                     </tr>
                     {!simple && open && variantsOf(p).map((v) => (
@@ -361,7 +387,7 @@ export default function Inventory() {
                         </td>
                         <td className="row-actions">
                           {moveButtons(p, v)}
-                          <button className="btn danger sm" onClick={() => onDeleteVariant(p, v)}>Quitar</button>
+                          <button className="icon-btn danger" title="Quitar variante" onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>
                         </td>
                       </tr>
                     ))}
@@ -371,6 +397,7 @@ export default function Inventory() {
             </tbody>
           </table>
         </div>
+        )}
         </>
       )}
 
