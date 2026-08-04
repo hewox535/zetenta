@@ -94,13 +94,20 @@ export default function Orders() {
   const totalVes = totalUsd * rate.value;
 
   // ------- pagos (solo los métodos seleccionados) -------
+  // Tolerancia de 1 céntimo, idéntica a create_order() en el servidor: el pedido
+  // se considera cubierto cuando paidUsd + PAY_EPS >= total. Sin esto, el redondeo
+  // a céntimos del monto en divisa (amplificado al dividir por 1-d) dejaba un
+  // restante < 1 céntimo que se mostraba como $0,00 pero mantenía deshabilitado
+  // "Finalizar". Los Bs se normalizan a USD redondeando cada pago, como el servidor.
+  const PAY_EPS = 0.01;
+  const round2 = (x) => Math.round(x * 100) / 100;
   // Descuento por divisa: el pago en USD "rinde" más (amt / (1-d)); los Bs no.
   const d = Math.min(0.99, Math.max(0, (Number(business?.foreign_discount_percent) || 0) / 100));
   const vesCredit = selectedMethods.reduce((s, id) => {
     const m = methods.find((x) => x.id === id);
     if (!m || m.currency === 'USD') return s;
     const amt = Number(payments[id]) || 0;
-    return s + (rate.value ? amt / rate.value : 0);
+    return s + (rate.value ? round2(amt / rate.value) : 0);
   }, 0);
   const usdPaid = selectedMethods.reduce((s, id) => {
     const m = methods.find((x) => x.id === id);
@@ -108,8 +115,11 @@ export default function Orders() {
     return s + (Number(payments[id]) || 0);
   }, 0);
   const paidUsd = vesCredit + (d > 0 ? usdPaid / (1 - d) : usdPaid);
-  const remainingUsd = Math.max(0, totalUsd - paidUsd);
-  const changeUsd = Math.max(0, paidUsd - totalUsd);
+  const rawRemaining = totalUsd - paidUsd;
+  const remainingUsd = Math.max(0, rawRemaining);
+  const changeUsd = Math.max(0, -rawRemaining);
+  // Cubierto (habilita Finalizar) cuando el restante cae dentro de la tolerancia.
+  const isCovered = cart.length > 0 && rawRemaining <= PAY_EPS;
   // Descuento concedido (igual criterio que el servidor).
   const pendingForUsd = Math.max(0, totalUsd - vesCredit);
   const usdNeeded = pendingForUsd * (1 - d);
@@ -131,9 +141,10 @@ export default function Orders() {
 
   const fillExact = (m) => {
     // Restante en USD (lista) sin contar lo ya escrito en este método.
+    const cur = Number(payments[m.id]) || 0;
     const creditOfThis = m.currency === 'USD'
-      ? (d > 0 ? (Number(payments[m.id]) || 0) / (1 - d) : (Number(payments[m.id]) || 0))
-      : (rate.value ? (Number(payments[m.id]) || 0) / rate.value : 0);
+      ? (d > 0 ? cur / (1 - d) : cur)
+      : (rate.value ? round2(cur / rate.value) : 0);
     const remaining = totalUsd - (paidUsd - creditOfThis);
     if (remaining <= 0) return;
     // En divisa se cobra el saldo con descuento: remaining*(1-d). En Bs, sin descuento.
@@ -165,7 +176,7 @@ export default function Orders() {
 
   async function onFinish() {
     setError(null);
-    if (!rate.value) { setError('No hay tasa de cambio disponible. Configúrala en Negocio → Pedidos.'); return; }
+    if (!rate.value) { setError('No hay tasa de cambio disponible. Configúrala en Negocio → Ventas.'); return; }
     setBusy(true);
     try {
       // Resuelve el cliente: existente, nuevo (se crea) o ninguno.
@@ -212,19 +223,19 @@ export default function Orders() {
       <div className="page">
         <header className="page-head no-print">
           <div>
-            <h1>Pedido finalizado</h1>
-            <p className="page-sub">Pedido Nº {finished.number} registrado.</p>
+            <h1>Venta finalizada</h1>
+            <p className="page-sub">Venta Nº {finished.number} registrada.</p>
           </div>
           <div className="page-actions">
-            <button className="btn ghost" onClick={newOrder}>Nuevo pedido</button>
-            <button className="btn primary" onClick={() => window.print()}>Imprimir pedido</button>
+            <button className="btn ghost" onClick={newOrder}>Nueva venta</button>
+            <button className="btn primary" onClick={() => window.print()}>Imprimir venta</button>
           </div>
         </header>
         <div className="receipt-wrap">
           <OrderReceipt business={business} order={finished} />
         </div>
         <div className="no-print" style={{ textAlign: 'center', marginTop: 20 }}>
-          <button className="btn primary lg" onClick={newOrder}>+ Nuevo pedido</button>
+          <button className="btn primary lg" onClick={newOrder}>+ Nueva venta</button>
         </div>
       </div>
     );
@@ -238,8 +249,8 @@ export default function Orders() {
     <div className="page pos-page">
       <header className="page-head">
         <div>
-          <h1>Pedidos</h1>
-          <p className="page-sub">Toca un producto para agregarlo al pedido.</p>
+          <h1>Nueva venta</h1>
+          <p className="page-sub">Toca un producto para agregarlo a la venta.</p>
         </div>
         <div className="page-actions">
           {rateBadge}
@@ -324,7 +335,7 @@ export default function Orders() {
             /* -------- Resumen del pedido (etapa de pago) -------- */
             <div className="card order-summary">
               <div className="order-summary-head">
-                <h2>Resumen del pedido</h2>
+                <h2>Resumen de la venta</h2>
                 <button className="btn ghost sm" onClick={() => setStage('shop')}>← Seguir agregando</button>
               </div>
               <table className="list">
@@ -399,7 +410,7 @@ export default function Orders() {
               {stage === 'shop' ? (
                 <>
                   <div className="pos-panel-head">
-                    <h2>Pedido</h2>
+                    <h2>Venta</h2>
                     {cart.length > 0 && <button className="btn ghost sm" onClick={() => setCart([])}>Vaciar</button>}
                   </div>
                   {cart.length === 0 ? (
@@ -431,7 +442,7 @@ export default function Orders() {
                   </div>
                   {methods.length === 0 ? (
                     <div className="pos-panel-empty">
-                      No hay métodos de pago. Agrégalos en <Link to="/settings">Negocio → Pedidos</Link>.
+                      No hay métodos de pago. Agrégalos en <Link to="/settings">Negocio → Ventas</Link>.
                     </div>
                   ) : (
                     <>
@@ -490,9 +501,9 @@ export default function Orders() {
                       <div className="totals-row ok"><span>Descuento divisa</span><span>−{usd(discountUsd)}</span></div>
                     )}
                     <div className="totals-row"><span>Pagado</span><span>{usd(paidUsd)}</span></div>
-                    {remainingUsd > 0.001
+                    {!isCovered
                       ? <div className="totals-row warn"><span>Restante</span><span>{usd(remainingUsd)}</span></div>
-                      : changeUsd > 0.001 && <div className="totals-row ok"><span>Vuelto</span><span>{usd(changeUsd)}</span></div>}
+                      : changeUsd > PAY_EPS && <div className="totals-row ok"><span>Vuelto</span><span>{usd(changeUsd)}</span></div>}
                   </>
                 )}
               </div>
@@ -502,9 +513,9 @@ export default function Orders() {
                   Ir al pago
                 </button>
               ) : (
-                <button className="btn primary lg block" disabled={busy || remainingUsd > 0.001 || cart.length === 0}
+                <button className="btn primary lg block" disabled={busy || !isCovered}
                   onClick={onFinish}>
-                  {busy ? 'Guardando…' : 'Finalizar pedido'}
+                  {busy ? 'Guardando…' : 'Finalizar venta'}
                 </button>
               )}
             </div>

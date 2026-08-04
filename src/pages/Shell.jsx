@@ -20,7 +20,7 @@ export default function Shell() {
 
   const items = [];
   if (capabilities.orders) {
-    items.push({ to: '/orders', label: 'Pedidos', icon: Icon.cart });
+    items.push({ to: '/orders', label: 'Ventas', icon: Icon.cart });
   }
   if (capabilities.customers) {
     items.push({ to: '/customers', label: 'Clientes', icon: Icon.user });

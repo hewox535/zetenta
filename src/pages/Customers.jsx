@@ -55,7 +55,7 @@ export default function Customers() {
   }
 
   async function onDelete(c) {
-    if (!confirm(`¿Eliminar a ${c.name}? Sus pedidos se conservan.`)) return;
+    if (!confirm(`¿Eliminar a ${c.name}? Sus ventas se conservan.`)) return;
     try {
       await deleteCustomer(c.id);
       setRows((prev) => prev.filter((r) => r.id !== c.id));

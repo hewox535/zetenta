@@ -23,11 +23,11 @@ export default function OrdersHistory() {
     <div className="page">
       <header className="page-head">
         <div>
-          <h1>Historial de pedidos</h1>
-          <p className="page-sub">Todos los pedidos registrados, del más reciente al más antiguo.</p>
+          <h1>Historial de ventas</h1>
+          <p className="page-sub">Todas las ventas registradas, de la más reciente a la más antigua.</p>
         </div>
         <div className="page-actions">
-          <Link to="/orders" className="btn primary">+ Nuevo pedido</Link>
+          <Link to="/orders" className="btn primary">+ Nueva venta</Link>
         </div>
       </header>
 
@@ -36,7 +36,7 @@ export default function OrdersHistory() {
       {orders === null ? (
         <div className="empty">Cargando…</div>
       ) : orders.length === 0 ? (
-        <div className="empty">Aún no hay pedidos. Registra el primero en <Link to="/orders">Pedidos</Link>.</div>
+        <div className="empty">Aún no hay ventas. Registra la primera en <Link to="/orders">Ventas</Link>.</div>
       ) : (
         <div className="card table-card">
           <table className="list">

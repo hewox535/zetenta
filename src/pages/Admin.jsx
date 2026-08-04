@@ -3,7 +3,7 @@ import { fetchBusinesses, updateBusinessCapabilities, updateBusinessBranding } f
 import { formatDate } from '../lib/calc';
 
 const CAPABILITIES = [
-  ['orders', 'Pedidos'],
+  ['orders', 'Ventas'],
   ['inventory', 'Inventario'],
   ['stats', 'Estadísticas'],
   ['customers', 'Clientes'],

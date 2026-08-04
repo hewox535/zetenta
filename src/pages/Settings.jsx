@@ -22,7 +22,7 @@ export default function Settings() {
     { key: 'fiscal', label: 'Datos fiscales' },
     capabilities?.retentions && { key: 'retentions', label: 'Retenciones' },
     capabilities?.inventory && { key: 'inventory', label: 'Inventario' },
-    capabilities?.orders && { key: 'orders', label: 'Pedidos' },
+    capabilities?.orders && { key: 'orders', label: 'Ventas' },
     { key: 'staff', label: 'Personal' },
   ].filter(Boolean);
 
@@ -431,7 +431,7 @@ function OrdersSection({ business, refreshBusiness }) {
       <section className="card vsection">
         <h2>Descuento por pago en divisa</h2>
         <p className="hint">
-          Descuento que se aplica <strong>solo</strong> a la parte del pedido que se paga
+          Descuento que se aplica <strong>solo</strong> a la parte de la venta que se paga
           en divisa (métodos en dólares). La parte pagada en bolívares no recibe descuento.
           Se calcula sobre el saldo pendiente que se liquida en divisa, no sobre el total.
         </p>
@@ -450,7 +450,7 @@ function OrdersSection({ business, refreshBusiness }) {
       <section className="card vsection">
         <h2>Métodos de pago</h2>
         <p className="hint">
-          Los que aparecen al cobrar un pedido. Desactiva los que no uses. Para separar
+          Los que aparecen al cobrar una venta. Desactiva los que no uses. Para separar
           submétodos de divisa (Binance, efectivo, Zelle…), crea uno por cada uno en
           <strong> Dólares</strong>: cada método se registra y reporta por separado.
         </p>
@@ -539,7 +539,7 @@ function StaffSection({ profile }) {
         <h2>Personal</h2>
         <p className="hint">
           El <strong>administrador</strong> tiene acceso completo (inventario, estadísticas,
-          configuración). La <strong>vendedora</strong> solo accede a Pedidos y Clientes.
+          configuración). La <strong>vendedora</strong> solo accede a Ventas y Clientes.
         </p>
         {staff === null ? (
           <div className="empty">Cargando…</div>

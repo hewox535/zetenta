@@ -23,7 +23,7 @@ export default function OrderView() {
   useEffect(() => {
     if (!order) return;
     const prev = document.title;
-    document.title = `Pedido ${order.number}`;
+    document.title = `Venta ${order.number}`;
     return () => { document.title = prev; };
   }, [order]);
 
@@ -34,8 +34,8 @@ export default function OrderView() {
     <div className="page">
       <header className="page-head no-print">
         <div>
-          <h1>Pedido {order.number}</h1>
-          <p className="page-sub">Detalle del pedido. Imprime o guarda como PDF.</p>
+          <h1>Venta {order.number}</h1>
+          <p className="page-sub">Detalle de la venta. Imprime o guarda como PDF.</p>
         </div>
         <div className="page-actions">
           <Link to="/orders/history" className="btn ghost">Volver</Link>

@@ -122,7 +122,7 @@ export default function Stats() {
       {orders === null ? (
         <div className="empty">Cargando…</div>
       ) : stats.count === 0 ? (
-        <div className="empty">Sin pedidos en este período. Registra ventas en <Link to="/orders">Pedidos</Link>.</div>
+        <div className="empty">Sin ventas en este período. Regístralas en <Link to="/orders">Ventas</Link>.</div>
       ) : (
         <>
           <div className="kpi-grid">
@@ -132,7 +132,7 @@ export default function Stats() {
               <div className="kpi-sub">{bs(stats.revenueVes)}</div>
             </div>
             <div className="card kpi">
-              <div className="kpi-label">Pedidos</div>
+              <div className="kpi-label">Ventas</div>
               <div className="kpi-value">{stats.count}</div>
             </div>
             <div className="card kpi">

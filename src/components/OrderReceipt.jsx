@@ -15,9 +15,9 @@ export default function OrderReceipt({ business, order }) {
   return (
     <div className="receipt">
       <div className="receipt-head">
-        <div className="receipt-biz">{business?.name || 'Pedido'}</div>
+        <div className="receipt-biz">{business?.name || 'Venta'}</div>
         {business?.rif && <div className="receipt-muted">{business.rif}</div>}
-        <div className="receipt-muted">Pedido Nº {order.number}</div>
+        <div className="receipt-muted">Venta Nº {order.number}</div>
         <div className="receipt-muted">{formatDate(order.created_at)}</div>
         {order.customer_name && <div className="receipt-muted">Cliente: {order.customer_name}</div>}
         {order.created_by_name && <div className="receipt-muted">Atendido por: {order.created_by_name}</div>}
