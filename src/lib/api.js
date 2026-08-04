@@ -297,16 +297,32 @@ export async function extractInvoice(file) {
   return data.extracted;
 }
 
-// ---------- Métodos de pago ----------
+// ---------- Cuentas bancarias y sus métodos de pago ----------
 
-export async function fetchPaymentMethods() {
-  return unwrap(await supabase.from('payment_methods')
-    .select('*').order('sort_order').order('created_at'));
+// Cuentas con sus métodos. Una cuenta sin métodos se usa como método en sí.
+export async function fetchBankAccounts() {
+  return unwrap(await supabase.from('bank_accounts')
+    .select('*, payment_methods(*)').order('sort_order').order('created_at'));
 }
 
-export async function createPaymentMethod(businessId, { name, currency, details }) {
+export async function createBankAccount(businessId, { name, currency, openingBalance, details }) {
+  return unwrap(await supabase.from('bank_accounts')
+    .insert({ business_id: businessId, name, currency, opening_balance: Number(openingBalance) || 0, details: details || {} })
+    .select('*, payment_methods(*)').single());
+}
+
+export async function updateBankAccount(id, patch) {
+  return unwrap(await supabase.from('bank_accounts')
+    .update(patch).eq('id', id).select('*, payment_methods(*)').single());
+}
+
+export async function deleteBankAccount(id) {
+  unwrap(await supabase.from('bank_accounts').delete().eq('id', id));
+}
+
+export async function createPaymentMethod(businessId, accountId, { name, description, currency }) {
   return unwrap(await supabase.from('payment_methods')
-    .insert({ business_id: businessId, name, currency, details: details || {} })
+    .insert({ business_id: businessId, account_id: accountId, name, description: description || '', currency })
     .select().single());
 }
 

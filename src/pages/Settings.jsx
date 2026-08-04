@@ -3,12 +3,20 @@ import { useAuth } from '../context/AuthContext';
 import {
   updateBusinessProfile, setWithholdingSeq,
   fetchTaxonomies, createTaxonomy, deleteTaxonomy, createTerm, updateTerm, deleteTerm,
-  fetchPaymentMethods, createPaymentMethod, updatePaymentMethod, deletePaymentMethod,
+  fetchBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
+  createPaymentMethod, updatePaymentMethod, deletePaymentMethod,
   updateOrderSettings, updateBusinessSettings,
   fetchStaff, createStaff, deleteStaff, setStaffRole,
 } from '../lib/api';
 import { fetchBcvRates } from '../lib/rates';
 import { money } from '../lib/calc';
+
+// Iconos limpios para acciones (editar, eliminar, agregar).
+const ICON = {
+  edit: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16v4z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.6"/></svg>,
+  trash: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M6 7l1 12a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9L18 7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  plus: <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>,
+};
 
 export default function Settings() {
   const { business, capabilities, refreshBusiness, profile } = useAuth();
@@ -316,7 +324,7 @@ function TaxGroup({ title, hint, taxonomies, placeholder, addLabel, value, onCha
   );
 }
 
-// ---------- Pedidos: tasa de cambio + métodos de pago ----------
+// ---------- Ventas: tasa de cambio + descuento + cuentas bancarias ----------
 function OrdersSection({ business, refreshBusiness }) {
   const cfg = business.rate_config || { mode: 'bcv', currency: 'USD' };
   const [mode, setMode] = useState(cfg.mode || 'bcv');
@@ -327,11 +335,6 @@ function OrdersSection({ business, refreshBusiness }) {
   const [rateBusy, setRateBusy] = useState(false);
   const [rateError, setRateError] = useState(null);
 
-  const [methods, setMethods] = useState([]);
-  const [mName, setMName] = useState('');
-  const [mCurrency, setMCurrency] = useState('VES');
-  const [mError, setMError] = useState(null);
-
   const [discount, setDiscount] = useState(String(business.foreign_discount_percent ?? 0));
   const [discBusy, setDiscBusy] = useState(false);
   const [discSaved, setDiscSaved] = useState(false);
@@ -339,7 +342,6 @@ function OrdersSection({ business, refreshBusiness }) {
 
   useEffect(() => {
     fetchBcvRates().then(setBcv).catch(() => {});
-    fetchPaymentMethods().then(setMethods).catch((e) => setMError(e.message));
   }, []);
 
   async function saveDiscount() {
@@ -364,30 +366,6 @@ function OrdersSection({ business, refreshBusiness }) {
       await refreshBusiness();
       setRateSaved(true);
     } catch (e) { setRateError(e.message); } finally { setRateBusy(false); }
-  }
-
-  async function addMethod() {
-    const name = mName.trim();
-    if (!name) return;
-    setMError(null);
-    try {
-      const created = await createPaymentMethod(business.id, { name, currency: mCurrency });
-      setMethods((prev) => [...prev, created]);
-      setMName(''); setMCurrency('VES');
-    } catch (e) { setMError(e.message); }
-  }
-  async function toggleMethod(m) {
-    try {
-      const updated = await updatePaymentMethod(m.id, { active: !m.active });
-      setMethods((prev) => prev.map((x) => (x.id === m.id ? updated : x)));
-    } catch (e) { setMError(e.message); }
-  }
-  async function removeMethod(m) {
-    if (!confirm(`¿Eliminar el método "${m.name}"?`)) return;
-    try {
-      await deletePaymentMethod(m.id);
-      setMethods((prev) => prev.filter((x) => x.id !== m.id));
-    } catch (e) { setMError(e.message); }
   }
 
   return (
@@ -447,45 +425,163 @@ function OrdersSection({ business, refreshBusiness }) {
         </button>
       </section>
 
-      <section className="card vsection">
-        <h2>Métodos de pago</h2>
-        <p className="hint">
-          Los que aparecen al cobrar una venta. Desactiva los que no uses. Para separar
-          submétodos de divisa (Binance, efectivo, Zelle…), crea uno por cada uno en
-          <strong> Dólares</strong>: cada método se registra y reporta por separado.
-        </p>
-        <div className="method-list">
-          {methods.map((m) => (
-            <div className={`method-row${m.active ? '' : ' inactive'}`} key={m.id}>
-              <div className="method-info">
-                <span className="method-name">{m.name}</span>
-                <span className="badge adjustment">{m.currency === 'USD' ? 'Dólares' : 'Bolívares'}</span>
-              </div>
-              <div className="method-actions">
-                <button type="button" className={`switch${m.active ? ' on' : ''}`} role="switch"
-                  aria-checked={m.active} onClick={() => toggleMethod(m)}><span className="switch-knob" /></button>
-                <button type="button" className="btn danger sm" onClick={() => removeMethod(m)}>Eliminar</button>
+      <BankAccountsManager business={business} />
+    </div>
+  );
+}
+
+// ---------- Cuentas bancarias: cada cuenta agrupa métodos y reporta su ingreso ----------
+function BankAccountsManager({ business }) {
+  const [accounts, setAccounts] = useState([]);
+  const [error, setError] = useState(null);
+  const [aName, setAName] = useState('');
+  const [aCurrency, setACurrency] = useState('VES');
+  const [mDraft, setMDraft] = useState({});         // { accountId: { name, description } }
+  const [edit, setEdit] = useState(null);           // { kind:'account'|'method', id, name, description }
+
+  useEffect(() => { fetchBankAccounts().then(setAccounts).catch((e) => setError(e.message)); }, []);
+
+  const patchAccount = (id, fn) => setAccounts((prev) => prev.map((x) => (x.id === id ? fn(x) : x)));
+  const draftOf = (id) => mDraft[id] || { name: '', description: '' };
+  const setDraft = (id, k, v) => setMDraft((d) => ({ ...d, [id]: { ...draftOf(id), [k]: v } }));
+
+  async function addAccount() {
+    const name = aName.trim(); if (!name) return;
+    setError(null);
+    try {
+      const created = await createBankAccount(business.id, { name, currency: aCurrency });
+      setAccounts((prev) => [...prev, { ...created, payment_methods: created.payment_methods || [] }]);
+      setAName(''); setACurrency('VES');
+    } catch (e) { setError(e.message); }
+  }
+  async function toggleAccount(a) {
+    try { const u = await updateBankAccount(a.id, { active: !a.active });
+      patchAccount(a.id, (x) => ({ ...u, payment_methods: x.payment_methods }));
+    } catch (e) { setError(e.message); }
+  }
+  async function saveAccountEdit() {
+    const name = (edit.name || '').trim(); if (!name) { setEdit(null); return; }
+    try { const u = await updateBankAccount(edit.id, { name });
+      patchAccount(edit.id, (x) => ({ ...u, payment_methods: x.payment_methods }));
+    } catch (e) { setError(e.message); } finally { setEdit(null); }
+  }
+  async function removeAccount(a) {
+    if (!confirm(`¿Eliminar la cuenta "${a.name}" y sus métodos? Las ventas ya registradas conservan su información.`)) return;
+    try { await deleteBankAccount(a.id); setAccounts((prev) => prev.filter((x) => x.id !== a.id)); }
+    catch (e) { setError(e.message); }
+  }
+  async function addMethod(a) {
+    const d = draftOf(a.id); const name = d.name.trim(); if (!name) return;
+    setError(null);
+    try {
+      const created = await createPaymentMethod(business.id, a.id, { name, description: d.description.trim(), currency: a.currency });
+      patchAccount(a.id, (x) => ({ ...x, payment_methods: [...(x.payment_methods || []), created] }));
+      setMDraft((m) => ({ ...m, [a.id]: { name: '', description: '' } }));
+    } catch (e) { setError(e.message); }
+  }
+  async function saveMethodEdit(a) {
+    const name = (edit.name || '').trim(); if (!name) { setEdit(null); return; }
+    try { const u = await updatePaymentMethod(edit.id, { name, description: (edit.description || '').trim() });
+      patchAccount(a.id, (x) => ({ ...x, payment_methods: x.payment_methods.map((y) => (y.id === edit.id ? u : y)) }));
+    } catch (e) { setError(e.message); } finally { setEdit(null); }
+  }
+  async function removeMethod(a, m) {
+    if (!confirm(`¿Eliminar el método "${m.name}"?`)) return;
+    try { await deletePaymentMethod(m.id);
+      patchAccount(a.id, (x) => ({ ...x, payment_methods: x.payment_methods.filter((y) => y.id !== m.id) }));
+    } catch (e) { setError(e.message); }
+  }
+
+  return (
+    <section className="card vsection">
+      <h2>Cuentas bancarias</h2>
+      <p className="hint">
+        Cada cuenta agrupa sus métodos de pago (transferencia, pago móvil…). Así sabes
+        cuánto entra a cada cuenta. Si una cuenta no tiene métodos, la cuenta misma se
+        usa como forma de pago al cobrar.
+      </p>
+      <div className="acct-list">
+        {accounts.map((a) => (
+          <div className={`acct${a.active ? '' : ' inactive'}`} key={a.id}>
+            <div className="acct-head">
+              {edit?.kind === 'account' && edit.id === a.id ? (
+                <input autoFocus value={edit.name}
+                  onChange={(e) => setEdit({ ...edit, name: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveAccountEdit(); if (e.key === 'Escape') setEdit(null); }}
+                  onBlur={saveAccountEdit} />
+              ) : (
+                <div className="acct-title">
+                  <strong>{a.name}</strong>
+                  <span className="badge adjustment">{a.currency === 'USD' ? 'Dólares' : 'Bolívares'}</span>
+                </div>
+              )}
+              <div className="acct-actions">
+                <button type="button" className={`switch${a.active ? ' on' : ''}`} role="switch"
+                  aria-checked={a.active} title={a.active ? 'Activa' : 'Inactiva'}
+                  onClick={() => toggleAccount(a)}><span className="switch-knob" /></button>
+                <button type="button" className="icon-btn" title="Editar cuenta"
+                  onClick={() => setEdit({ kind: 'account', id: a.id, name: a.name })}>{ICON.edit}</button>
+                <button type="button" className="icon-btn danger" title="Eliminar cuenta"
+                  onClick={() => removeAccount(a)}>{ICON.trash}</button>
               </div>
             </div>
-          ))}
-        </div>
-        <div className="inline-form">
-          <label>Nuevo método<input value={mName} onChange={(e) => setMName(e.target.value)}
-            placeholder="Zelle, Punto de venta, Efectivo Bs…"
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMethod(); } }} /></label>
-          <label className="short">Moneda
-            <select value={mCurrency} onChange={(e) => setMCurrency(e.target.value)}>
-              <option value="VES">Bolívares</option>
-              <option value="USD">Dólares</option>
-            </select>
-          </label>
-          <div className="inline-form-actions">
-            <button type="button" className="btn" onClick={addMethod}>Agregar</button>
+
+            <div className="acct-methods">
+              {(a.payment_methods || []).map((m) => (
+                edit?.kind === 'method' && edit.id === m.id ? (
+                  <div className="acct-method editing" key={m.id}>
+                    <input autoFocus placeholder="Método" value={edit.name}
+                      onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+                    <input placeholder="Descripción (opcional)" value={edit.description}
+                      onChange={(e) => setEdit({ ...edit, description: e.target.value })} />
+                    <button type="button" className="btn sm" onClick={() => saveMethodEdit(a)}>Guardar</button>
+                    <button type="button" className="btn ghost sm" onClick={() => setEdit(null)}>Cancelar</button>
+                  </div>
+                ) : (
+                  <div className="acct-method" key={m.id}>
+                    <div className="acct-method-info">
+                      <span className="acct-method-name">{m.name}</span>
+                      {m.description && <span className="muted">{m.description}</span>}
+                    </div>
+                    <div className="acct-method-actions">
+                      <button type="button" className="icon-btn" title="Editar método"
+                        onClick={() => setEdit({ kind: 'method', id: m.id, name: m.name, description: m.description || '' })}>{ICON.edit}</button>
+                      <button type="button" className="icon-btn danger" title="Eliminar método"
+                        onClick={() => removeMethod(a, m)}>{ICON.trash}</button>
+                    </div>
+                  </div>
+                )
+              ))}
+              <div className="acct-add-method">
+                <input placeholder="Agregar método (transferencia, pago móvil…)" value={draftOf(a.id).name}
+                  onChange={(e) => setDraft(a.id, 'name', e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMethod(a); } }} />
+                <input placeholder="Descripción (opcional)" value={draftOf(a.id).description}
+                  onChange={(e) => setDraft(a.id, 'description', e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMethod(a); } }} />
+                <button type="button" className="btn sm" onClick={() => addMethod(a)}>{ICON.plus} Método</button>
+              </div>
+            </div>
           </div>
+        ))}
+      </div>
+
+      <div className="inline-form">
+        <label>Nueva cuenta<input value={aName} onChange={(e) => setAName(e.target.value)}
+          placeholder="Banesco Bs, Zelle, Efectivo $…"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAccount(); } }} /></label>
+        <label className="short">Moneda
+          <select value={aCurrency} onChange={(e) => setACurrency(e.target.value)}>
+            <option value="VES">Bolívares</option>
+            <option value="USD">Dólares</option>
+          </select>
+        </label>
+        <div className="inline-form-actions">
+          <button type="button" className="btn" onClick={addAccount}>Agregar cuenta</button>
         </div>
-        {mError && <div className="form-error">{mError}</div>}
-      </section>
-    </div>
+      </div>
+      {error && <div className="form-error">{error}</div>}
+    </section>
   );
 }
 

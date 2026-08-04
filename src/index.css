@@ -687,6 +687,34 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .method-name { font-size: 15px; font-weight: 600; }
 .method-actions { display: flex; align-items: center; gap: 12px; }
 
+/* Botón de icono para acciones (editar, eliminar) */
+.icon-btn {
+  display: inline-grid; place-items: center; width: 32px; height: 32px;
+  border: 1px solid var(--border); border-radius: 9px; background: var(--surface);
+  color: var(--text-2); cursor: pointer;
+}
+.icon-btn:hover { border-color: var(--accent-line); color: var(--accent); }
+.icon-btn.danger:hover { border-color: color-mix(in srgb, var(--danger) 45%, transparent); color: var(--danger); }
+
+/* Cuentas bancarias: cuenta con sus métodos anidados */
+.acct-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.acct { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.acct.inactive { opacity: .6; }
+.acct-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; background: var(--accent-soft); }
+.acct-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.acct-title strong { font-size: 15px; }
+.acct-actions { display: flex; align-items: center; gap: 8px; }
+.acct-methods { display: flex; flex-direction: column; padding: 4px 14px 12px; }
+.acct-method { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.acct-method-info { display: flex; flex-direction: column; min-width: 0; }
+.acct-method-name { font-size: 14px; font-weight: 600; }
+.acct-method-actions { display: flex; gap: 6px; }
+.acct-method.editing { display: flex; flex-wrap: wrap; gap: 8px; }
+.acct-method.editing input { flex: 1 1 140px; min-width: 0; }
+.acct-add-method { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 10px; }
+.acct-add-method input { flex: 1 1 160px; min-width: 0; }
+.acct-add-method .btn { display: inline-flex; align-items: center; gap: 4px; }
+
 /* ============================================================
    Responsive
    ============================================================ */

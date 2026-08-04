@@ -42,7 +42,8 @@ export default function Stats() {
     let receivedTotalUsd = 0;               // ingreso neto real (lo que efectivamente entró), en USD
     let discountUsd = 0;
     const byProduct = new Map();      // name → { qty, revenue }
-    const byMethod = new Map();       // name → usd
+    const byMethod = new Map();       // etiqueta cuenta·método → usd
+    const byAccount = new Map();      // cuenta → usd (ingreso por cuenta)
     const byDay = new Map();          // yyyy-mm-dd → usd
     const productDays = new Map();    // name → Map(day → qty)
     for (const o of orders) {
@@ -61,8 +62,12 @@ export default function Stats() {
         pd.set(day, (pd.get(day) || 0) + (Number(it.quantity) || 0));
       }
       for (const p of o.order_payments || []) {
-        byMethod.set(p.method_name, (byMethod.get(p.method_name) || 0) + (Number(p.amount_usd) || 0));
-        receivedTotalUsd += Number(p.amount_usd) || 0;
+        const usdAmt = Number(p.amount_usd) || 0;
+        const acct = p.account_name || p.method_name || 'Sin cuenta';
+        const label = p.method_name ? `${acct} · ${p.method_name}` : acct;
+        byMethod.set(label, (byMethod.get(label) || 0) + usdAmt);
+        byAccount.set(acct, (byAccount.get(acct) || 0) + usdAmt);
+        receivedTotalUsd += usdAmt;
         if (p.currency === 'USD') receivedUsd += Number(p.amount) || 0;
         else receivedVes += Number(p.amount) || 0;
       }
@@ -79,6 +84,7 @@ export default function Stats() {
       topProducts,
       bottomProducts: [...topProducts].reverse().slice(0, 5),
       methods: [...byMethod.entries()].map(([name, v]) => ({ name, usd: v })).sort((a, b) => b.usd - a.usd),
+      accounts: [...byAccount.entries()].map(([name, v]) => ({ name, usd: v })).sort((a, b) => b.usd - a.usd),
       days: [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])),
       productDays,
       noSales,
@@ -211,6 +217,18 @@ export default function Stats() {
                       <div className="totals-row ok"><span>Descuento concedido</span><span>−{usd(stats.discountUsd)}</span></div>
                     </>
                   )}
+                </div>
+              </section>
+
+              <section className="card vsection">
+                <h2>Ingreso por cuenta</h2>
+                <p className="hint">Cuánto entró a cada cuenta bancaria en el período.</p>
+                <div className="totals">
+                  {stats.accounts.map((a) => (
+                    <div className="totals-row" key={a.name}>
+                      <span>{a.name}</span><span>{usd(a.usd)}</span>
+                    </div>
+                  ))}
                 </div>
               </section>
 

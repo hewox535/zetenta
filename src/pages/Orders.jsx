@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  fetchProducts, fetchTaxonomies, fetchPaymentMethods, fetchCustomers,
+  fetchProducts, fetchTaxonomies, fetchBankAccounts, fetchCustomers,
   createCustomer, createOrder, fetchOrder, mediaUrl,
 } from '../lib/api';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
@@ -23,6 +23,29 @@ const variantImg = (p, v) => {
   const m = mediaOf(p).find((x) => x.variant_id === v.id);
   return m ? mediaUrl(m) : productImg(p);
 };
+
+// Aplana cuentas bancarias a opciones de pago para el POS: una cuenta sin
+// métodos es una opción en sí; una cuenta con métodos aporta una opción por
+// método ("Cuenta · Método"). Cada opción lleva account_id/method_id y la moneda
+// de su cuenta, para que create_order registre a qué cuenta entró el dinero.
+function payOptionsFromAccounts(accounts) {
+  const opts = [];
+  for (const a of (accounts || []).filter((x) => x.active)) {
+    const ms = (a.payment_methods || [])
+      .filter((m) => m.active !== false)
+      .sort((x, y) => (x.sort_order - y.sort_order) || String(x.created_at).localeCompare(String(y.created_at)));
+    if (ms.length === 0) {
+      opts.push({ id: `a:${a.id}`, name: a.name, currency: a.currency,
+        account_id: a.id, method_id: null, account_name: a.name, method_name: '' });
+    } else {
+      for (const m of ms) {
+        opts.push({ id: `m:${m.id}`, name: `${a.name} · ${m.name}`, currency: a.currency,
+          account_id: a.id, method_id: m.id, account_name: a.name, method_name: m.name });
+      }
+    }
+  }
+  return opts;
+}
 
 // Helpers de monto (aceptan coma o punto decimal).
 const parseAmt = (s) => Number(String(s ?? '').replace(',', '.')) || 0;
@@ -110,9 +133,9 @@ export default function Orders() {
   const [finished, setFinished] = useState(null);      // pedido guardado (con ítems/pagos)
 
   useEffect(() => {
-    Promise.all([fetchProducts(), fetchTaxonomies(), fetchPaymentMethods(), fetchCustomers()])
-      .then(([p, t, m, c]) => {
-        setProducts(p); setTaxonomies(t); setMethods(m.filter((x) => x.active)); setCustomers(c);
+    Promise.all([fetchProducts(), fetchTaxonomies(), fetchBankAccounts(), fetchCustomers()])
+      .then(([p, t, accts, c]) => {
+        setProducts(p); setTaxonomies(t); setMethods(payOptionsFromAccounts(accts)); setCustomers(c);
       })
       .catch((e) => setError(e.message));
     fetchBcvRates().then(setRates).catch((e) => setRateError(e.message));
@@ -257,7 +280,11 @@ export default function Orders() {
         .filter(Boolean)
         .map((m) => ({ m, amount: parseAmt(payments[m.id]) }))
         .filter((x) => x.amount > 0)
-        .map((x) => ({ method_id: x.m.id, method_name: x.m.name, currency: x.m.currency, amount: x.amount }));
+        .map((x) => ({
+          account_id: x.m.account_id, method_id: x.m.method_id,
+          account_name: x.m.account_name, method_name: x.m.method_name,
+          currency: x.m.currency, amount: x.amount,
+        }));
 
       const created = await createOrder({
         items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName,
