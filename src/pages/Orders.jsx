@@ -24,6 +24,62 @@ const variantImg = (p, v) => {
   return m ? mediaUrl(m) : productImg(p);
 };
 
+// Helpers de monto (aceptan coma o punto decimal).
+const parseAmt = (s) => Number(String(s ?? '').replace(',', '.')) || 0;
+const round2 = (x) => Math.round(x * 100) / 100;
+const fmtAmt = (x) => (x ? String(round2(x)) : '');
+
+// Fila de monto de un método de pago con DOS inputs sincronizados: el de la moneda
+// del método y su equivalente en la otra moneda. El monto que se envía a create_order
+// se guarda SIEMPRE en la moneda del método (el input secundario es solo captura).
+// Editar cualquiera de los dos ajusta el otro al instante con la tasa vigente.
+function PayAmountRow({ m, rate, amount, onAmount, onExact }) {
+  const [focus, setFocus] = useState(null); // 'main' | 'alt' | null
+  const [draft, setDraft] = useState('');
+  const isVes = m.currency !== 'USD';
+  const toAlt = (canon) => {                    // moneda-método → otra moneda
+    const v = parseAmt(canon);
+    if (!v || !rate) return '';
+    return fmtAmt(isVes ? v / rate : v * rate);
+  };
+  const toCanon = (alt) => {                    // otra moneda → moneda-método
+    const v = parseAmt(alt);
+    if (!v || !rate) return '';
+    return fmtAmt(isVes ? v * rate : v / rate);
+  };
+  const mainCur = isVes ? 'Bs' : 'USD';
+  const altCur = isVes ? 'USD' : 'Bs';
+  const mainVal = focus === 'main' ? draft : (amount ?? '');
+  const altVal = focus === 'alt' ? draft : toAlt(amount);
+  return (
+    <div className="pay-input-row">
+      <div className="pay-input-label">
+        <span>{m.name}</span>
+        <span className="muted">{mainCur}</span>
+      </div>
+      <div className="pay-input-controls">
+        <div className="pay-dual">
+          <label className="pay-amt main">
+            <span className="pay-amt-cur">{mainCur}</span>
+            <input inputMode="decimal" placeholder="0,00" value={mainVal}
+              onFocus={() => { setFocus('main'); setDraft(amount ?? ''); }}
+              onBlur={() => setFocus(null)}
+              onChange={(e) => { setDraft(e.target.value); onAmount(e.target.value); }} />
+          </label>
+          <label className="pay-amt alt">
+            <span className="pay-amt-cur">{altCur}</span>
+            <input inputMode="decimal" placeholder="0,00" value={altVal}
+              onFocus={() => { setFocus('alt'); setDraft(toAlt(amount)); }}
+              onBlur={() => setFocus(null)}
+              onChange={(e) => { setDraft(e.target.value); onAmount(toCanon(e.target.value)); }} />
+          </label>
+        </div>
+        <button type="button" className="btn ghost sm" onClick={onExact}>Exacto</button>
+      </div>
+    </div>
+  );
+}
+
 export default function Orders() {
   const { business } = useAuth();
   const [products, setProducts] = useState(null);
@@ -100,24 +156,21 @@ export default function Orders() {
   // restante < 1 céntimo que se mostraba como $0,00 pero mantenía deshabilitado
   // "Finalizar". Los Bs se normalizan a USD redondeando cada pago, como el servidor.
   const PAY_EPS = 0.01;
-  const round2 = (x) => Math.round(x * 100) / 100;
   // Descuento por divisa: el pago en USD "rinde" más (amt / (1-d)); los Bs no.
   const d = Math.min(0.99, Math.max(0, (Number(business?.foreign_discount_percent) || 0) / 100));
   const vesCredit = selectedMethods.reduce((s, id) => {
     const m = methods.find((x) => x.id === id);
     if (!m || m.currency === 'USD') return s;
-    const amt = Number(payments[id]) || 0;
+    const amt = parseAmt(payments[id]);
     return s + (rate.value ? round2(amt / rate.value) : 0);
   }, 0);
   const usdPaid = selectedMethods.reduce((s, id) => {
     const m = methods.find((x) => x.id === id);
     if (!m || m.currency !== 'USD') return s;
-    return s + (Number(payments[id]) || 0);
+    return s + parseAmt(payments[id]);
   }, 0);
   const paidUsd = vesCredit + (d > 0 ? usdPaid / (1 - d) : usdPaid);
   const rawRemaining = totalUsd - paidUsd;
-  const remainingUsd = Math.max(0, rawRemaining);
-  const changeUsd = Math.max(0, -rawRemaining);
   // Cubierto (habilita Finalizar) cuando el restante cae dentro de la tolerancia.
   const isCovered = cart.length > 0 && rawRemaining <= PAY_EPS;
   // Descuento concedido (igual criterio que el servidor).
@@ -125,6 +178,13 @@ export default function Orders() {
   const usdNeeded = pendingForUsd * (1 - d);
   const discountUsd = d <= 0 ? 0
     : (usdPaid + 0.005 >= usdNeeded ? pendingForUsd * d : (usdPaid * d) / (1 - d));
+  // Lo que el cliente realmente paga (neto = lista − descuento) y lo realmente
+  // recibido en efectivo (Bs a USD + USD), para no mostrar "pagado 90$" cuando el
+  // descuento hace que se cobren menos. Cuando está cubierto, recibido == a pagar.
+  const netTotalUsd = Math.max(0, totalUsd - discountUsd);
+  const receivedUsd = vesCredit + usdPaid;
+  const remainingNet = Math.max(0, netTotalUsd - receivedUsd);
+  const changeNet = Math.max(0, receivedUsd - netTotalUsd);
 
   const toggleMethod = (m) => {
     if (selectedMethods.includes(m.id)) {
@@ -141,7 +201,7 @@ export default function Orders() {
 
   const fillExact = (m) => {
     // Restante en USD (lista) sin contar lo ya escrito en este método.
-    const cur = Number(payments[m.id]) || 0;
+    const cur = parseAmt(payments[m.id]);
     const creditOfThis = m.currency === 'USD'
       ? (d > 0 ? cur / (1 - d) : cur)
       : (rate.value ? round2(cur / rate.value) : 0);
@@ -195,7 +255,7 @@ export default function Orders() {
       const pays = selectedMethods
         .map((id) => methods.find((x) => x.id === id))
         .filter(Boolean)
-        .map((m) => ({ m, amount: Number(payments[m.id]) || 0 }))
+        .map((m) => ({ m, amount: parseAmt(payments[m.id]) }))
         .filter((x) => x.amount > 0)
         .map((x) => ({ method_id: x.m.id, method_name: x.m.name, currency: x.m.currency, amount: x.amount }));
 
@@ -463,24 +523,17 @@ export default function Orders() {
                         )}
                       </div>
 
-                      {/* Un input por cada método seleccionado, debajo de la lista */}
+                      {/* Un input por cada método seleccionado, con su equivalente en la otra moneda */}
                       {selectedMethods.length > 0 && (
                         <div className="pay-inputs">
                           {selectedMethods
                             .map((id) => methods.find((x) => x.id === id))
                             .filter(Boolean)
                             .map((m) => (
-                              <div className="pay-input-row" key={m.id}>
-                                <div className="pay-input-label">
-                                  <span>{m.name}</span>
-                                  <span className="muted">{m.currency === 'USD' ? 'USD' : 'Bs'}</span>
-                                </div>
-                                <div className="pay-input-controls">
-                                  <input inputMode="decimal" placeholder="0,00" value={payments[m.id] || ''}
-                                    onChange={(e) => setPayments((prev) => ({ ...prev, [m.id]: e.target.value }))} />
-                                  <button type="button" className="btn ghost sm" onClick={() => fillExact(m)}>Exacto</button>
-                                </div>
-                              </div>
+                              <PayAmountRow key={m.id} m={m} rate={rate.value}
+                                amount={payments[m.id] || ''}
+                                onAmount={(val) => setPayments((prev) => ({ ...prev, [m.id]: val }))}
+                                onExact={() => fillExact(m)} />
                             ))}
                         </div>
                       )}
@@ -493,17 +546,25 @@ export default function Orders() {
             {/* Totales y acción (fijos abajo) */}
             <div className="pos-panel-foot">
               <div className="totals">
-                <div className="totals-row grand"><span>Total</span><span>{usd(totalUsd)}</span></div>
-                <div className="totals-row"><span>Total Bs</span><span>{bs(totalVes)}</span></div>
+                {stage === 'pay' && discountUsd > 0.005 ? (
+                  <>
+                    <div className="totals-row"><span>Total lista</span><span>{usd(totalUsd)}</span></div>
+                    <div className="totals-row ok"><span>Descuento por divisa</span><span>−{usd(discountUsd)}</span></div>
+                    <div className="totals-row grand"><span>A pagar</span><span>{usd(netTotalUsd)}</span></div>
+                    <div className="totals-row"><span className="muted">A pagar en Bs</span><span className="muted">{bs(netTotalUsd * rate.value)}</span></div>
+                  </>
+                ) : (
+                  <>
+                    <div className="totals-row grand"><span>Total</span><span>{usd(totalUsd)}</span></div>
+                    <div className="totals-row"><span>Total Bs</span><span>{bs(totalVes)}</span></div>
+                  </>
+                )}
                 {stage === 'pay' && (
                   <>
-                    {discountUsd > 0.005 && (
-                      <div className="totals-row ok"><span>Descuento divisa</span><span>−{usd(discountUsd)}</span></div>
-                    )}
-                    <div className="totals-row"><span>Pagado</span><span>{usd(paidUsd)}</span></div>
+                    <div className="totals-row"><span>Pagado</span><span>{usd(receivedUsd)}</span></div>
                     {!isCovered
-                      ? <div className="totals-row warn"><span>Restante</span><span>{usd(remainingUsd)}</span></div>
-                      : changeUsd > PAY_EPS && <div className="totals-row ok"><span>Vuelto</span><span>{usd(changeUsd)}</span></div>}
+                      ? <div className="totals-row warn"><span>Restante</span><span>{usd(remainingNet)}</span></div>
+                      : changeNet > PAY_EPS && <div className="totals-row ok"><span>Vuelto</span><span>{usd(changeNet)}</span></div>}
                   </>
                 )}
               </div>

@@ -553,6 +553,14 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .pay-input-label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
 .pay-input-controls { display: flex; gap: 8px; align-items: center; }
 .pay-input-controls input { font-variant-numeric: tabular-nums; }
+/* Dos montos sincronizados: principal (moneda del método, más ancho) + equivalente */
+.pay-dual { display: flex; gap: 8px; flex: 1; min-width: 0; }
+.pay-amt { position: relative; display: flex; align-items: center; min-width: 0; }
+.pay-amt.main { flex: 1.7 1 0; }
+.pay-amt.alt { flex: 1 1 0; }
+.pay-amt-cur { position: absolute; left: 10px; font-size: 11px; font-weight: 700; color: var(--text-2); pointer-events: none; }
+.pay-amt input { width: 100%; min-width: 0; padding-left: 32px; font-variant-numeric: tabular-nums; }
+.pay-amt.alt input { background: var(--accent-soft); color: var(--text-2); }
 
 .pos-panel-foot { flex: 0 0 auto; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); }
 .pos-panel-foot .totals { margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column; }

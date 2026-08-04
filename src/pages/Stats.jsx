@@ -37,8 +37,9 @@ export default function Stats() {
 
   const stats = useMemo(() => {
     if (!orders) return null;
-    let revenueUsd = 0, revenueVes = 0;
+    let revenueUsd = 0, revenueVes = 0;     // venta bruta (precio lista, antes de descuento)
     let receivedVes = 0, receivedUsd = 0;   // ingresos reales por moneda de pago
+    let receivedTotalUsd = 0;               // ingreso neto real (lo que efectivamente entró), en USD
     let discountUsd = 0;
     const byProduct = new Map();      // name → { qty, revenue }
     const byMethod = new Map();       // name → usd
@@ -61,6 +62,7 @@ export default function Stats() {
       }
       for (const p of o.order_payments || []) {
         byMethod.set(p.method_name, (byMethod.get(p.method_name) || 0) + (Number(p.amount_usd) || 0));
+        receivedTotalUsd += Number(p.amount_usd) || 0;
         if (p.currency === 'USD') receivedUsd += Number(p.amount) || 0;
         else receivedVes += Number(p.amount) || 0;
       }
@@ -72,8 +74,8 @@ export default function Stats() {
     const sold = new Set(byProduct.keys());
     const noSales = allProducts.filter((p) => !sold.has(p.name)).map((p) => p.name);
     return {
-      revenueUsd, revenueVes, count, receivedVes, receivedUsd, discountUsd,
-      avgTicket: count ? revenueUsd / count : 0,
+      revenueUsd, revenueVes, count, receivedVes, receivedUsd, receivedTotalUsd, discountUsd,
+      avgTicket: count ? receivedTotalUsd / count : 0,
       topProducts,
       bottomProducts: [...topProducts].reverse().slice(0, 5),
       methods: [...byMethod.entries()].map(([name, v]) => ({ name, usd: v })).sort((a, b) => b.usd - a.usd),
@@ -127,9 +129,13 @@ export default function Stats() {
         <>
           <div className="kpi-grid">
             <div className="card kpi">
-              <div className="kpi-label">Ingresos</div>
-              <div className="kpi-value">{usd(stats.revenueUsd)}</div>
-              <div className="kpi-sub">{bs(stats.revenueVes)}</div>
+              <div className="kpi-label">Ingresos (recibido)</div>
+              <div className="kpi-value">{usd(stats.receivedTotalUsd)}</div>
+              <div className="kpi-sub">
+                {stats.discountUsd > 0.005
+                  ? `Venta lista ${usd(stats.revenueUsd)}`
+                  : bs(stats.revenueVes)}
+              </div>
             </div>
             <div className="card kpi">
               <div className="kpi-label">Ventas</div>
@@ -194,11 +200,16 @@ export default function Stats() {
             <div className="stats-side">
               <section className="card vsection">
                 <h2>Ingresos por moneda</h2>
+                <p className="hint">Lo que realmente entró a caja, por moneda de pago. Es lo que debe cuadrar con tus cuentas.</p>
                 <div className="totals">
                   <div className="totals-row"><span>Recibido en bolívares</span><span>{bs(stats.receivedVes)}</span></div>
                   <div className="totals-row"><span>Recibido en divisa</span><span>{usd(stats.receivedUsd)}</span></div>
+                  <div className="totals-row grand"><span>Total recibido</span><span>{usd(stats.receivedTotalUsd)}</span></div>
                   {stats.discountUsd > 0.005 && (
-                    <div className="totals-row ok"><span>Descuento por divisa</span><span>−{usd(stats.discountUsd)}</span></div>
+                    <>
+                      <div className="totals-row"><span className="muted">Venta bruta (lista)</span><span className="muted">{usd(stats.revenueUsd)}</span></div>
+                      <div className="totals-row ok"><span>Descuento concedido</span><span>−{usd(stats.discountUsd)}</span></div>
+                    </>
                   )}
                 </div>
               </section>
