@@ -399,6 +399,17 @@ export async function createCustomer(businessId, { name, document, phone, email 
     .select().single());
 }
 
+// Alta masiva (importación CSV). rows: [{ name, document, phone, email }]
+export async function createCustomersBulk(businessId, rows) {
+  if (!rows.length) return [];
+  return unwrap(await supabase.from('customers')
+    .insert(rows.map((r) => ({
+      business_id: businessId, name: r.name,
+      document: r.document || '', phone: r.phone || '', email: r.email || '',
+    })))
+    .select());
+}
+
 export async function updateCustomer(id, patch) {
   return unwrap(await supabase.from('customers')
     .update(patch).eq('id', id).select().single());
