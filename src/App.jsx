@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { BranchProvider } from './context/BranchContext';
 import { BrandingProvider, useBranding } from './context/BrandingContext';
 import Brand from './components/Brand';
 import Login from './pages/Login';
@@ -85,6 +86,7 @@ export default function App() {
     <BrandingProvider>
     <BrandGate>
     <AuthProvider>
+      <BranchProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -111,6 +113,7 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </BranchProvider>
     </AuthProvider>
     </BrandGate>
     </BrandingProvider>

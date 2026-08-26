@@ -88,11 +88,49 @@ export async function deleteWithholding(id) {
   unwrap(await supabase.rpc('delete_withholding', { p_id: id }));
 }
 
+// ---------- Sucursales ----------
+
+export async function fetchBranches() {
+  return unwrap(await supabase.from('branches').select('*').order('sort_order').order('created_at'));
+}
+
+export async function createBranch(businessId, { name, address }) {
+  return unwrap(await supabase.from('branches')
+    .insert({ business_id: businessId, name, address: address || '' }).select().single());
+}
+
+export async function updateBranch(id, patch) {
+  return unwrap(await supabase.from('branches').update(patch).eq('id', id).select().single());
+}
+
+export async function deleteBranch(id) {
+  unwrap(await supabase.from('branches').delete().eq('id', id));
+}
+
+// Traslado de stock entre sucursales (atómico, sin sobreventa en origen).
+export async function transferStock({ variantId, fromBranch, toBranch, quantity, note }) {
+  return unwrap(await supabase.rpc('transfer_stock', {
+    p_variant_id: variantId, p_from: fromBranch, p_to: toBranch,
+    p_qty: Number(quantity), p_note: note || '',
+  }));
+}
+
+// Accesos de sucursal por usuario (todas las filas visibles según RLS).
+export async function fetchUserBranches() {
+  return unwrap(await supabase.from('user_branches').select('user_id, branch_id'));
+}
+
+export async function setUserBranches(userId, allBranches, branchIds) {
+  return unwrap(await supabase.rpc('set_user_branches', {
+    p_user: userId, p_all: allBranches, p_branch_ids: branchIds || [],
+  }));
+}
+
 // ---------- Inventario ----------
 
 export async function fetchProducts() {
   return unwrap(await supabase.from('products')
-    .select('*, product_terms(term_id), product_variants(*), product_media(*)').order('name'));
+    .select('*, product_terms(term_id), product_variants(*, variant_stock(*)), product_media(*)').order('name'));
 }
 
 // ---------- Medios de producto (imágenes) ----------
@@ -148,7 +186,7 @@ export async function createProduct(businessId, { name, sku, unit, price, varian
 
 // Alta atómica: producto + categorías + variaciones con stock inicial.
 // categories: { taxonomyName: value }   variants: [{ attributes, sku, price, stock }]
-export async function createProductWithVariants({ name, sku, unit, price, categories, variantAxes, variants }) {
+export async function createProductWithVariants({ name, sku, unit, price, categories, variantAxes, variants, branchId }) {
   return unwrap(await supabase.rpc('create_product_with_variants', {
     p_name: name,
     p_sku: sku || '',
@@ -157,16 +195,18 @@ export async function createProductWithVariants({ name, sku, unit, price, catego
     p_categories: categories || {},
     p_variant_axes: variantAxes || [],
     p_variants: variants || [],
+    p_branch_id: branchId || null,
   }));
 }
 
-export async function addProductVariant(productId, { attributes, sku, price, stock }) {
+export async function addProductVariant(productId, { attributes, sku, price, stock, branchId }) {
   return unwrap(await supabase.rpc('add_product_variant', {
     p_product_id: productId,
     p_attributes: attributes || {},
     p_sku: sku || '',
     p_price: price ?? null,
     p_stock: Number(stock) || 0,
+    p_branch_id: branchId || null,
   }));
 }
 
@@ -217,9 +257,9 @@ export async function fetchMovements(limit = 30, { productId, type } = {}) {
   return unwrap(await q);
 }
 
-export async function createMovement(businessId, { productId, variantId, type, quantity, note }) {
+export async function createMovement(businessId, { productId, variantId, type, quantity, note, branchId }) {
   return unwrap(await supabase.from('inventory_movements')
-    .insert({ business_id: businessId, product_id: productId, variant_id: variantId, type, quantity, note })
+    .insert({ business_id: businessId, product_id: productId, variant_id: variantId, type, quantity, note, branch_id: branchId || null })
     .select().single());
 }
 
@@ -353,7 +393,7 @@ export async function updateBusinessSettings({ foreignDiscountPercent, lowStockP
 
 export async function fetchStaff() {
   return unwrap(await supabase.from('profiles')
-    .select('id, full_name, email, business_role, role')
+    .select('id, full_name, email, business_role, role, all_branches')
     .not('business_id', 'is', null)
     .order('full_name'));
 }
@@ -422,7 +462,7 @@ export async function deleteCustomer(id) {
 // ---------- Pedidos ----------
 
 // items: [{ variant_id, quantity }]   payments: [{ method_id, method_name, currency, amount }]
-export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note }) {
+export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note, branchId }) {
   return unwrap(await supabase.rpc('create_order', {
     p_items: items,
     p_payments: payments,
@@ -431,6 +471,7 @@ export async function createOrder({ items, payments, rate, rateSource, customerI
     p_customer_name: customerName || '',
     p_note: note || '',
     p_customer_id: customerId || null,
+    p_branch_id: branchId || null,
   }));
 }
 

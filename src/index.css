@@ -82,6 +82,8 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
   position: sticky; top: 0; height: 100vh;
 }
 .sidebar-brand { padding: 0 10px 20px; }
+.branch-select { width: auto; max-width: 100%; margin: 0 10px 16px; padding: 8px 30px 8px 12px; font-size: 14px; font-weight: 600; }
+.branch-select.mobile { margin: 0 0 0 auto; padding: 6px 26px 6px 10px; font-size: 13px; max-width: 46vw; }
 .sidebar-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 .nav-item {
   display: flex; align-items: center; gap: 10px;
