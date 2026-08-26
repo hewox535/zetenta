@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useBranch } from '../context/BranchContext';
 import { fetchOrdersForStats, fetchProducts } from '../lib/api';
 import { usd, bs, formatDate } from '../lib/calc';
 
@@ -20,7 +21,9 @@ const PRESETS = [
 ];
 
 export default function Stats() {
+  const { allBranches } = useBranch();
   const [preset, setPreset] = useState('30d');
+  const [branchFilter, setBranchFilter] = useState('all');
   const [orders, setOrders] = useState(null);
   const [allProducts, setAllProducts] = useState([]);
   const [error, setError] = useState(null);
@@ -37,6 +40,7 @@ export default function Stats() {
 
   const stats = useMemo(() => {
     if (!orders) return null;
+    const scoped = branchFilter === 'all' ? orders : orders.filter((o) => o.branch_id === branchFilter);
     let revenueUsd = 0, revenueVes = 0;     // venta bruta (precio lista, antes de descuento)
     let receivedVes = 0, receivedUsd = 0;   // ingresos reales por moneda de pago
     let receivedTotalUsd = 0;               // ingreso neto real (lo que efectivamente entró), en USD
@@ -46,7 +50,7 @@ export default function Stats() {
     const byAccount = new Map();      // cuenta → usd (ingreso por cuenta)
     const byDay = new Map();          // yyyy-mm-dd → usd
     const productDays = new Map();    // name → Map(day → qty)
-    for (const o of orders) {
+    for (const o of scoped) {
       revenueUsd += Number(o.total_usd) || 0;
       revenueVes += Number(o.total_ves) || 0;
       discountUsd += Number(o.discount_usd) || 0;
@@ -74,7 +78,7 @@ export default function Stats() {
     }
     const products = [...byProduct.entries()].map(([name, v]) => ({ name, ...v }));
     const topProducts = [...products].sort((a, b) => b.qty - a.qty);
-    const count = orders.length;
+    const count = scoped.length;
     // Baja rotación: productos del catálogo sin ninguna venta en el período.
     const sold = new Set(byProduct.keys());
     const noSales = allProducts.filter((p) => !sold.has(p.name)).map((p) => p.name);
@@ -89,7 +93,7 @@ export default function Stats() {
       productDays,
       noSales,
     };
-  }, [orders, allProducts]);
+  }, [orders, allProducts, branchFilter]);
 
   function exportCsv() {
     if (!stats) return;
@@ -123,6 +127,12 @@ export default function Stats() {
             {label}
           </button>
         ))}
+        {allBranches.length > 1 && (
+          <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)} style={{ width: 'auto', marginLeft: 'auto' }}>
+            <option value="all">Todas las sucursales</option>
+            {allBranches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        )}
       </div>
 
       {error && <div className="form-error">{error}</div>}

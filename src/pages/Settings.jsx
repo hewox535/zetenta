@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import {
   updateBusinessProfile, setWithholdingSeq,
   fetchTaxonomies, createTaxonomy, deleteTaxonomy, createTerm, updateTerm, deleteTerm,
   fetchBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
   createPaymentMethod, updatePaymentMethod, deletePaymentMethod,
   updateOrderSettings, updateBusinessSettings,
+  fetchBranches, createBranch, updateBranch, deleteBranch,
+  fetchUserBranches, setUserBranches,
   fetchStaff, createStaff, deleteStaff, setStaffRole,
 } from '../lib/api';
 import { fetchBcvRates } from '../lib/rates';
@@ -30,6 +33,7 @@ export default function Settings() {
     { key: 'fiscal', label: 'Datos fiscales' },
     capabilities?.retentions && { key: 'retentions', label: 'Retenciones' },
     capabilities?.inventory && { key: 'inventory', label: 'Inventario' },
+    { key: 'branches', label: 'Sucursales' },
     capabilities?.orders && { key: 'orders', label: 'Ventas' },
     { key: 'staff', label: 'Personal' },
   ].filter(Boolean);
@@ -53,6 +57,7 @@ export default function Settings() {
       {section === 'fiscal' && <FiscalSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'retentions' && <RetentionSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'inventory' && <InventorySection business={business} refreshBusiness={refreshBusiness} />}
+      {section === 'branches' && <BranchesSection business={business} />}
       {section === 'orders' && <OrdersSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'staff' && <StaffSection profile={profile} />}
     </div>
@@ -582,6 +587,154 @@ function BankAccountsManager({ business }) {
       </div>
       {error && <div className="form-error">{error}</div>}
     </section>
+  );
+}
+
+// ---------- Sucursales: alta/edición + acceso del personal ----------
+function BranchesSection({ business }) {
+  const { reload } = useBranch();
+  const [branches, setBranches] = useState([]);
+  const [staff, setStaff] = useState([]);
+  const [access, setAccess] = useState({});   // userId -> { all, ids:Set }
+  const [error, setError] = useState(null);
+  const [bName, setBName] = useState('');
+  const [bAddr, setBAddr] = useState('');
+  const [edit, setEdit] = useState(null);     // { id, name, address }
+
+  const loadAccess = () => Promise.all([fetchStaff(), fetchUserBranches()]).then(([s, ub]) => {
+    setStaff(s.filter((u) => u.role !== 'platform_admin'));
+    const map = {};
+    s.forEach((u) => { map[u.id] = { all: u.all_branches !== false, ids: new Set(ub.filter((x) => x.user_id === u.id).map((x) => x.branch_id)) }; });
+    setAccess(map);
+  });
+
+  useEffect(() => {
+    fetchBranches().then(setBranches).catch((e) => setError(e.message));
+    loadAccess().catch(() => {});
+  }, []);
+
+  async function addBranch() {
+    const name = bName.trim(); if (!name) return;
+    setError(null);
+    try {
+      const created = await createBranch(business.id, { name, address: bAddr.trim() });
+      setBranches((prev) => [...prev, created]); setBName(''); setBAddr(''); reload();
+    } catch (e) { setError(e.message); }
+  }
+  async function saveEdit() {
+    const name = (edit.name || '').trim(); if (!name) { setEdit(null); return; }
+    try {
+      const u = await updateBranch(edit.id, { name, address: (edit.address || '').trim() });
+      setBranches((prev) => prev.map((x) => (x.id === edit.id ? u : x))); reload();
+    } catch (e) { setError(e.message); } finally { setEdit(null); }
+  }
+  async function toggleActive(b) {
+    try { const u = await updateBranch(b.id, { active: !b.active });
+      setBranches((prev) => prev.map((x) => (x.id === b.id ? u : x))); reload();
+    } catch (e) { setError(e.message); }
+  }
+  async function removeBranch(b) {
+    if (b.is_default) { setError('No se puede eliminar la sucursal principal.'); return; }
+    if (!confirm(`¿Eliminar la sucursal "${b.name}"? Su stock y su historial se eliminan.`)) return;
+    try { await deleteBranch(b.id); setBranches((prev) => prev.filter((x) => x.id !== b.id)); reload(); }
+    catch (e) { setError(e.message); }
+  }
+
+  const setUserAll = (uid, all) => setAccess((a) => ({ ...a, [uid]: { ...a[uid], all } }));
+  const toggleUserBranch = (uid, bid) => setAccess((a) => {
+    const ids = new Set(a[uid].ids); if (ids.has(bid)) ids.delete(bid); else ids.add(bid);
+    return { ...a, [uid]: { ...a[uid], ids } };
+  });
+  async function saveAccess(u) {
+    const a = access[u.id];
+    setError(null);
+    try { await setUserBranches(u.id, a.all, [...a.ids]); await loadAccess(); }
+    catch (e) { setError(e.message); }
+  }
+
+  return (
+    <div className="vform">
+      <section className="card vsection">
+        <h2>Sucursales</h2>
+        <p className="hint">
+          Cada sucursal tiene su propio stock. El stock total de un producto es la suma de todas las
+          sucursales. En Inventario puedes trasladar stock entre ellas.
+        </p>
+        <div className="acct-list">
+          {branches.map((b) => (
+            <div className="acct" key={b.id}>
+              <div className="acct-head">
+                {edit?.id === b.id ? (
+                  <div className="acct-method editing" style={{ flex: 1 }}>
+                    <input autoFocus value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="Nombre" />
+                    <input value={edit.address} onChange={(e) => setEdit({ ...edit, address: e.target.value })} placeholder="Dirección (opcional)" />
+                    <button type="button" className="btn sm" onClick={saveEdit}>Guardar</button>
+                    <button type="button" className="btn ghost sm" onClick={() => setEdit(null)}>Cancelar</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="acct-title">
+                      <strong>{b.name}</strong>
+                      {b.is_default && <span className="badge adjustment">Principal</span>}
+                      {b.address && <span className="muted">{b.address}</span>}
+                    </div>
+                    <div className="acct-actions">
+                      <button type="button" className={`switch${b.active ? ' on' : ''}`} role="switch"
+                        aria-checked={b.active} title={b.active ? 'Activa' : 'Inactiva'} onClick={() => toggleActive(b)}><span className="switch-knob" /></button>
+                      <button type="button" className="icon-btn" title="Editar" onClick={() => setEdit({ id: b.id, name: b.name, address: b.address || '' })}>{ICON.edit}</button>
+                      {!b.is_default && <button type="button" className="icon-btn danger" title="Eliminar" onClick={() => removeBranch(b)}>{ICON.trash}</button>}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="inline-form">
+          <label>Nueva sucursal<input value={bName} onChange={(e) => setBName(e.target.value)} placeholder="Sucursal Centro"
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addBranch(); } }} /></label>
+          <label>Dirección (opcional)<input value={bAddr} onChange={(e) => setBAddr(e.target.value)} placeholder="Av. Principal…" /></label>
+          <div className="inline-form-actions"><button type="button" className="btn" onClick={addBranch}>Agregar</button></div>
+        </div>
+      </section>
+
+      <section className="card vsection">
+        <h2>Acceso del personal</h2>
+        <p className="hint">Define a qué sucursales puede acceder cada persona. “Todas” incluye las que crees a futuro.</p>
+        {staff.length === 0 ? <div className="empty">Cargando…</div> : (
+          <div className="acct-list">
+            {staff.map((u) => {
+              const a = access[u.id] || { all: true, ids: new Set() };
+              return (
+                <div className="acct" key={u.id}>
+                  <div className="acct-head">
+                    <div className="acct-title"><strong>{u.full_name || u.email}</strong><span className="muted">{u.email}</span></div>
+                    <button type="button" className="btn sm" onClick={() => saveAccess(u)}>Guardar</button>
+                  </div>
+                  <div className="acct-methods">
+                    <label className="radio-row">
+                      <input type="checkbox" checked={a.all} onChange={(e) => setUserAll(u.id, e.target.checked)} />
+                      <span>Todas las sucursales</span>
+                    </label>
+                    {!a.all && (
+                      <div className="chips">
+                        {branches.map((b) => (
+                          <label key={b.id} className={`chip${a.ids.has(b.id) ? ' on' : ''}`} style={{ cursor: 'pointer' }}>
+                            <input type="checkbox" checked={a.ids.has(b.id)} onChange={() => toggleUserBranch(u.id, b.id)} style={{ width: 'auto', marginRight: 6 }} />
+                            {b.name}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+      {error && <div className="form-error">{error}</div>}
+    </div>
   );
 }
 

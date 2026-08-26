@@ -1,15 +1,78 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import {
   fetchProducts, deleteProduct,
   fetchMovements, createMovement,
   fetchTaxonomies,
   createProductWithVariants, updateProductDetails,
   addProductVariant, updateVariant, deleteVariant,
+  transferStock,
   mediaUrl, uploadProductImage, deleteProductMedia,
 } from '../lib/api';
 import { money, formatDate, variantLabel } from '../lib/calc';
+
+// Stock de una variante en una sucursal concreta (0 si no tiene fila).
+const branchStock = (v, branchId) => {
+  const vs = (v.variant_stock || []).find((x) => x.branch_id === branchId);
+  return vs ? Number(vs.stock) : 0;
+};
+
+// ---------- Carga masiva por CSV (productos simples) ----------
+function parseCSV(text, delim) {
+  const rows = []; let row = []; let cur = ''; let q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === delim) { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else if (c === '\r') { /* ignora */ }
+    else cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter((r) => r.some((x) => String(x).trim() !== ''));
+}
+const PROD_ALIASES = {
+  name: ['nombre', 'name', 'producto'],
+  sku: ['sku', 'codigo', 'código', 'code'],
+  price: ['precio', 'price', 'precio_usd', 'preciousd'],
+  unit: ['unidad', 'unit', 'und'],
+  stock: ['stock', 'cantidad', 'existencia', 'inicial', 'qty'],
+};
+const numFrom = (s) => Number(String(s ?? '').replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+function productsFromCSV(text) {
+  const firstLine = text.split(/\r?\n/)[0] || '';
+  const delim = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
+  const matrix = parseCSV(text, delim);
+  if (!matrix.length) return [];
+  const header = matrix[0].map((h) => h.trim().toLowerCase());
+  const idx = {}; let hasHeader = false;
+  for (const [field, aliases] of Object.entries(PROD_ALIASES)) {
+    const j = header.findIndex((h) => aliases.includes(h));
+    if (j >= 0) { idx[field] = j; hasHeader = true; }
+  }
+  const dataRows = hasHeader ? matrix.slice(1) : matrix;
+  const map = hasHeader ? idx : { name: 0, sku: 1, price: 2, unit: 3, stock: 4 };
+  const out = [];
+  for (const r of dataRows) {
+    const get = (f) => (map[f] != null ? (r[map[f]] ?? '').trim() : '');
+    const name = get('name');
+    if (!name) continue;
+    out.push({
+      name, sku: get('sku'), unit: get('unit') || 'und',
+      price: numFrom(get('price')), stock: numFrom(get('stock')),
+    });
+  }
+  return out;
+}
+function downloadInvTemplate() {
+  const csv = 'nombre,sku,precio,unidad,stock\nCamisa Oxford,CAM-OXF,12.50,und,20\n';
+  const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a'); a.href = url; a.download = 'inventario-plantilla.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
 
 const MOVE_LABELS = { in: 'Entrada', out: 'Salida', adjustment: 'Ajuste' };
 
@@ -31,6 +94,8 @@ const ICON = {
   plus: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg>,
   minus: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12h14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg>,
   adjust: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 8h11M19 8h1M4 16h1M9 16h11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><circle cx="17" cy="8" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.6"/><circle cx="7" cy="16" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.6"/></svg>,
+  transfer: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  upload: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 16V5M8 9l4-4 4 4M5 19h14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 };
 
 // Selector con las opciones existentes + "＋ Otro…" para escribir un valor nuevo.
@@ -60,7 +125,11 @@ function TermSelect({ terms, value, onChange, placeholder }) {
 
 export default function Inventory() {
   const { business } = useAuth();
+  const { branchId, currentBranch, allBranches } = useBranch();
+  const multiBranch = allBranches.length > 1;
   const [products, setProducts] = useState(null);
+  const [transfer, setTransfer] = useState(null);  // { productId, variantId, label, to, quantity }
+  const [importMsg, setImportMsg] = useState(null);
   const [movements, setMovements] = useState([]);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -122,7 +191,7 @@ export default function Inventory() {
       categories,
       variants: variantsOf(p).map((v) => ({
         id: v.id, label: variantLabel(v.attributes, p.variant_axes),
-        stock: String(v.stock), origStock: Number(v.stock),
+        stock: String(branchStock(v, branchId)), origStock: branchStock(v, branchId),
         sku: v.sku || '', price: v.price != null ? String(v.price) : '',
         target: v.target_stock != null ? String(v.target_stock) : '',
       })),
@@ -173,7 +242,7 @@ export default function Inventory() {
         }
         const created = await createProductWithVariants({
           name: modal.name.trim(), sku: modal.sku.trim(), unit: modal.unit.trim() || 'und',
-          price: Number(modal.price) || 0, categories, variantAxes, variants,
+          price: Number(modal.price) || 0, categories, variantAxes, variants, branchId,
         });
         for (let i = 0; i < (modal.stagedFiles || []).length; i++) {
           await uploadProductImage(business.id, created.id, modal.stagedFiles[i], { sortOrder: i });
@@ -192,7 +261,7 @@ export default function Inventory() {
           await updateVariant(v.id, patch);
           const ns = Number(v.stock) || 0;
           if (ns !== v.origStock) {
-            await createMovement(business.id, { productId: modal.id, variantId: v.id, type: 'adjustment', quantity: ns, note: 'Ajuste (edición)' });
+            await createMovement(business.id, { productId: modal.id, variantId: v.id, type: 'adjustment', quantity: ns, note: 'Ajuste (edición)', branchId });
           }
         }
         for (const r of modal.newRows) {
@@ -203,7 +272,7 @@ export default function Inventory() {
             attributes[ax] = val;
           }
           await addProductVariant(modal.id, {
-            attributes, sku: r.sku.trim(), price: r.price === '' ? null : Number(r.price), stock: Number(r.stock) || 0,
+            attributes, sku: r.sku.trim(), price: r.price === '' ? null : Number(r.price), stock: Number(r.stock) || 0, branchId,
           });
         }
       }
@@ -249,12 +318,49 @@ export default function Inventory() {
     try {
       await createMovement(business.id, {
         productId: move.productId, variantId: move.variantId, type: move.type,
-        quantity: Number(move.quantity), note: move.note.trim(),
+        quantity: Number(move.quantity), note: move.note.trim(), branchId,
       });
       await reload();
       setMove(null);
     } catch (err) {
       setError(err.message.includes('Insufficient stock') ? 'No hay stock suficiente para esa salida.' : err.message);
+    } finally { setBusy(false); }
+  }
+
+  async function onImportProducts(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(null); setImportMsg(null); setBusy(true);
+    try {
+      const text = await file.text();
+      const rows = productsFromCSV(text);
+      if (!rows.length) { setImportMsg('No se encontraron filas válidas en el CSV.'); return; }
+      let ok = 0;
+      for (const r of rows) {
+        await createProductWithVariants({
+          name: r.name, sku: r.sku, unit: r.unit, price: r.price, categories: {}, variantAxes: [],
+          variants: [{ attributes: {}, stock: r.stock }], branchId,
+        });
+        ok++;
+      }
+      await reload();
+      setImportMsg(`Importados ${ok} producto(s)${multiBranch && currentBranch ? ` a ${currentBranch.name}` : ''}.`);
+    } catch (err) {
+      setError(`No se pudo importar: ${err.message}`);
+    } finally { setBusy(false); }
+  }
+
+  async function onSubmitTransfer(e) {
+    e.preventDefault();
+    setError(null); setBusy(true);
+    try {
+      await transferStock({ variantId: transfer.variantId, fromBranch: branchId, toBranch: transfer.to, quantity: transfer.quantity, note: 'Traslado' });
+      await reload();
+      setTransfer(null);
+    } catch (err) {
+      setError(err.message.includes('Insufficient') || err.message.includes('suficiente')
+        ? 'No hay stock suficiente en la sucursal de origen.' : err.message);
     } finally { setBusy(false); }
   }
 
@@ -265,7 +371,11 @@ export default function Inventory() {
       <button className="icon-btn" title="Salida (restar stock)"
         onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'out', quantity: '', note: '' })}>{ICON.minus}</button>
       <button className="icon-btn" title="Ajustar stock"
-        onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'adjustment', quantity: String(v.stock), note: '' })}>{ICON.adjust}</button>
+        onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'adjustment', quantity: String(branchStock(v, branchId)), note: '' })}>{ICON.adjust}</button>
+      {multiBranch && (
+        <button className="icon-btn" title="Trasladar a otra sucursal"
+          onClick={() => setTransfer({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes, p.variant_axes) || 'Estándar', to: '', quantity: '' })}>{ICON.transfer}</button>
+      )}
     </>
   );
 
@@ -280,9 +390,20 @@ export default function Inventory() {
         </div>
         <div className="page-actions">
           <Link to="/inventory/history" className="btn ghost">Historial completo</Link>
+          <label className="btn ghost">
+            ⬆ Importar CSV
+            <input type="file" accept=".csv,text/csv" hidden disabled={busy} onChange={onImportProducts} />
+          </label>
           <button className="btn primary" onClick={openCreate}>+ Nuevo producto</button>
         </div>
       </header>
+
+      {importMsg && (
+        <div className="form-ok">
+          {importMsg} <button className="linklike" onClick={() => setImportMsg(null)}>ok</button>
+          {' · '}<button className="linklike" onClick={downloadInvTemplate}>descargar plantilla</button>
+        </div>
+      )}
 
       {products && (() => {
         const low = products.flatMap((p) => variantsOf(p).filter(isLow).map((v) => ({ p, v })));
@@ -365,7 +486,8 @@ export default function Inventory() {
                       <td className="mono">{p.sku}</td>
                       <td className="num">{money(p.price)}</td>
                       <td className="num">
-                        <strong>{totalStock(p)}</strong> {p.unit}
+                        <strong>{variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0)}</strong> {p.unit}
+                        {multiBranch && <div className="muted">total {totalStock(p)}</div>}
                         {simple && dv && isLow(dv) && <span className="badge low">Bajo</span>}
                         {!simple && productHasLow(p) && <span className="badge low">Bajo</span>}
                       </td>
@@ -381,12 +503,17 @@ export default function Inventory() {
                         <td className="mono">{v.sku}</td>
                         <td className="num">{v.price != null ? money(v.price) : <span className="muted">{money(p.price)}</span>}</td>
                         <td className="num">
-                          <strong>{Number(v.stock)}</strong> {p.unit}
+                          <strong>{branchStock(v, branchId)}</strong> {p.unit}
+                          {multiBranch && <div className="muted">total {Number(v.stock)}</div>}
                           {isLow(v) && <span className="badge low">Bajo</span>}
                           {v.target_stock != null && <div className="muted">objetivo {Number(v.target_stock)}</div>}
                         </td>
                         <td className="row-actions">
                           {moveButtons(p, v)}
+                          {multiBranch && (
+                            <button className="icon-btn" title="Trasladar a otra sucursal"
+                              onClick={() => setTransfer({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes, p.variant_axes) || 'Estándar', to: '', quantity: '' })}>{ICON.transfer}</button>
+                          )}
                           <button className="icon-btn danger" title="Quitar variante" onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>
                         </td>
                       </tr>
@@ -574,6 +701,7 @@ export default function Inventory() {
               {move.label && <span className="muted"> · {move.label}</span>}
             </h2>
             <form onSubmit={onSubmitMove} className="vform">
+              {multiBranch && currentBranch && <p className="hint">Sucursal: <strong>{currentBranch.name}</strong></p>}
               <label>
                 {move.type === 'adjustment' ? 'Stock real contado' : 'Cantidad'}
                 <input type="number" step="0.01" min="0" autoFocus required value={move.quantity}
@@ -586,6 +714,37 @@ export default function Inventory() {
               <div className="inline-form-actions">
                 <button className="btn primary" disabled={busy}>Registrar</button>
                 <button type="button" className="btn ghost" onClick={() => setMove(null)}>Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============ Modal de traslado entre sucursales ============ */}
+      {transfer && (
+        <div className="modal-backdrop" onClick={() => setTransfer(null)}>
+          <div className="modal card" onClick={(e) => e.stopPropagation()}>
+            <h2>
+              Trasladar — {products.find((p) => p.id === transfer.productId)?.name}
+              {transfer.label && <span className="muted"> · {transfer.label}</span>}
+            </h2>
+            <form onSubmit={onSubmitTransfer} className="vform">
+              <p className="hint">Desde <strong>{currentBranch?.name}</strong> hacia otra sucursal.</p>
+              <label>Sucursal destino
+                <select value={transfer.to} onChange={(e) => setTransfer((m) => ({ ...m, to: e.target.value }))} required>
+                  <option value="">Elegir…</option>
+                  {allBranches.filter((b) => b.id !== branchId).map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>Cantidad a trasladar
+                <input type="number" step="0.01" min="0.01" autoFocus required value={transfer.quantity}
+                  onChange={(e) => setTransfer((m) => ({ ...m, quantity: e.target.value }))} />
+              </label>
+              <div className="inline-form-actions">
+                <button className="btn primary" disabled={busy || !transfer.to}>Trasladar</button>
+                <button type="button" className="btn ghost" onClick={() => setTransfer(null)}>Cancelar</button>
               </div>
             </form>
           </div>

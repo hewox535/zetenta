@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import {
   fetchProducts, fetchTaxonomies, fetchBankAccounts, fetchCustomers,
   createCustomer, createOrder, fetchOrder, mediaUrl,
@@ -12,7 +13,12 @@ import OrderReceipt from '../components/OrderReceipt';
 const EMPTY_CUST = { name: '', document: '', phone: '', email: '' };
 
 const variantsOf = (p) => p.product_variants || [];
-const totalStock = (p) => variantsOf(p).reduce((s, v) => s + Number(v.stock || 0), 0);
+// Stock de la variante en la sucursal actual (0 si no hay fila para esa sucursal).
+const branchStock = (v, branchId) => {
+  const vs = (v.variant_stock || []).find((x) => x.branch_id === branchId);
+  return vs ? Number(vs.stock) : 0;
+};
+const totalStock = (p, branchId) => variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0);
 const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).length === 0;
 const defaultVariant = (p) =>
   variantsOf(p).find((v) => Object.keys(v.attributes || {}).length === 0) || variantsOf(p)[0];
@@ -107,6 +113,7 @@ function PayAmountRow({ m, rate, amount, onAmount, onExact }) {
 
 export default function Orders() {
   const { business } = useAuth();
+  const { branchId, currentBranch, branches } = useBranch();
   const [products, setProducts] = useState(null);
   const [taxonomies, setTaxonomies] = useState([]);
   const [methods, setMethods] = useState([]);
@@ -152,7 +159,7 @@ export default function Orders() {
       if (found) return prev.map((c) => (c.id === v.id ? { ...c, qty: c.qty + 1 } : c));
       return [...prev, {
         id: v.id, productId: p.id, name: p.name, label: variantLabel(v.attributes, p.variant_axes),
-        price: variantPrice(p, v), unit: p.unit, stock: Number(v.stock), qty: 1,
+        price: variantPrice(p, v), unit: p.unit, stock: branchStock(v, branchId), qty: 1,
       }];
     });
   };
@@ -289,7 +296,7 @@ export default function Orders() {
         }));
 
       const created = await createOrder({
-        items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName,
+        items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName, branchId,
       });
       const full = await fetchOrder(created.id);
       setFinished(full);
@@ -342,6 +349,7 @@ export default function Orders() {
           <p className="page-sub">Toca un producto para agregarlo a la venta.</p>
         </div>
         <div className="page-actions">
+          {branches.length > 1 && currentBranch && <span className="rate-chip">🏬 {currentBranch.name}</span>}
           {rateBadge}
           <Link to="/orders/history" className="btn ghost">Historial</Link>
         </div>
@@ -384,7 +392,7 @@ export default function Orders() {
                 <div className="product-grid">
                   {visible.map((p) => {
                     const qty = cartQtyForProduct(p);
-                    const stock = totalStock(p);
+                    const stock = totalStock(p, branchId);
                     const simple = isSimple(p);
                     const dv = simple ? defaultVariant(p) : null;
                     const img = productImg(p);
@@ -625,7 +633,8 @@ export default function Orders() {
             <div className="variant-pick-grid">
               {variantsOf(picker).map((v) => {
                 const inCart = cart.find((c) => c.id === v.id);
-                const out = Number(v.stock) <= 0;
+                const vStock = branchStock(v, branchId);
+                const out = vStock <= 0;
                 const img = variantImg(picker, v);
                 return (
                   <div key={v.id} className={`variant-pick${inCart ? ' in-cart' : ''}`}
@@ -637,7 +646,7 @@ export default function Orders() {
                     </div>
                     <div className="variant-pick-label">{variantLabel(v.attributes, picker.variant_axes) || 'Estándar'}</div>
                     <div className="product-card-meta">
-                      <span className={`stock-badge${out ? ' out' : ''}`}>{Number(v.stock)} {picker.unit}</span>
+                      <span className={`stock-badge${out ? ' out' : ''}`}>{vStock} {picker.unit}</span>
                     </div>
                     <div className="product-card-prices">
                       <strong>{usd(variantPrice(picker, v))}</strong>
