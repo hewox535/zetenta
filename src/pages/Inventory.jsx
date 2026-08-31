@@ -19,7 +19,7 @@ const branchStock = (v, branchId) => {
   return vs ? Number(vs.stock) : 0;
 };
 
-// ---------- Carga masiva por CSV (productos simples) ----------
+// ---------- Carga masiva por CSV (simples o con variaciones) ----------
 function parseCSV(text, delim) {
   const rows = []; let row = []; let cur = ''; let q = false;
   for (let i = 0; i < text.length; i++) {
@@ -42,17 +42,28 @@ const PROD_ALIASES = {
   stock: ['stock', 'cantidad', 'existencia', 'inicial', 'qty'],
 };
 const numFrom = (s) => Number(String(s ?? '').replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-function productsFromCSV(text) {
+const normHeader = (s) => String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+// axisNames: ejes de variación del negocio (Talla, Color…). Un encabezado que
+// coincida con un eje se lee como atributo de variación de la fila.
+function productsFromCSV(text, axisNames = []) {
   const firstLine = text.split(/\r?\n/)[0] || '';
   const delim = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
   const matrix = parseCSV(text, delim);
   if (!matrix.length) return [];
   const header = matrix[0].map((h) => h.trim().toLowerCase());
-  const idx = {}; let hasHeader = false;
+  const idx = {};
   for (const [field, aliases] of Object.entries(PROD_ALIASES)) {
     const j = header.findIndex((h) => aliases.includes(h));
-    if (j >= 0) { idx[field] = j; hasHeader = true; }
+    if (j >= 0) idx[field] = j;
   }
+  const axisIdx = {}; // nombre del eje (tal como está en la taxonomía) → columna
+  header.forEach((h, j) => {
+    const ax = axisNames.find((a) => normHeader(a) === normHeader(h));
+    if (ax && axisIdx[ax] == null) axisIdx[ax] = j;
+  });
+  // Un encabezado real trae la columna del nombre (o de un eje); si no, la
+  // primera fila es data (evita que un valor como "und" se lea como encabezado).
+  const hasHeader = idx.name != null || Object.keys(axisIdx).length > 0;
   const dataRows = hasHeader ? matrix.slice(1) : matrix;
   const map = hasHeader ? idx : { name: 0, sku: 1, price: 2, unit: 3, stock: 4 };
   const out = [];
@@ -60,15 +71,30 @@ function productsFromCSV(text) {
     const get = (f) => (map[f] != null ? (r[map[f]] ?? '').trim() : '');
     const name = get('name');
     if (!name) continue;
+    const attrs = {};
+    for (const [ax, j] of Object.entries(axisIdx)) {
+      const v = (r[j] ?? '').trim();
+      if (v) attrs[ax] = v;
+    }
     out.push({
       name, sku: get('sku'), unit: get('unit') || 'und',
-      price: numFrom(get('price')), stock: numFrom(get('stock')),
+      price: numFrom(get('price')), stock: numFrom(get('stock')), attrs,
     });
   }
   return out;
 }
-function downloadInvTemplate() {
-  const csv = 'nombre,sku,precio,unidad,stock\nCamisa Oxford,CAM-OXF,12.50,und,20\n';
+function downloadInvTemplate(axisNames = []) {
+  const axes = axisNames.map((n) => n.toLowerCase());
+  const header = ['nombre', 'sku', 'precio', 'unidad', 'stock', ...axes].join(',');
+  const pad = (vals) => axes.map((_, i) => vals[i] || '').join(',');
+  const rows = axes.length
+    ? [
+        `Camisa Oxford,CAM-OXF-M,12.50,und,10,${pad(['M', 'Azul'])}`,
+        `Camisa Oxford,CAM-OXF-L,12.50,und,8,${pad(['L', 'Azul'])}`,
+        `Correa de cuero,ACC-01,9,und,15,${pad([])}`,
+      ]
+    : ['Camisa Oxford,CAM-OXF,12.50,und,20'];
+  const csv = `${header}\n${rows.join('\n')}\n`;
   const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
   const a = document.createElement('a'); a.href = url; a.download = 'inventario-plantilla.csv'; a.click();
   URL.revokeObjectURL(url);
@@ -340,18 +366,52 @@ export default function Inventory() {
     setError(null); setImportMsg(null); setBusy(true);
     try {
       const text = await file.text();
-      const rows = productsFromCSV(text);
+      const rows = productsFromCSV(text, varTax.map((t) => t.name));
       if (!rows.length) { setImportMsg('No se encontraron filas válidas en el CSV.'); return; }
-      let ok = 0;
+
+      // Filas con el mismo nombre se agrupan en un producto; si traen columnas
+      // de variación (Talla, Color…) cada fila es una variante. Combos
+      // repetidos suman stock en vez de fallar por duplicado.
+      const groups = new Map();
       for (const r of rows) {
-        await createProductWithVariants({
-          name: r.name, sku: r.sku, unit: r.unit, price: r.price, categories: {}, variantAxes: [],
-          variants: [{ attributes: {}, stock: r.stock }], branchId,
-        });
-        ok++;
+        const key = r.name.toLowerCase();
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(r);
+      }
+
+      let prods = 0; let vars = 0;
+      for (const group of groups.values()) {
+        const base = group[0];
+        const axes = varTax.map((t) => t.name)
+          .filter((ax) => group.some((r) => r.attrs[ax]));
+        if (axes.length === 0) {
+          await createProductWithVariants({
+            name: base.name, sku: base.sku, unit: base.unit, price: base.price, categories: {}, variantAxes: [],
+            variants: [{ attributes: {}, stock: group.reduce((s, r) => s + r.stock, 0) }], branchId,
+          });
+        } else {
+          const byCombo = new Map();
+          for (const r of group) {
+            const attributes = {};
+            for (const ax of axes) if (r.attrs[ax]) attributes[ax] = r.attrs[ax];
+            const ck = JSON.stringify(axes.map((ax) => attributes[ax] || ''));
+            if (byCombo.has(ck)) byCombo.get(ck).stock += r.stock;
+            else byCombo.set(ck, {
+              attributes, sku: r.sku, stock: r.stock,
+              price: r.price && r.price !== base.price ? r.price : null,
+            });
+          }
+          const variants = [...byCombo.values()];
+          await createProductWithVariants({
+            name: base.name, sku: '', unit: base.unit, price: base.price, categories: {},
+            variantAxes: axes, variants, branchId,
+          });
+          vars += variants.length;
+        }
+        prods++;
       }
       await reload();
-      setImportMsg(`Importados ${ok} producto(s)${multiBranch && currentBranch ? ` a ${currentBranch.name}` : ''}.`);
+      setImportMsg(`Importados ${prods} producto(s)${vars ? ` (${vars} variante(s))` : ''}${multiBranch && currentBranch ? ` a ${currentBranch.name}` : ''}.`);
     } catch (err) {
       setError(`No se pudo importar: ${err.message}`);
     } finally { setBusy(false); }
@@ -407,7 +467,7 @@ export default function Inventory() {
       {importMsg && (
         <div className="form-ok">
           {importMsg} <button className="linklike" onClick={() => setImportMsg(null)}>ok</button>
-          {' · '}<button className="linklike" onClick={downloadInvTemplate}>descargar plantilla</button>
+          {' · '}<button className="linklike" onClick={() => downloadInvTemplate(varTax.map((t) => t.name))}>descargar plantilla</button>
         </div>
       )}
 
