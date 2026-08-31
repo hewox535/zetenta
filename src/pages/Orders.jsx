@@ -7,6 +7,7 @@ import {
   createCustomer, createOrder, fetchOrder, mediaUrl,
 } from '../lib/api';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
+import { notifySale } from '../lib/push';
 import { usd, bs, money, variantLabel } from '../lib/calc';
 import OrderReceipt from '../components/OrderReceipt';
 
@@ -298,6 +299,7 @@ export default function Orders() {
       const created = await createOrder({
         items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName, branchId,
       });
+      notifySale(created.id); // push a los admins del negocio (fuego y olvido)
       const full = await fetchOrder(created.id);
       setFinished(full);
       setStage('done');

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchBusinesses, updateBusinessCapabilities, updateBusinessBranding, uploadBrandingAsset } from '../lib/api';
+import { fetchBusinesses, updateBusinessBranding, uploadBrandingAsset } from '../lib/api';
 import { formatDate } from '../lib/calc';
 
 // Dominio donde vive la plataforma: los slugs se sirven como subdominios de él.
@@ -11,6 +11,7 @@ const CAPABILITIES = [
   ['inventory', 'Inventario'],
   ['stats', 'Estadísticas'],
   ['customers', 'Clientes'],
+  ['campaigns', 'Campañas'],
   ['retentions', 'Retenciones'],
 ];
 
@@ -18,7 +19,8 @@ const CAP_HINTS = {
   orders: 'Punto de venta y historial de pedidos.',
   inventory: 'Productos, variaciones y stock.',
   stats: 'Estadísticas del negocio.',
-  customers: 'Base de clientes y campañas.',
+  customers: 'Base de clientes.',
+  campaigns: 'Campañas dirigidas desde el módulo de clientes.',
   retentions: 'Retenciones y proveedores.',
 };
 
@@ -30,18 +32,6 @@ export default function Admin() {
   useEffect(() => {
     fetchBusinesses().then(setRows).catch((e) => setError(e.message));
   }, []);
-
-  async function toggle(business, key) {
-    const capabilities = { ...business.capabilities, [key]: !business.capabilities?.[key] };
-    setRows((prev) => prev.map((b) => (b.id === business.id ? { ...b, capabilities } : b)));
-    try {
-      const updated = await updateBusinessCapabilities(business.id, capabilities);
-      setRows((prev) => prev.map((b) => (b.id === business.id ? updated : b)));
-    } catch (e) {
-      setError(e.message);
-      setRows((prev) => prev.map((b) => (b.id === business.id ? business : b)));
-    }
-  }
 
   function onSaved(updated) {
     setRows((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
@@ -71,7 +61,7 @@ export default function Admin() {
                 <th>Negocio</th>
                 <th>Dominio</th>
                 <th>Registrado</th>
-                {CAPABILITIES.map(([key, label]) => <th key={key} className="centro">{label}</th>)}
+                <th>Módulos</th>
                 <th />
               </tr>
             </thead>
@@ -83,20 +73,11 @@ export default function Admin() {
                     {b.custom_domain || b.slug || <span className="muted">—</span>}
                   </td>
                   <td>{formatDate(b.created_at)}</td>
-                  {CAPABILITIES.map(([key]) => (
-                    <td key={key} className="centro">
-                      <button
-                        className={`switch${b.capabilities?.[key] ? ' on' : ''}`}
-                        role="switch"
-                        aria-checked={!!b.capabilities?.[key]}
-                        onClick={() => toggle(b, key)}
-                      >
-                        <span className="switch-knob" />
-                      </button>
-                    </td>
-                  ))}
+                  <td className="muted">
+                    {CAPABILITIES.filter(([key]) => b.capabilities?.[key]).length} de {CAPABILITIES.length} activos
+                  </td>
                   <td className="row-actions">
-                    <button className="btn ghost sm" onClick={() => setEditing(b)}>Marca</button>
+                    <button className="btn ghost sm" onClick={() => setEditing(b)}>Editar</button>
                   </td>
                 </tr>
               ))}

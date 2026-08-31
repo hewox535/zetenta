@@ -10,7 +10,9 @@ import {
   fetchBranches, createBranch, updateBranch, deleteBranch,
   fetchUserBranches, setUserBranches,
   fetchStaff, createStaff, deleteStaff, setStaffRole,
+  updateNotificationPrefs,
 } from '../lib/api';
+import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/push';
 import { fetchBcvRates } from '../lib/rates';
 import { money } from '../lib/calc';
 
@@ -36,6 +38,7 @@ export default function Settings() {
     { key: 'branches', label: 'Sucursales' },
     capabilities?.orders && { key: 'orders', label: 'Ventas' },
     { key: 'staff', label: 'Personal' },
+    { key: 'notifications', label: 'Notificaciones' },
   ].filter(Boolean);
 
   return (
@@ -60,6 +63,83 @@ export default function Settings() {
       {section === 'branches' && <BranchesSection business={business} />}
       {section === 'orders' && <OrdersSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'staff' && <StaffSection profile={profile} />}
+      {section === 'notifications' && <NotificationsSection />}
+    </div>
+  );
+}
+
+// ---------- Notificaciones push ----------
+// La suscripción es por dispositivo/navegador; las preferencias por tipo son
+// del usuario (aplican a todos sus dispositivos suscritos).
+const NOTIFICATION_TYPES = [
+  ['sale', 'Venta registrada', 'Cada vez que alguien de tu negocio registra una venta (no se te avisa de las tuyas).'],
+  ['low_stock', 'Stock bajo', 'Cuando una venta deja una variante en o por debajo del umbral de stock bajo.'],
+];
+
+function NotificationsSection() {
+  const { profile, refreshProfile } = useAuth();
+  const [enabled, setEnabled] = useState(null); // null = detectando
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const prefs = profile?.notification_prefs || {};
+
+  useEffect(() => {
+    if (!pushSupported()) { setEnabled(false); return; }
+    isPushEnabled().then(setEnabled).catch(() => setEnabled(false));
+  }, []);
+
+  async function onToggleDevice() {
+    setError(null); setBusy(true);
+    try {
+      if (enabled) { await disablePush(); setEnabled(false); }
+      else { await enablePush(profile); setEnabled(true); }
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+
+  async function onTogglePref(key) {
+    setError(null);
+    try {
+      await updateNotificationPrefs(profile.id, { ...prefs, [key]: prefs[key] === false });
+      await refreshProfile();
+    } catch (err) { setError(err.message); }
+  }
+
+  return (
+    <div className="vform">
+      <section className="card vsection">
+        <h2>Notificaciones</h2>
+        {!pushSupported() ? (
+          <p className="hint">
+            Este navegador no soporta notificaciones push. En iPhone/iPad funciona a partir
+            de iOS 16.4 y solo con la app agregada a la pantalla de inicio.
+          </p>
+        ) : (
+          <div className="method-row">
+            <div className="module-info">
+              <span className="method-name">Este dispositivo</span>
+              <span className="muted">Recibir notificaciones del navegador en este dispositivo, aun con la app cerrada.</span>
+            </div>
+            <button type="button" className={`switch${enabled ? ' on' : ''}`} role="switch"
+              aria-checked={!!enabled} disabled={busy || enabled === null} onClick={onToggleDevice}>
+              <span className="switch-knob" />
+            </button>
+          </div>
+        )}
+        <p className="hint">Qué te avisamos (aplica a todos tus dispositivos con notificaciones activas):</p>
+        {NOTIFICATION_TYPES.map(([key, label, hint]) => (
+          <div className="method-row" key={key}>
+            <div className="module-info">
+              <span className="method-name">{label}</span>
+              <span className="muted">{hint}</span>
+            </div>
+            <button type="button" className={`switch${prefs[key] !== false ? ' on' : ''}`} role="switch"
+              aria-checked={prefs[key] !== false} onClick={() => onTogglePref(key)}>
+              <span className="switch-knob" />
+            </button>
+          </div>
+        ))}
+        {error && <div className="form-error">{error}</div>}
+      </section>
     </div>
   );
 }

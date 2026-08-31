@@ -21,6 +21,12 @@ export async function updateMyProfile(userId, { fullName, username }) {
     .eq('id', userId).select().single());
 }
 
+// Qué tipos de notificación push quiere recibir este usuario.
+export async function updateNotificationPrefs(userId, prefs) {
+  return unwrap(await supabase.from('profiles')
+    .update({ notification_prefs: prefs }).eq('id', userId).select().single());
+}
+
 // Cambio de correo de la sesión actual. Supabase envía un enlace de
 // confirmación; el correo auth cambia al confirmarse. Actualizamos también la
 // copia visible en profiles (puede ir un paso adelante hasta la confirmación).
@@ -530,11 +536,6 @@ export async function fetchOrdersForStats(fromISO, toISO) {
 
 export async function fetchBusinesses() {
   return unwrap(await supabase.from('businesses').select('*').order('created_at'));
-}
-
-export async function updateBusinessCapabilities(id, capabilities) {
-  return unwrap(await supabase.from('businesses')
-    .update({ capabilities }).eq('id', id).select().single());
 }
 
 // Activos de marca (logo/favicon): se suben al bucket público 'branding' (solo

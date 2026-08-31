@@ -88,7 +88,8 @@ const dedupeKey = (c) =>
   c.name.toLowerCase();
 
 export default function Customers() {
-  const { business } = useAuth();
+  const { business, capabilities } = useAuth();
+  const canCampaign = capabilities?.campaigns !== false; // módulo apagable por el admin de la plataforma
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -252,9 +253,11 @@ export default function Customers() {
             <input type="file" accept=".csv,text/csv" hidden disabled={busy} onChange={onImport} />
           </label>
           <button className="btn ghost" onClick={exportCsv} disabled={!rows?.length}>⬇ Exportar CSV</button>
-          <button className={`btn${campaign ? ' primary' : ' ghost'}`} onClick={() => setCampaign((v) => !v)}>
-            📣 Campaña
-          </button>
+          {canCampaign && (
+            <button className={`btn${campaign ? ' primary' : ' ghost'}`} onClick={() => setCampaign((v) => !v)}>
+              📣 Campaña
+            </button>
+          )}
         </div>
       </header>
 

@@ -82,9 +82,13 @@ export function BrandingProvider({ children }) {
       ? `${branding.name} — pedidos, inventario y gestión de tu negocio.`
       : 'Zetenta — gestión de negocio: pedidos, inventario, retenciones y estadísticas en un solo lugar.';
 
+    // Nombre al agregar a pantalla de inicio: "Marca Admin" (la app instalada
+    // es el panel del negocio, no su tienda).
+    const appName = `${title} Admin`;
+
     setMeta('name', 'description', description);
     setMeta('name', 'theme-color', accent);
-    setMeta('name', 'apple-mobile-web-app-title', title);
+    setMeta('name', 'apple-mobile-web-app-title', appName);
     setMeta('property', 'og:title', title);
     setMeta('property', 'og:site_name', title);
     setMeta('property', 'og:description', description);
@@ -108,8 +112,8 @@ export function BrandingProvider({ children }) {
     // URLs del manifest blob deben ser absolutas.
     if (branded && icon) {
       const manifest = {
-        name: title,
-        short_name: title,
+        name: appName,
+        short_name: appName,
         start_url: `${window.location.origin}/`,
         scope: `${window.location.origin}/`,
         display: 'standalone',

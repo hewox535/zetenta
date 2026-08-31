@@ -35,7 +35,7 @@ export default function Login() {
         <p className="auth-sub">Tus cuentas, de la A a la Z.</p>
         <form onSubmit={onSubmit} className="auth-form">
           <label>
-            Correo o usuario
+            Usuario o correo
             <input value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus autoComplete="username" />
           </label>
           <label>
