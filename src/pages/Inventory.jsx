@@ -538,11 +538,17 @@ export default function Inventory() {
       {modal && (
         <div className="modal-backdrop" onClick={() => setModal(null)}>
           <div className="modal card modal-wide" onClick={(e) => e.stopPropagation()}>
-            <div className="pos-panel-head">
+            <div className="modal-head">
               <h2>{modal.mode === 'create' ? 'Nuevo producto' : 'Editar producto'}</h2>
               <button className="btn ghost sm" onClick={() => setModal(null)}>Cerrar</button>
             </div>
             <form onSubmit={onSubmit} className="vform">
+              {modal.mode === 'create' && (
+                <div className="seg">
+                  <button type="button" className={`seg-btn${modal.cmode === 'simple' ? ' active' : ''}`} onClick={() => setM({ cmode: 'simple' })}>Producto simple</button>
+                  <button type="button" className={`seg-btn${modal.cmode === 'variants' ? ' active' : ''}`} onClick={() => setM({ cmode: 'variants' })}>Con variaciones</button>
+                </div>
+              )}
               <div className="np-grid">
                 <label className="np-name">Nombre
                   <input value={modal.name} onChange={(e) => setM({ name: e.target.value })} required autoFocus placeholder="Camisa Oxford" />
@@ -617,18 +623,13 @@ export default function Inventory() {
               {/* -------- Variaciones -------- */}
               {modal.mode === 'create' ? (
                 <div className="np-block">
-                  <div className="seg">
-                    <button type="button" className={`seg-btn${modal.cmode === 'simple' ? ' active' : ''}`} onClick={() => setM({ cmode: 'simple' })}>Producto simple</button>
-                    <button type="button" className={`seg-btn${modal.cmode === 'variants' ? ' active' : ''}`} onClick={() => setM({ cmode: 'variants' })}>Con variaciones</button>
-                  </div>
-
                   {modal.cmode === 'simple' ? (
-                    <label className="short" style={{ marginTop: 12 }}>Stock inicial
+                    <label className="short">Stock inicial
                       <input type="number" step="1" min="0" value={modal.simpleStock}
                         onChange={(e) => setM({ simpleStock: e.target.value })} placeholder="0" />
                     </label>
                   ) : varTax.length === 0 ? (
-                    <p className="hint" style={{ marginTop: 12 }}>No hay ejes de variación. Créalos en <Link to="/settings">Negocio → Inventario → Variaciones</Link> (p. ej. Color, Talla).</p>
+                    <p className="hint">No hay ejes de variación. Créalos en <Link to="/settings">Negocio → Inventario → Variaciones</Link> (p. ej. Color, Talla).</p>
                   ) : (
                     <div className="np-variants">
                       <div className="oc-label">Varía por</div>

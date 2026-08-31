@@ -247,6 +247,11 @@ a.icon-btn { text-decoration: none; }
 }
 .asset-preview img { width: 100%; height: 100%; object-fit: contain; }
 .asset-empty { color: var(--text-2); opacity: .6; }
+/* Cabecera de modal: título alineado con el contenido (sin el padding del
+   panel del POS que se usaba antes) */
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.modal-head h2 { margin: 0; }
+
 /* Modal de marca: pestañas y lista de módulos con toggles */
 .modal-tabs { margin: 14px 0 18px; }
 .module-list { display: flex; flex-direction: column; }
