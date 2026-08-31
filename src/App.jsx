@@ -20,6 +20,7 @@ import OrdersHistory from './pages/OrdersHistory';
 import OrderView from './pages/OrderView';
 import Stats from './pages/Stats';
 import Settings from './pages/Settings';
+import Account from './pages/Account';
 import Admin from './pages/Admin';
 
 function Splash() {
@@ -108,6 +109,7 @@ export default function App() {
             <Route path="orders/:id" element={<RequireCapability name="orders"><OrderView /></RequireCapability>} />
             <Route path="stats" element={<RequireBusinessAdmin><RequireCapability name="stats"><Stats /></RequireCapability></RequireBusinessAdmin>} />
             <Route path="settings" element={<RequireBusinessAdmin><Settings /></RequireBusinessAdmin>} />
+            <Route path="account" element={<Account />} />
             <Route path="admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

@@ -739,7 +739,7 @@ function BranchesSection({ business }) {
 }
 
 // ---------- Personal: administradores y vendedoras ----------
-const EMPTY_STAFF = { email: '', password: '', fullName: '' };
+const EMPTY_STAFF = { username: '', email: '', password: '', fullName: '' };
 const ROLE_LABEL = { admin: 'Administrador', seller: 'Vendedora' };
 
 function StaffSection({ profile }) {
@@ -758,10 +758,15 @@ function StaffSection({ profile }) {
     e.preventDefault();
     setError(null); setOk(null); setBusy(true);
     try {
-      await createStaff({ email: form.email.trim(), password: form.password, fullName: form.fullName.trim() });
+      await createStaff({
+        username: form.username.trim().toLowerCase(),
+        email: form.email.trim(),
+        password: form.password,
+        fullName: form.fullName.trim(),
+      });
       setStaff(await fetchStaff());
       setForm(EMPTY_STAFF); setShowNew(false);
-      setOk('Vendedora creada. Ya puede iniciar sesión con ese correo y contraseña.');
+      setOk('Vendedora creada. Ya puede iniciar sesión con ese usuario y contraseña.');
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
 
@@ -801,9 +806,9 @@ function StaffSection({ profile }) {
                 <div className="method-row" key={u.id}>
                   <div className="method-info">
                     <span className="method-name">
-                      {u.full_name || u.email}{isMe && <span className="muted"> · tú</span>}
+                      {u.full_name || u.email || (u.username ? `@${u.username}` : '')}{isMe && <span className="muted"> · tú</span>}
                     </span>
-                    <span className="muted">{u.email}</span>
+                    <span className="muted">{u.email || (u.username ? `@${u.username}` : '')}</span>
                   </div>
                   <div className="method-actions">
                     {isPlatform ? (
@@ -831,7 +836,16 @@ function StaffSection({ profile }) {
         {showNew ? (
           <form onSubmit={onCreate} className="vform" style={{ marginTop: 16 }}>
             <label>Nombre<input value={form.fullName} onChange={set('fullName')} placeholder="Nombre de la vendedora" /></label>
-            <label>Correo<input type="email" value={form.email} onChange={set('email')} required placeholder="vendedora@correo.com" /></label>
+            <label>
+              Usuario
+              <input value={form.username} onChange={set('username')} required spellCheck={false} placeholder="usuario para iniciar sesión" />
+              <span className="field-hint">3–30 caracteres: letras, números y . _ - (sin espacios).</span>
+            </label>
+            <label>
+              Correo (opcional)
+              <input type="email" value={form.email} onChange={set('email')} placeholder="vendedora@correo.com" />
+              <span className="field-hint">Sin correo también puede entrar; el correo solo hace falta para recuperar la contraseña.</span>
+            </label>
             <label>Contraseña<input type="text" value={form.password} onChange={set('password')} required minLength={6} placeholder="Mínimo 6 caracteres" /></label>
             <div className="inline-form-actions">
               <button className="btn primary" disabled={busy}>{busy ? 'Creando…' : 'Crear vendedora'}</button>

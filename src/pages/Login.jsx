@@ -21,7 +21,7 @@ export default function Login() {
     const { error: err } = await signIn(email.trim(), password);
     setBusy(false);
     if (err) {
-      setError(err.message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos.' : err.message);
+      setError(err.message === 'Invalid login credentials' ? 'Usuario o contraseña incorrectos.' : err.message);
       return;
     }
     navigate('/', { replace: true });
@@ -35,8 +35,8 @@ export default function Login() {
         <p className="auth-sub">Tus cuentas, de la A a la Z.</p>
         <form onSubmit={onSubmit} className="auth-form">
           <label>
-            Correo electrónico
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus autoComplete="email" />
+            Correo o usuario
+            <input value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus autoComplete="username" />
           </label>
           <label>
             Contraseña

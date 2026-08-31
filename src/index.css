@@ -81,7 +81,9 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
   border-right: 1px solid var(--border); padding: 22px 14px;
   position: sticky; top: 0; height: 100vh;
 }
-.sidebar-brand { padding: 0 10px 20px; }
+.sidebar-brand { padding: 0 10px 20px; text-align: left; }
+/* En el panel lateral el logo va más grande y pegado a la izquierda */
+.sidebar > .sidebar-brand.brand-logo { max-height: 42px; margin: 0 0 20px 10px; padding: 0; }
 .branch-select { width: auto; max-width: 100%; margin: 0 10px 16px; padding: 8px 30px 8px 12px; font-size: 14px; font-weight: 600; }
 .branch-select.mobile { margin: 0 0 0 auto; padding: 6px 26px 6px 10px; font-size: 13px; max-width: 46vw; }
 .sidebar-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
@@ -108,8 +110,17 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
 .menu-btn svg { width: 100%; height: 100%; }
 
 .sidebar-footer { border-top: 1px solid var(--border); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.sidebar-user { display: flex; align-items: center; gap: 8px; }
+.sidebar-user-info { flex: 1; min-width: 0; }
 .sidebar-user-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-user-biz { font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-gear {
+  flex: 0 0 30px; display: inline-grid; place-items: center; width: 30px; height: 30px;
+  border-radius: var(--radius-sm); color: var(--text-2);
+}
+.sidebar-gear svg { width: 18px; height: 18px; }
+.sidebar-gear:hover { background: rgba(0,0,0,.05); color: var(--text); text-decoration: none; }
+.sidebar-gear.active { background: var(--accent-soft); color: var(--accent); }
 
 .content { flex: 1; min-width: 0; padding: 36px 40px 60px; }
 
@@ -235,6 +246,11 @@ a.icon-btn { text-decoration: none; }
 }
 .asset-preview img { width: 100%; height: 100%; object-fit: contain; }
 .asset-empty { color: var(--text-2); opacity: .6; }
+/* Módulos por negocio en el modal de marca: chips conmutables */
+.caps-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.cap-chip { border: 1px solid var(--border); background: transparent; color: var(--text-2); cursor: pointer; padding: 5px 12px; font: inherit; font-size: 12.5px; font-weight: 600; }
+.cap-chip.on { border-color: transparent; background: var(--accent-soft); color: var(--accent); }
+
 .color-row { display: flex; align-items: center; gap: 8px; }
 .color-row input[type="color"] { flex: 0 0 44px; width: 44px; height: 34px; padding: 2px; cursor: pointer; }
 .color-row .color-hex { width: 100px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

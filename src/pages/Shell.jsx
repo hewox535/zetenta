@@ -28,7 +28,7 @@ const Icon = {
 };
 
 export default function Shell() {
-  const { profile, business, capabilities, isAdmin, isBusinessAdmin, isSeller, signOut } = useAuth();
+  const { profile, business, capabilities, isAdmin, isBusinessAdmin, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const items = [];
@@ -57,7 +57,10 @@ export default function Shell() {
   if (isAdmin) {
     items.push({ to: '/admin', label: 'Administración', icon: Icon.shield });
   }
-  const roleLabel = isAdmin ? 'Administrador de la plataforma' : isSeller ? 'Vendedora' : business?.name;
+  // Identidad en el pie: nombre del usuario y, debajo, su correo real o su
+  // nombre de usuario (el correo sintético del personal sin correo no se muestra).
+  const userName = profile?.full_name || (profile?.username ? `@${profile.username}` : profile?.email);
+  const userIdent = profile?.email || (profile?.username ? `@${profile.username}` : '');
 
   return (
     <div className="shell">
@@ -84,8 +87,14 @@ export default function Shell() {
         </nav>
         <div className="sidebar-footer">
           <div className="sidebar-user">
-            <div className="sidebar-user-name">{profile?.full_name || profile?.email}</div>
-            <div className="sidebar-user-biz">{roleLabel}{isSeller && business ? ` · ${business.name}` : ''}</div>
+            <div className="sidebar-user-info">
+              <div className="sidebar-user-name">{userName}</div>
+              <div className="sidebar-user-biz">{userIdent}</div>
+            </div>
+            <NavLink to="/account" className="sidebar-gear" title="Configuración de la cuenta"
+              aria-label="Configuración de la cuenta" onClick={() => setMenuOpen(false)}>
+              {Icon.gear}
+            </NavLink>
           </div>
           <button className="btn ghost sm" onClick={signOut}>Cerrar sesión</button>
         </div>

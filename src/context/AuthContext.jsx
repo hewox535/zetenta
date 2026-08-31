@@ -48,7 +48,23 @@ export function AuthProvider({ children }) {
     if (profile?.business_id) setBusiness(await fetchBusiness(profile.business_id));
   }, [profile]);
 
-  const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
+  // Tras editar la cuenta (nombre, usuario) recarga el perfil sin recargar la app.
+  const refreshProfile = useCallback(async () => {
+    if (session?.user?.id) setProfile(await fetchProfile(session.user.id));
+  }, [session]);
+
+  // Acepta correo o nombre de usuario: sin '@' se resuelve el username al
+  // correo auth vía RPC login_email (los usuarios sin correo real tienen uno
+  // sintético que solo sirve para autenticar).
+  const signIn = async (identifier, password) => {
+    let email = identifier;
+    if (!identifier.includes('@')) {
+      const { data } = await supabase.rpc('login_email', { p_username: identifier });
+      if (!data) return { error: { message: 'Invalid login credentials' } };
+      email = data;
+    }
+    return supabase.auth.signInWithPassword({ email, password });
+  };
 
   const signUp = (email, password, { businessName, fullName, businessType }) =>
     supabase.auth.signUp({
@@ -72,6 +88,7 @@ export function AuthProvider({ children }) {
     isSeller: profile?.role !== 'platform_admin' && profile?.business_role === 'seller',
     capabilities: business?.capabilities ?? {},
     refreshBusiness,
+    refreshProfile,
     signIn,
     signUp,
     signOut,

@@ -11,6 +11,30 @@ export async function fetchProfile(userId) {
   return unwrap(await supabase.from('profiles').select('*').eq('id', userId).single());
 }
 
+// Cuenta propia: nombre visible y nombre de usuario (único; puede quedar vacío).
+export async function updateMyProfile(userId, { fullName, username }) {
+  return unwrap(await supabase.from('profiles')
+    .update({
+      full_name: fullName.trim(),
+      username: username?.trim() ? username.trim().toLowerCase() : null,
+    })
+    .eq('id', userId).select().single());
+}
+
+// Cambio de correo de la sesión actual. Supabase envía un enlace de
+// confirmación; el correo auth cambia al confirmarse. Actualizamos también la
+// copia visible en profiles (puede ir un paso adelante hasta la confirmación).
+export async function updateMyEmail(userId, email) {
+  const { error } = await supabase.auth.updateUser({ email });
+  if (error) throw new Error(error.message);
+  unwrap(await supabase.from('profiles').update({ email }).eq('id', userId));
+}
+
+export async function updateMyPassword(password) {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw new Error(error.message);
+}
+
 export async function fetchBusiness(businessId) {
   return unwrap(await supabase.from('businesses').select('*').eq('id', businessId).single());
 }
@@ -393,14 +417,14 @@ export async function updateBusinessSettings({ foreignDiscountPercent, lowStockP
 
 export async function fetchStaff() {
   return unwrap(await supabase.from('profiles')
-    .select('id, full_name, email, business_role, role, all_branches')
+    .select('id, full_name, email, username, business_role, role, all_branches')
     .not('business_id', 'is', null)
     .order('full_name'));
 }
 
-export async function createStaff({ email, password, fullName }) {
+export async function createStaff({ username, email, password, fullName }) {
   const { data, error } = await supabase.functions.invoke('staff', {
-    body: { action: 'create', email, password, full_name: fullName },
+    body: { action: 'create', username, email, password, full_name: fullName },
   });
   if (error) {
     let msg = error.message;
@@ -537,12 +561,14 @@ export async function uploadBrandingAsset(businessId, file, kind) {
 
 // White label: el administrador configura dominio y marca de cada negocio.
 // slug / custom_domain vacíos se guardan como NULL (para no romper el índice único).
-export async function updateBusinessBranding(id, { slug, customDomain, branding }) {
+export async function updateBusinessBranding(id, { slug, customDomain, branding, capabilities }) {
+  const patch = {
+    slug: slug?.trim() ? slug.trim().toLowerCase() : null,
+    custom_domain: customDomain?.trim() ? customDomain.trim().toLowerCase() : null,
+    branding: branding || {},
+  };
+  if (capabilities) patch.capabilities = capabilities;
   return unwrap(await supabase.from('businesses')
-    .update({
-      slug: slug?.trim() ? slug.trim().toLowerCase() : null,
-      custom_domain: customDomain?.trim() ? customDomain.trim().toLowerCase() : null,
-      branding: branding || {},
-    })
+    .update(patch)
     .eq('id', id).select().single());
 }

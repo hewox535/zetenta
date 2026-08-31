@@ -110,6 +110,7 @@ function BrandingModal({ business, onClose, onSaved }) {
   const [accent2, setAccent2] = useState(business.branding?.accent2 || business.branding?.accent || '#0077ed');
   const [logoUrl, setLogoUrl] = useState(business.branding?.logo_url || '');
   const [faviconUrl, setFaviconUrl] = useState(business.branding?.favicon_url || '');
+  const [caps, setCaps] = useState({ ...business.capabilities });
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(null); // 'logo' | 'favicon'
   const [error, setError] = useState(null);
@@ -139,7 +140,7 @@ function BrandingModal({ business, onClose, onSaved }) {
       if (HEX_RE.test(accent2.trim())) branding.accent2 = accent2.trim();
       if (logoUrl.trim()) branding.logo_url = logoUrl.trim();
       if (faviconUrl.trim()) branding.favicon_url = faviconUrl.trim();
-      const updated = await updateBusinessBranding(business.id, { slug, customDomain, branding });
+      const updated = await updateBusinessBranding(business.id, { slug, customDomain, branding, capabilities: caps });
       onSaved(updated);
     } catch (err) {
       setError(err.message.includes('duplicate') ? 'Ese slug o dominio ya está en uso por otro negocio.' : err.message);
@@ -187,6 +188,20 @@ function BrandingModal({ business, onClose, onSaved }) {
               onPick={(e) => onPickFile('favicon', e)}
               onClear={() => setFaviconUrl('')}
             />
+          </div>
+          <div className="asset-field">
+            <span className="asset-label">Módulos</span>
+            <div className="caps-grid">
+              {CAPABILITIES.map(([key, label]) => (
+                <button key={key} type="button"
+                  className={`chip cap-chip${caps[key] ? ' on' : ''}`}
+                  aria-pressed={!!caps[key]}
+                  onClick={() => setCaps((c) => ({ ...c, [key]: !c[key] }))}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="hint">Los módulos apagados no aparecen en el menú de ese negocio.</span>
           </div>
           {error && <div className="form-error">{error}</div>}
           <div className="inline-form-actions">

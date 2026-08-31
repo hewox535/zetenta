@@ -4,8 +4,12 @@
 //   POST /functions/v1/staff
 //   Authorization: Bearer <access_token del admin>   (+ header apikey)
 //   Body JSON:
-//     { action: "create", email, password, full_name? }
+//     { action: "create", username, password, email?, full_name? }
 //     { action: "delete", user_id }
+//
+// El correo es opcional: sin él, el usuario auth se crea con un correo
+// sintético (username@staff.zetenta.app) que solo sirve para autenticar;
+// profiles.email guarda únicamente correos reales ('' si no hay).
 //
 //   200 → { ok: true, user? }   4xx/5xx → { error }
 //
@@ -54,26 +58,35 @@ Deno.serve(async (req) => {
     );
 
     if (body.action === 'create') {
+      const username = String(body.username || '').trim().toLowerCase();
       const email = String(body.email || '').trim().toLowerCase();
       const password = String(body.password || '');
       const fullName = String(body.full_name || '').trim();
-      if (!email || password.length < 6) {
-        return json({ error: 'Correo válido y contraseña de al menos 6 caracteres.' }, 400);
+      if (!/^[a-z0-9._-]{3,30}$/.test(username)) {
+        return json({ error: 'Usuario inválido: 3–30 caracteres, letras/números y . _ - (sin espacios).' }, 400);
       }
+      if (password.length < 6) {
+        return json({ error: 'Contraseña de al menos 6 caracteres.' }, 400);
+      }
+      const { data: taken } = await admin.from('profiles')
+        .select('id').ilike('username', username).maybeSingle();
+      if (taken) return json({ error: 'Ese nombre de usuario ya está en uso.' }, 400);
+
+      const authEmail = email || `${username}@staff.zetenta.app`;
       const { data: created, error: cErr } = await admin.auth.admin.createUser({
-        email, password, email_confirm: true, user_metadata: { full_name: fullName },
+        email: authEmail, password, email_confirm: true, user_metadata: { full_name: fullName },
       });
       if (cErr || !created?.user) return json({ error: cErr?.message || 'No se pudo crear el usuario.' }, 400);
 
       // El trigger handle_new_user creó el perfil (sin negocio). Lo asignamos.
       const { error: uErr } = await admin.from('profiles')
-        .update({ business_id: me.business_id, business_role: 'seller', full_name: fullName, email })
+        .update({ business_id: me.business_id, business_role: 'seller', full_name: fullName, email, username })
         .eq('id', created.user.id);
       if (uErr) {
         await admin.auth.admin.deleteUser(created.user.id); // rollback
-        return json({ error: uErr.message }, 400);
+        return json({ error: uErr.message.includes('profiles_username_key') ? 'Ese nombre de usuario ya está en uso.' : uErr.message }, 400);
       }
-      return json({ ok: true, user: { id: created.user.id, email, full_name: fullName } });
+      return json({ ok: true, user: { id: created.user.id, email, username, full_name: fullName } });
     }
 
     if (body.action === 'delete') {
