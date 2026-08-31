@@ -507,6 +507,34 @@ export async function updateBusinessCapabilities(id, capabilities) {
     .update({ capabilities }).eq('id', id).select().single());
 }
 
+// Activos de marca (logo/favicon): se suben al bucket público 'branding' (solo
+// platform_admin puede escribir; ver migración branding_assets). Se conservan
+// como PNG para no perder transparencia; SVG se sube tal cual. El favicon se
+// limita a 512px (suficiente para pantalla de inicio) y el logo a 1024px.
+async function toPngBlob(file, maxSize) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+    return blob || file;
+  } catch { return file; }
+}
+
+export async function uploadBrandingAsset(businessId, file, kind) {
+  const isSvg = file.type === 'image/svg+xml';
+  const blob = isSvg ? file : await toPngBlob(file, kind === 'favicon' ? 512 : 1024);
+  const ext = isSvg ? 'svg' : 'png';
+  const path = `${businessId}/${kind}-${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from('branding')
+    .upload(path, blob, { contentType: isSvg ? 'image/svg+xml' : 'image/png', upsert: false });
+  if (error) throw new Error(error.message);
+  return supabase.storage.from('branding').getPublicUrl(path).data.publicUrl;
+}
+
 // White label: el administrador configura dominio y marca de cada negocio.
 // slug / custom_domain vacíos se guardan como NULL (para no romper el índice único).
 export async function updateBusinessBranding(id, { slug, customDomain, branding }) {

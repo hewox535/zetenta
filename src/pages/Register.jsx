@@ -52,7 +52,7 @@ export default function Register() {
         <form onSubmit={onSubmit} className="auth-form">
           <label>
             Nombre del negocio
-            <input value={businessName} onChange={(e) => setBusinessName(e.target.value)} required autoFocus placeholder="Auto Vidrios Duglaris, C.A." />
+            <input value={businessName} onChange={(e) => setBusinessName(e.target.value)} required autoFocus placeholder="Mi Negocio, C.A." />
           </label>
           <label>
             Tipo de negocio

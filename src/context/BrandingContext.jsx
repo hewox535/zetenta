@@ -11,7 +11,7 @@ import { supabase } from '../lib/supabaseClient';
 // mientras tanto revalidamos en segundo plano. En la primera visita, la app
 // espera al RPC mostrando un splash neutro (no una marca equivocada).
 
-const DEFAULT = { name: 'zetenta', logoUrl: null, accent: null, businessId: null };
+const DEFAULT = { name: 'zetenta', logoUrl: null, faviconUrl: null, accent: null, accent2: null, businessId: null };
 const BrandingContext = createContext({ ...DEFAULT, ready: false, fromCache: false });
 
 const host = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -52,7 +52,8 @@ export function BrandingProvider({ children }) {
         if (!active) return;
         const b = Array.isArray(data) ? data[0] : data;
         const next = b
-          ? { name: b.name || 'zetenta', logoUrl: b.logo_url || null, accent: b.accent || null, businessId: b.business_id }
+          ? { name: b.name || 'zetenta', logoUrl: b.logo_url || null, faviconUrl: b.favicon_url || null,
+              accent: b.accent || null, accent2: b.accent2 || null, businessId: b.business_id }
           : { ...DEFAULT };
         writeCache(next);
         setBranding({ ...next, ready: true, fromCache: false });
@@ -69,7 +70,7 @@ export function BrandingProvider({ children }) {
 
     if (branding.accent) {
       root.style.setProperty('--accent', branding.accent);
-      root.style.setProperty('--accent-hover', branding.accent);
+      root.style.setProperty('--accent-hover', branding.accent2 || branding.accent);
       root.style.setProperty('--accent-soft', `color-mix(in srgb, ${branding.accent} 10%, transparent)`);
       root.style.setProperty('--accent-ring', `color-mix(in srgb, ${branding.accent} 22%, transparent)`);
       root.style.setProperty('--accent-line', `color-mix(in srgb, ${branding.accent} 40%, transparent)`);
@@ -88,12 +89,43 @@ export function BrandingProvider({ children }) {
     setMeta('property', 'og:site_name', title);
     setMeta('property', 'og:description', description);
 
-    if (branding.logoUrl) {
+    // Ícono por marca: el favicon dedicado manda; sin él, cae al logo. Se usa
+    // en el tab (favicon), en iOS (apple-touch-icon) y en el manifest (Android).
+    const icon = branding.faviconUrl || branding.logoUrl;
+    if (icon) {
+      const isSvg = /\.svg(\?|$)/.test(icon);
       let link = document.querySelector("link[rel='icon']");
       if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
-      link.href = branding.logoUrl;
+      link.href = icon;
+      if (isSvg) link.type = 'image/svg+xml'; else link.removeAttribute('type');
       let apple = document.querySelector("link[rel='apple-touch-icon']");
-      if (apple) apple.href = branding.logoUrl;
+      if (!apple) { apple = document.createElement('link'); apple.rel = 'apple-touch-icon'; document.head.appendChild(apple); }
+      apple.href = icon;
+    }
+
+    // Manifest dinámico: al agregar la app a la pantalla de inicio (Android/
+    // Chrome) se usan el nombre, colores e ícono de la marca del dominio. Las
+    // URLs del manifest blob deben ser absolutas.
+    if (branded && icon) {
+      const manifest = {
+        name: title,
+        short_name: title,
+        start_url: `${window.location.origin}/`,
+        scope: `${window.location.origin}/`,
+        display: 'standalone',
+        background_color: '#ffffff',
+        theme_color: accent,
+        icons: [{
+          src: icon,
+          sizes: /\.svg(\?|$)/.test(icon) ? 'any' : '512x512',
+          type: /\.svg(\?|$)/.test(icon) ? 'image/svg+xml' : 'image/png',
+          purpose: 'any',
+        }],
+      };
+      let mlink = document.querySelector("link[rel='manifest']");
+      if (!mlink) { mlink = document.createElement('link'); mlink.rel = 'manifest'; document.head.appendChild(mlink); }
+      if (mlink.href.startsWith('blob:')) URL.revokeObjectURL(mlink.href);
+      mlink.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
     }
   }, [branding]);
 

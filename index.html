@@ -20,6 +20,13 @@
           var _m = document.querySelector('meta[name="theme-color"]');
           if (_m) _m.setAttribute('content', _b.accent);
         }
+        var _icon = _b && (_b.faviconUrl || _b.logoUrl);
+        if (_icon) {
+          var _i = document.querySelector('link[rel="icon"]');
+          if (_i) { _i.href = _icon; if (!/\.svg(\?|$)/.test(_icon)) _i.removeAttribute('type'); }
+          var _a = document.querySelector('link[rel="apple-touch-icon"]');
+          if (_a) _a.href = _icon;
+        }
       } catch (e) { /* localStorage no disponible */ }
     </script>
     <meta name="description" content="Zetenta — gestión de negocio: pedidos, inventario, retenciones y estadísticas en un solo lugar." />

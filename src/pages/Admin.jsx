@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchBusinesses, updateBusinessCapabilities, updateBusinessBranding } from '../lib/api';
+import { fetchBusinesses, updateBusinessCapabilities, updateBusinessBranding, uploadBrandingAsset } from '../lib/api';
 import { formatDate } from '../lib/calc';
 
 const CAPABILITIES = [
@@ -103,9 +103,27 @@ function BrandingModal({ business, onClose, onSaved }) {
   const [customDomain, setCustomDomain] = useState(business.custom_domain || '');
   const [name, setName] = useState(business.branding?.name || '');
   const [accent, setAccent] = useState(business.branding?.accent || '#0071e3');
+  const [accent2, setAccent2] = useState(business.branding?.accent2 || business.branding?.accent || '#0077ed');
   const [logoUrl, setLogoUrl] = useState(business.branding?.logo_url || '');
+  const [faviconUrl, setFaviconUrl] = useState(business.branding?.favicon_url || '');
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(null); // 'logo' | 'favicon'
   const [error, setError] = useState(null);
+
+  async function onPickFile(kind, e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(null); setUploading(kind);
+    try {
+      const url = await uploadBrandingAsset(business.id, file, kind);
+      if (kind === 'logo') setLogoUrl(url); else setFaviconUrl(url);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(null);
+    }
+  }
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -114,7 +132,9 @@ function BrandingModal({ business, onClose, onSaved }) {
       const branding = {};
       if (name.trim()) branding.name = name.trim();
       if (accent.trim()) branding.accent = accent.trim();
+      if (accent2.trim()) branding.accent2 = accent2.trim();
       if (logoUrl.trim()) branding.logo_url = logoUrl.trim();
+      if (faviconUrl.trim()) branding.favicon_url = faviconUrl.trim();
       const updated = await updateBusinessBranding(business.id, { slug, customDomain, branding });
       onSaved(updated);
     } catch (err) {
@@ -131,34 +151,80 @@ function BrandingModal({ business, onClose, onSaved }) {
         <form onSubmit={onSubmit} className="vform">
           <label>
             Subdominio (slug)
-            <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="robert-clothes" />
+            <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="mi-negocio" />
             <span className="hint">Se accede en <strong>{slug ? slug.trim().toLowerCase() : 'slug'}</strong>.tudominio.com</span>
           </label>
           <label>
             Dominio propio (opcional)
-            <input value={customDomain} onChange={(e) => setCustomDomain(e.target.value)} placeholder="tienda.robertclothes.com" />
+            <input value={customDomain} onChange={(e) => setCustomDomain(e.target.value)} placeholder="tienda.midominio.com" />
           </label>
           <label>
             Nombre de marca
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Robert Clothes" />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre visible del negocio" />
           </label>
           <div className="vgrid">
             <label>
               Color de acento
               <input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} />
+              <span className="hint">Botones, enlaces y detalles.</span>
             </label>
             <label>
-              Logo (URL, opcional)
-              <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…/logo.png" />
+              Color secundario
+              <input type="color" value={accent2} onChange={(e) => setAccent2(e.target.value)} />
+              <span className="hint">Estados al pasar el cursor.</span>
             </label>
+          </div>
+          <div className="vgrid">
+            <AssetField
+              label="Logo"
+              hint="PNG o SVG, idealmente con fondo transparente."
+              url={logoUrl}
+              uploading={uploading === 'logo'}
+              onPick={(e) => onPickFile('logo', e)}
+              onClear={() => setLogoUrl('')}
+            />
+            <AssetField
+              label="Favicon / ícono de app"
+              hint="Cuadrado, mínimo 512×512. Se usa en el tab y en la pantalla de inicio."
+              url={faviconUrl}
+              uploading={uploading === 'favicon'}
+              onPick={(e) => onPickFile('favicon', e)}
+              onClear={() => setFaviconUrl('')}
+            />
           </div>
           {error && <div className="form-error">{error}</div>}
           <div className="inline-form-actions">
-            <button className="btn primary" disabled={busy}>{busy ? 'Guardando…' : 'Guardar'}</button>
+            <button className="btn primary" disabled={busy || uploading !== null}>{busy ? 'Guardando…' : 'Guardar'}</button>
             <button type="button" className="btn ghost" onClick={onClose}>Cancelar</button>
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// Campo de imagen de marca: vista previa + subir a Supabase Storage + quitar.
+function AssetField({ label, hint, url, uploading, onPick, onClear }) {
+  return (
+    <div className="asset-field">
+      <span className="asset-label">{label}</span>
+      <div className="asset-row">
+        <span className="asset-preview">
+          {url ? <img src={url} alt={label} /> : <span className="asset-empty">—</span>}
+        </span>
+        <label className={`btn ghost sm${uploading ? ' disabled' : ''}`}>
+          {uploading ? 'Subiendo…' : (url ? 'Cambiar' : 'Subir')}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            hidden
+            disabled={uploading}
+            onChange={onPick}
+          />
+        </label>
+        {url && !uploading && <button type="button" className="btn ghost sm" onClick={onClear}>Quitar</button>}
+      </div>
+      <span className="hint">{hint}</span>
     </div>
   );
 }
