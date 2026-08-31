@@ -63,6 +63,11 @@ export function BrandingProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    // Sin marca resuelta (ni caché) no se pinta identidad alguna: ni título ni
+    // favicon. Zetenta es una marca más: solo aparece cuando el dominio
+    // efectivamente resolvió a la marca por defecto.
+    if (!branding.ready && !branding.fromCache) return;
+
     const root = document.documentElement;
     const branded = branding.name && branding.name !== 'zetenta';
     const title = branded ? branding.name : 'Zetenta';
@@ -77,7 +82,7 @@ export function BrandingProvider({ children }) {
     }
 
     // Identidad dinámica: título, favicon y meta de SEO reflejan el negocio del dominio
-    document.title = title;
+    document.title = `${title} Admin`;
     const description = branded
       ? `${branding.name} — pedidos, inventario y gestión de tu negocio.`
       : 'Zetenta — gestión de negocio: pedidos, inventario, retenciones y estadísticas en un solo lugar.';
@@ -93,9 +98,10 @@ export function BrandingProvider({ children }) {
     setMeta('property', 'og:site_name', title);
     setMeta('property', 'og:description', description);
 
-    // Ícono por marca: el favicon dedicado manda; sin él, cae al logo. Se usa
-    // en el tab (favicon), en iOS (apple-touch-icon) y en el manifest (Android).
-    const icon = branding.faviconUrl || branding.logoUrl;
+    // Ícono por marca: el favicon dedicado manda; sin él, cae al logo. La marca
+    // Zetenta usa su propio favicon estático. Se usa en el tab (favicon), en
+    // iOS (apple-touch-icon) y en el manifest (Android).
+    const icon = branding.faviconUrl || branding.logoUrl || (!branded ? '/favicon.svg' : null);
     if (icon) {
       const isSvg = /\.svg(\?|$)/.test(icon);
       let link = document.querySelector("link[rel='icon']");
@@ -110,7 +116,7 @@ export function BrandingProvider({ children }) {
     // Manifest dinámico: al agregar la app a la pantalla de inicio (Android/
     // Chrome) se usan el nombre, colores e ícono de la marca del dominio. Las
     // URLs del manifest blob deben ser absolutas.
-    if (branded && icon) {
+    if (icon) {
       const manifest = {
         name: appName,
         short_name: appName,

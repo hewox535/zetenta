@@ -2,35 +2,41 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0071e3" />
-    <title>Zetenta</title>
+    <title></title>
     <script>
-      // Título (y color) del tab sin parpadeo: se toman de la marca cacheada por
-      // dominio (misma clave que BrandingContext) de forma síncrona, antes del
-      // primer render. Sin caché queda vacío hasta que la app resuelva la marca,
-      // así nunca se muestra una marca equivocada (p. ej. "Zetenta" en el dominio
-      // de un cliente). El <title> estático de arriba es el fallback sin JS/SEO.
+      // Identidad (título, favicon, color) sin parpadeo: se toma de la marca
+      // cacheada por dominio (misma clave que BrandingContext) de forma
+      // síncrona, antes del primer render. La app arranca SIN título ni
+      // favicon: no hay identidad estática, ni siquiera la de Zetenta — cada
+      // dominio (zetenta.app incluido) la recibe al resolver su marca, así
+      // nunca se muestra una marca equivocada.
       try {
         var _b = JSON.parse(localStorage.getItem('zt-brand:' + location.hostname) || 'null');
-        document.title = _b && _b.name && _b.name !== 'zetenta' ? _b.name : (_b ? 'Zetenta' : '');
-        if (_b && _b.accent) {
-          var _m = document.querySelector('meta[name="theme-color"]');
-          if (_m) _m.setAttribute('content', _b.accent);
-        }
-        var _icon = _b && (_b.faviconUrl || _b.logoUrl);
-        if (_icon) {
-          var _i = document.querySelector('link[rel="icon"]');
-          if (_i) { _i.href = _icon; if (!/\.svg(\?|$)/.test(_icon)) _i.removeAttribute('type'); }
-          var _a = document.querySelector('link[rel="apple-touch-icon"]');
-          if (_a) _a.href = _icon;
+        if (_b) {
+          var _brandName = _b.name && _b.name !== 'zetenta' ? _b.name : 'Zetenta';
+          document.title = _brandName + ' Admin';
+          if (_b.accent) {
+            var _m = document.querySelector('meta[name="theme-color"]');
+            if (_m) _m.setAttribute('content', _b.accent);
+          }
+          var _icon = _b.faviconUrl || _b.logoUrl || (_b.name === 'zetenta' ? '/favicon.svg' : null);
+          if (_icon) {
+            var _i = document.createElement('link');
+            _i.rel = 'icon';
+            if (/\.svg(\?|$)/.test(_icon)) _i.type = 'image/svg+xml';
+            _i.href = _icon;
+            document.head.appendChild(_i);
+            var _a = document.createElement('link');
+            _a.rel = 'apple-touch-icon';
+            _a.href = _icon;
+            document.head.appendChild(_a);
+          }
         }
       } catch (e) { /* localStorage no disponible */ }
     </script>
     <meta name="description" content="Zetenta — gestión de negocio: pedidos, inventario, retenciones y estadísticas en un solo lugar." />
-    <meta name="apple-mobile-web-app-title" content="Zetenta" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Zetenta" />
