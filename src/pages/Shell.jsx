@@ -25,11 +25,26 @@ const Icon = {
   cart: <svg viewBox="0 0 24 24"><path d="M4 5h2l1.6 10.4a1 1 0 0 0 1 .85h8.2a1 1 0 0 0 1-.8L20 8H7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><circle cx="9.5" cy="19.5" r="1.4" fill="currentColor"/><circle cx="17" cy="19.5" r="1.4" fill="currentColor"/></svg>,
   chart: <svg viewBox="0 0 24 24"><path d="M4 20V4M4 20h16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M8 20v-6M12 20v-9M16 20v-4M20 20V9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
   user: <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M4.5 20c.9-3.6 3.6-5.5 7.5-5.5s6.6 1.9 7.5 5.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
+  chevLeft: <svg viewBox="0 0 24 24"><path d="M11.5 6L6 12l5.5 6M18 6l-5.5 6 5.5 6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  chevRight: <svg viewBox="0 0 24 24"><path d="M6 6l5.5 6L6 18M12.5 6L18 12l-5.5 6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  logout: <svg viewBox="0 0 24 24"><path d="M14 4H7a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M11 12h9m0 0l-3.5-3.5M20 12l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 };
 
 export default function Shell() {
   const { profile, business, capabilities, isAdmin, isBusinessAdmin, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Menú lateral contraído a solo íconos (preferencia por dispositivo; el
+  // default es abierto). En móvil no aplica: ahí es un cajón deslizante.
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('zt-sidebar') === 'collapsed'; } catch { return false; }
+  });
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      const next = !c;
+      try { localStorage.setItem('zt-sidebar', next ? 'collapsed' : 'open'); } catch { /* sin almacenamiento */ }
+      return next;
+    });
+  }
 
   const items = [];
   if (capabilities.orders) {
@@ -73,15 +88,22 @@ export default function Shell() {
         <BranchSwitch className="mobile" />
       </header>
       {menuOpen && <div className="sidebar-backdrop no-print" onClick={() => setMenuOpen(false)} />}
-      <aside className={`sidebar no-print${menuOpen ? ' open' : ''}`}>
-        <Brand className="sidebar-brand" />
+      <aside className={`sidebar no-print${menuOpen ? ' open' : ''}${collapsed ? ' collapsed' : ''}`}>
+        <div className="sidebar-top">
+          <Brand className="sidebar-brand" />
+          <button type="button" className="sidebar-collapse" onClick={toggleCollapsed}
+            title={collapsed ? 'Expandir menú' : 'Contraer menú'}
+            aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'}>
+            {collapsed ? Icon.chevRight : Icon.chevLeft}
+          </button>
+        </div>
         <BranchSwitch />
         <nav className="sidebar-nav">
           {items.map((it) => (
-            <NavLink key={it.to} to={it.to} onClick={() => setMenuOpen(false)}
+            <NavLink key={it.to} to={it.to} onClick={() => setMenuOpen(false)} title={it.label}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
               <span className="nav-icon">{it.icon}</span>
-              {it.label}
+              <span className="nav-label">{it.label}</span>
             </NavLink>
           ))}
         </nav>
@@ -96,7 +118,10 @@ export default function Shell() {
               {Icon.gear}
             </NavLink>
           </div>
-          <button className="btn ghost sm" onClick={signOut}>Cerrar sesión</button>
+          <button className="btn ghost sm sidebar-logout" onClick={signOut} title="Cerrar sesión">
+            <span className="logout-icon">{Icon.logout}</span>
+            <span className="nav-label">Cerrar sesión</span>
+          </button>
         </div>
       </aside>
       <main className="content">
