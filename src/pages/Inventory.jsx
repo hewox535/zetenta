@@ -544,9 +544,21 @@ export default function Inventory() {
             </div>
             <form onSubmit={onSubmit} className="vform">
               {modal.mode === 'create' && (
-                <div className="seg">
-                  <button type="button" className={`seg-btn${modal.cmode === 'simple' ? ' active' : ''}`} onClick={() => setM({ cmode: 'simple' })}>Producto simple</button>
-                  <button type="button" className={`seg-btn${modal.cmode === 'variants' ? ' active' : ''}`} onClick={() => setM({ cmode: 'variants' })}>Con variaciones</button>
+                <div className="mode-pills" role="radiogroup" aria-label="Tipo de producto">
+                  {[
+                    ['simple', 'Producto simple', 'Un solo artículo con su stock'],
+                    ['variants', 'Con variaciones', 'Talla, color u otros ejes'],
+                  ].map(([key, label, sub]) => (
+                    <button type="button" key={key} role="radio" aria-checked={modal.cmode === key}
+                      className={`mode-pill${modal.cmode === key ? ' active' : ''}`}
+                      onClick={() => setM({ cmode: key })}>
+                      <span className="mode-radio" aria-hidden="true" />
+                      <span className="mode-pill-text">
+                        <span className="mode-pill-label">{label}</span>
+                        <span className="mode-pill-sub">{sub}</span>
+                      </span>
+                    </button>
+                  ))}
                 </div>
               )}
               <div className="np-grid">
@@ -800,30 +812,36 @@ export default function Inventory() {
 }
 
 // Constructor de variaciones: una fila por combinación, con selectores por eje.
+// Cada variación es una tarjeta con borde suave y cada campo lleva su propio
+// label (legible también en móvil, donde los campos se apilan).
 function VarRows({ axisNames, termsFor, rows, onChange, emptyHint }) {
   const update = (i, patch) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const setValue = (i, name, val) => onChange(rows.map((r, j) => (j === i ? { ...r, values: { ...r.values, [name]: val } } : r)));
   return (
     <div className="var-rows">
-      {rows.length > 0 && (
-        <div className="var-rows-head">
-          {axisNames.map((n) => <span key={n}>{n}</span>)}
-          <span>Stock</span><span>SKU</span><span>Precio</span><span />
-        </div>
-      )}
       {rows.length === 0 && emptyHint && <p className="hint">{emptyHint}</p>}
       {rows.map((r, i) => (
-        <div className="var-row" key={r.key}>
-          {axisNames.map((name) => (
-            <TermSelect key={name} terms={termsFor(name)} value={r.values[name] || ''}
-              onChange={(val) => setValue(i, name, val)} placeholder={name} />
-          ))}
-          <input type="number" min="0" step="1" value={r.stock} placeholder="0"
-            onChange={(e) => update(i, { stock: e.target.value })} />
-          <input value={r.sku} placeholder="opcional" onChange={(e) => update(i, { sku: e.target.value })} />
-          <input type="number" min="0" step="0.01" value={r.price} placeholder="hereda"
-            onChange={(e) => update(i, { price: e.target.value })} />
-          <button type="button" className="var-row-del" aria-label="Quitar"
+        <div className="var-card" key={r.key}>
+          <div className="var-card-fields">
+            {axisNames.map((name) => (
+              <label className="var-field" key={name}>{name}
+                <TermSelect terms={termsFor(name)} value={r.values[name] || ''}
+                  onChange={(val) => setValue(i, name, val)} placeholder={name} />
+              </label>
+            ))}
+            <label className="var-field num">Stock
+              <input type="number" min="0" step="1" value={r.stock} placeholder="0"
+                onChange={(e) => update(i, { stock: e.target.value })} />
+            </label>
+            <label className="var-field">SKU
+              <input value={r.sku} placeholder="opcional" onChange={(e) => update(i, { sku: e.target.value })} />
+            </label>
+            <label className="var-field num">Precio
+              <input type="number" min="0" step="0.01" value={r.price} placeholder="hereda"
+                onChange={(e) => update(i, { price: e.target.value })} />
+            </label>
+          </div>
+          <button type="button" className="var-row-del" aria-label="Quitar variación" title="Quitar variación"
             onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button>
         </div>
       ))}
