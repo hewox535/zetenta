@@ -85,9 +85,11 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
 /* Fila superior: marca + botón de contraer */
 .sidebar-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
 .sidebar-top .sidebar-brand { flex: 1; min-width: 0; padding: 0 0 20px 10px; }
-/* El logo del panel lateral, alineado al inicio: sin align-self el flex lo
-   estira a todo el ancho y object-fit:contain lo centra visualmente. */
-.sidebar-top .sidebar-brand.brand-logo { max-height: 30px; align-self: flex-start; margin: 0 0 20px 10px; padding: 0; }
+/* El logo del panel lateral, alineado al inicio: si el flex lo estira
+   (flex:1 heredado de .sidebar-brand), object-fit:contain centra la imagen
+   dentro del hueco; con flex:0 el <img> toma solo su ancho natural y el
+   space-between de la fila empuja el chevron a la derecha. */
+.sidebar-top .sidebar-brand.brand-logo { flex: 0 1 auto; max-height: 30px; width: auto; margin: 0 0 20px 10px; padding: 0; }
 .sidebar-collapse {
   flex: 0 0 28px; width: 28px; height: 28px; display: inline-grid; place-items: center;
   border: none; background: transparent; border-radius: var(--radius-sm);
