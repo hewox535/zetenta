@@ -235,6 +235,9 @@ a.icon-btn { text-decoration: none; }
 }
 .asset-preview img { width: 100%; height: 100%; object-fit: contain; }
 .asset-empty { color: var(--text-2); opacity: .6; }
+.color-row { display: flex; align-items: center; gap: 8px; }
+.color-row input[type="color"] { flex: 0 0 44px; width: 44px; height: 34px; padding: 2px; cursor: pointer; }
+.color-row .color-hex { width: 100px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .vmore summary {
   cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent);
   list-style: none; padding: 2px 0;

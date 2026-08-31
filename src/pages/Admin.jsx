@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import { fetchBusinesses, updateBusinessCapabilities, updateBusinessBranding, uploadBrandingAsset } from '../lib/api';
 import { formatDate } from '../lib/calc';
 
+// Dominio donde vive la plataforma: los slugs se sirven como subdominios de él.
+const PLATFORM_DOMAIN = 'zetenta.app';
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
 const CAPABILITIES = [
   ['orders', 'Ventas'],
   ['inventory', 'Inventario'],
@@ -131,8 +135,8 @@ function BrandingModal({ business, onClose, onSaved }) {
     try {
       const branding = {};
       if (name.trim()) branding.name = name.trim();
-      if (accent.trim()) branding.accent = accent.trim();
-      if (accent2.trim()) branding.accent2 = accent2.trim();
+      if (HEX_RE.test(accent.trim())) branding.accent = accent.trim();
+      if (HEX_RE.test(accent2.trim())) branding.accent2 = accent2.trim();
       if (logoUrl.trim()) branding.logo_url = logoUrl.trim();
       if (faviconUrl.trim()) branding.favicon_url = faviconUrl.trim();
       const updated = await updateBusinessBranding(business.id, { slug, customDomain, branding });
@@ -152,7 +156,7 @@ function BrandingModal({ business, onClose, onSaved }) {
           <label>
             Subdominio (slug)
             <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="mi-negocio" />
-            <span className="hint">Se accede en <strong>{slug ? slug.trim().toLowerCase() : 'slug'}</strong>.tudominio.com</span>
+            <span className="hint">Se accede en <strong>{slug ? slug.trim().toLowerCase() : 'slug'}</strong>.{PLATFORM_DOMAIN}</span>
           </label>
           <label>
             Dominio propio (opcional)
@@ -163,16 +167,8 @@ function BrandingModal({ business, onClose, onSaved }) {
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre visible del negocio" />
           </label>
           <div className="vgrid">
-            <label>
-              Color de acento
-              <input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} />
-              <span className="hint">Botones, enlaces y detalles.</span>
-            </label>
-            <label>
-              Color secundario
-              <input type="color" value={accent2} onChange={(e) => setAccent2(e.target.value)} />
-              <span className="hint">Estados al pasar el cursor.</span>
-            </label>
+            <ColorField label="Color de acento" hint="Botones, enlaces y detalles." value={accent} onChange={setAccent} />
+            <ColorField label="Color secundario" hint="Estados al pasar el cursor." value={accent2} onChange={setAccent2} />
           </div>
           <div className="vgrid">
             <AssetField
@@ -199,6 +195,27 @@ function BrandingModal({ business, onClose, onSaved }) {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// Selector de color con campo hexadecimal editable: el swatch y el texto se
+// sincronizan; solo un hex completo (#rrggbb) se propaga al valor guardado.
+function ColorField({ label, hint, value, onChange }) {
+  const valid = HEX_RE.test(value);
+  function onText(e) {
+    let v = e.target.value.trim();
+    if (v && !v.startsWith('#')) v = `#${v}`;
+    onChange(v);
+  }
+  return (
+    <div className="asset-field">
+      <span className="asset-label">{label}</span>
+      <div className="color-row">
+        <input type="color" value={valid ? value : '#000000'} onChange={(e) => onChange(e.target.value)} />
+        <input className="color-hex" value={value} onChange={onText} placeholder="#0071e3" maxLength={7} spellCheck={false} />
+      </div>
+      <span className="hint">{hint}</span>
     </div>
   );
 }
