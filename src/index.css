@@ -153,6 +153,12 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
 
 .page { max-width: 980px; margin: 0 auto; }
 .page.narrow { max-width: 640px; }
+/* Sidebar contraído: el contenido aprovecha el ancho liberado (los topes
+   suben; el grid de productos del POS agrega columnas solo). Las páginas
+   narrow (formularios) conservan su ancho de lectura. */
+.shell.sidebar-collapsed .page { max-width: 1200px; }
+.shell.sidebar-collapsed .page.narrow { max-width: 640px; }
+.shell.sidebar-collapsed .pos-page { max-width: 1440px; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
 .page-sub { color: var(--text-2); margin: 4px 0 0; }
 .page-actions { display: flex; gap: 8px; }

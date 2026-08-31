@@ -78,7 +78,7 @@ export default function Shell() {
   const userIdent = profile?.email || (profile?.username ? `@${profile.username}` : '');
 
   return (
-    <div className="shell">
+    <div className={`shell${collapsed ? ' sidebar-collapsed' : ''}`}>
       {/* Solo visible en móvil: hamburguesa + marca; la barra lateral se vuelve cajón */}
       <header className="mobile-top no-print">
         <button className="menu-btn" aria-label="Abrir menú" onClick={() => setMenuOpen(true)}>
