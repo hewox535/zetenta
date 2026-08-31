@@ -114,6 +114,7 @@ function EmailSection({ profile, refreshProfile }) {
 }
 
 function PasswordSection() {
+  const [current, setCurrent] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -126,8 +127,8 @@ function PasswordSection() {
     if (password !== confirm) { setError('Las contraseñas no coinciden.'); return; }
     setBusy(true);
     try {
-      await updateMyPassword(password);
-      setPassword(''); setConfirm('');
+      await updateMyPassword(current, password);
+      setCurrent(''); setPassword(''); setConfirm('');
       setOk('Contraseña actualizada.');
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
@@ -136,6 +137,10 @@ function PasswordSection() {
     <section className="card vsection">
       <h2>Contraseña</h2>
       <form onSubmit={onSubmit} className="vform">
+        <label>
+          Contraseña actual
+          <PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} required autoComplete="current-password" />
+        </label>
         <div className="vgrid">
           <label>
             Nueva contraseña

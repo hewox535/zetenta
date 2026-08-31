@@ -14,6 +14,14 @@ const CAPABILITIES = [
   ['retentions', 'Retenciones'],
 ];
 
+const CAP_HINTS = {
+  orders: 'Punto de venta y historial de pedidos.',
+  inventory: 'Productos, variaciones y stock.',
+  stats: 'Estadísticas del negocio.',
+  customers: 'Base de clientes y campañas.',
+  retentions: 'Retenciones y proveedores.',
+};
+
 export default function Admin() {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
@@ -111,6 +119,7 @@ function BrandingModal({ business, onClose, onSaved }) {
   const [logoUrl, setLogoUrl] = useState(business.branding?.logo_url || '');
   const [faviconUrl, setFaviconUrl] = useState(business.branding?.favicon_url || '');
   const [caps, setCaps] = useState({ ...business.capabilities });
+  const [tab, setTab] = useState('brand'); // 'brand' | 'modules'
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(null); // 'logo' | 'favicon'
   const [error, setError] = useState(null);
@@ -152,8 +161,13 @@ function BrandingModal({ business, onClose, onSaved }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal card" onClick={(e) => e.stopPropagation()}>
-        <h2>Marca y dominio — {business.name}</h2>
+        <h2>{business.name}</h2>
+        <nav className="settings-nav modal-tabs">
+          <button type="button" className={`settings-tab${tab === 'brand' ? ' active' : ''}`} onClick={() => setTab('brand')}>Marca</button>
+          <button type="button" className={`settings-tab${tab === 'modules' ? ' active' : ''}`} onClick={() => setTab('modules')}>Módulos</button>
+        </nav>
         <form onSubmit={onSubmit} className="vform">
+          {tab === 'brand' && (<>
           <label>
             Subdominio (slug)
             <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="mi-negocio" />
@@ -189,20 +203,26 @@ function BrandingModal({ business, onClose, onSaved }) {
               onClear={() => setFaviconUrl('')}
             />
           </div>
-          <div className="asset-field">
-            <span className="asset-label">Módulos</span>
-            <div className="caps-grid">
+          </>)}
+          {tab === 'modules' && (
+            <div className="module-list">
               {CAPABILITIES.map(([key, label]) => (
-                <button key={key} type="button"
-                  className={`chip cap-chip${caps[key] ? ' on' : ''}`}
-                  aria-pressed={!!caps[key]}
-                  onClick={() => setCaps((c) => ({ ...c, [key]: !c[key] }))}>
-                  {label}
-                </button>
+                <div className="method-row" key={key}>
+                  <div className="module-info">
+                    <span className="method-name">{label}</span>
+                    <span className="muted">{CAP_HINTS[key]}</span>
+                  </div>
+                  <button type="button"
+                    className={`switch${caps[key] ? ' on' : ''}`}
+                    role="switch" aria-checked={!!caps[key]}
+                    onClick={() => setCaps((c) => ({ ...c, [key]: !c[key] }))}>
+                    <span className="switch-knob" />
+                  </button>
+                </div>
               ))}
+              <span className="hint">Los módulos apagados no aparecen en el menú de ese negocio.</span>
             </div>
-            <span className="hint">Los módulos apagados no aparecen en el menú de ese negocio.</span>
-          </div>
+          )}
           {error && <div className="form-error">{error}</div>}
           <div className="inline-form-actions">
             <button className="btn primary" disabled={busy || uploading !== null}>{busy ? 'Guardando…' : 'Guardar'}</button>

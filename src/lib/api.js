@@ -30,8 +30,14 @@ export async function updateMyEmail(userId, email) {
   unwrap(await supabase.from('profiles').update({ email }).eq('id', userId));
 }
 
-export async function updateMyPassword(password) {
-  const { error } = await supabase.auth.updateUser({ password });
+// Cambia la contraseña verificando antes la actual: se reautentica contra el
+// correo auth de la sesión (funciona también con el correo sintético del
+// personal sin correo real).
+export async function updateMyPassword(currentPassword, newPassword) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error: authErr } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword });
+  if (authErr) throw new Error('La contraseña actual no es correcta.');
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw new Error(error.message);
 }
 

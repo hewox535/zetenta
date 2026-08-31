@@ -82,8 +82,9 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
   position: sticky; top: 0; height: 100vh;
 }
 .sidebar-brand { padding: 0 10px 20px; text-align: left; }
-/* En el panel lateral el logo va más grande y pegado a la izquierda */
-.sidebar > .sidebar-brand.brand-logo { max-height: 42px; margin: 0 0 20px 10px; padding: 0; }
+/* El logo del panel lateral, alineado al inicio: sin align-self el flex lo
+   estira a todo el ancho y object-fit:contain lo centra visualmente. */
+.sidebar > .sidebar-brand.brand-logo { max-height: 30px; align-self: flex-start; margin: 0 0 20px 10px; padding: 0; }
 .branch-select { width: auto; max-width: 100%; margin: 0 10px 16px; padding: 8px 30px 8px 12px; font-size: 14px; font-weight: 600; }
 .branch-select.mobile { margin: 0 0 0 auto; padding: 6px 26px 6px 10px; font-size: 13px; max-width: 46vw; }
 .sidebar-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
@@ -246,10 +247,13 @@ a.icon-btn { text-decoration: none; }
 }
 .asset-preview img { width: 100%; height: 100%; object-fit: contain; }
 .asset-empty { color: var(--text-2); opacity: .6; }
-/* Módulos por negocio en el modal de marca: chips conmutables */
-.caps-grid { display: flex; flex-wrap: wrap; gap: 6px; }
-.cap-chip { border: 1px solid var(--border); background: transparent; color: var(--text-2); cursor: pointer; padding: 5px 12px; font: inherit; font-size: 12.5px; font-weight: 600; }
-.cap-chip.on { border-color: transparent; background: var(--accent-soft); color: var(--accent); }
+/* Modal de marca: pestañas y lista de módulos con toggles */
+.modal-tabs { margin: 14px 0 18px; }
+.module-list { display: flex; flex-direction: column; }
+.module-list .method-row:first-child { padding-top: 0; }
+.module-list > .hint { margin-top: 10px; }
+.module-info { display: flex; flex-direction: column; min-width: 0; }
+.module-info .muted { font-size: 12.5px; }
 
 .color-row { display: flex; align-items: center; gap: 8px; }
 .color-row input[type="color"] { flex: 0 0 44px; width: 44px; height: 34px; padding: 2px; cursor: pointer; }
