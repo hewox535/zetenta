@@ -179,8 +179,10 @@ export default function Inventory() {
   }
   function openEdit(p) {
     setError(null);
+    // Categorías y, en productos simples, propiedades (Talla, Color…): ambas
+    // viven en product_terms, así que se cosechan de todas las taxonomías.
     const categories = {};
-    for (const t of catTax) {
+    for (const t of taxonomies) {
       const ids = new Set(t.taxonomy_terms.map((x) => x.id));
       const pt = (p.product_terms || []).find((x) => ids.has(x.term_id));
       if (pt) categories[t.id] = termName.get(pt.term_id) || '';
@@ -224,8 +226,12 @@ export default function Inventory() {
     e.preventDefault();
     setError(null); setBusy(true);
     try {
+      // Producto simple: además de categorías, lleva propiedades de variación
+      // (Talla, Color…) como dato del producto. Con variaciones, esos valores
+      // van en los atributos de cada variante, no aquí.
+      const simpleNow = modal.mode === 'create' ? modal.cmode === 'simple' : modal.simple;
       const categories = {};
-      for (const t of catTax) {
+      for (const t of [...catTax, ...(simpleNow ? varTax : [])]) {
         const val = (modal.categories[t.id] || '').trim();
         if (val) categories[t.name] = val;
       }
@@ -552,20 +558,31 @@ export default function Inventory() {
                 </label>
               </div>
 
-              {catTax.length > 0 && (
-                <div className="np-block">
-                  <div className="oc-label">Categorías</div>
-                  <div className="np-grid">
-                    {catTax.map((t) => (
-                      <label key={t.id}>{t.name}
-                        <TermSelect terms={t.taxonomy_terms} value={modal.categories[t.id] || ''}
-                          onChange={(val) => setM({ categories: { ...modal.categories, [t.id]: val } })}
-                          placeholder={`Elegir ${t.name.toLowerCase()}…`} />
-                      </label>
-                    ))}
+              {(() => {
+                // Producto simple: también puede fijar Talla, Color, etc. como
+                // dato del producto (sin crear variaciones); alimenta los
+                // filtros del POS y del inventario igual que las categorías.
+                const simpleNow = modal.mode === 'create' ? modal.cmode === 'simple' : modal.simple;
+                const tagTax = [...catTax, ...(simpleNow ? varTax : [])];
+                if (tagTax.length === 0) return null;
+                return (
+                  <div className="np-block">
+                    <div className="oc-label">{simpleNow && varTax.length > 0 ? 'Categorías y propiedades' : 'Categorías'}</div>
+                    <div className="np-grid">
+                      {tagTax.map((t) => (
+                        <label key={t.id}>{t.name}
+                          <TermSelect terms={t.taxonomy_terms} value={modal.categories[t.id] || ''}
+                            onChange={(val) => setM({ categories: { ...modal.categories, [t.id]: val } })}
+                            placeholder={`Elegir ${t.name.toLowerCase()}…`} />
+                        </label>
+                      ))}
+                    </div>
+                    {simpleNow && varTax.length > 0 && (
+                      <p className="hint">Talla, color, etc. de un producto sin variaciones. Si el producto varía por esos ejes, usa “Con variaciones”.</p>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* -------- Imágenes -------- */}
               <div className="np-block">
