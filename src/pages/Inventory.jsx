@@ -456,6 +456,10 @@ export default function Inventory() {
         </div>
         <div className="page-actions">
           <Link to="/inventory/history" className="btn ghost">Historial completo</Link>
+          <button className="btn ghost" title="Descarga el modelo con las columnas esperadas (ábrelo en Excel, llénalo y guárdalo como CSV)"
+            onClick={() => downloadInvTemplate(varTax.map((t) => t.name))}>
+            ⬇ Plantilla
+          </button>
           <label className="btn ghost">
             ⬆ Importar CSV
             <input type="file" accept=".csv,text/csv" hidden disabled={busy} onChange={onImportProducts} />
