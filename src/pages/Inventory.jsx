@@ -635,6 +635,12 @@ export default function Inventory() {
                 <label>SKU
                   <input value={modal.sku} onChange={(e) => setM({ sku: e.target.value })} placeholder="CAM-OXF" />
                 </label>
+                {modal.mode === 'create' && modal.cmode === 'simple' && (
+                  <label>Cantidad
+                    <input type="number" step="1" min="0" value={modal.simpleStock}
+                      onChange={(e) => setM({ simpleStock: e.target.value })} placeholder="0" />
+                  </label>
+                )}
                 {/* La unidad (products.unit) se mantiene internamente con su
                     default 'und'; se configurará por negocio más adelante. */}
               </div>
@@ -695,15 +701,12 @@ export default function Inventory() {
                 </div>
               </div>
 
-              {/* -------- Variaciones -------- */}
+              {/* -------- Variaciones (la cantidad del simple va arriba, junto
+                   a los datos básicos) -------- */}
               {modal.mode === 'create' ? (
+                modal.cmode === 'simple' ? null : (
                 <div className="np-block">
-                  {modal.cmode === 'simple' ? (
-                    <label className="short">Cantidad
-                      <input type="number" step="1" min="0" value={modal.simpleStock}
-                        onChange={(e) => setM({ simpleStock: e.target.value })} placeholder="0" />
-                    </label>
-                  ) : varTax.length === 0 ? (
+                  {varTax.length === 0 ? (
                     <p className="hint">No hay ejes de variación. Créalos en <Link to="/settings">Negocio → Inventario → Variaciones</Link> (p. ej. Color, Talla).</p>
                   ) : (
                     <div className="np-variants">
@@ -729,6 +732,7 @@ export default function Inventory() {
                     </div>
                   )}
                 </div>
+                )
               ) : (
                 /* -------- Editar: variantes existentes + agregar -------- */
                 <div className="np-block">
