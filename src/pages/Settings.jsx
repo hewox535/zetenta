@@ -6,7 +6,7 @@ import {
   fetchTaxonomies, createTaxonomy, deleteTaxonomy, createTerm, updateTerm, deleteTerm,
   fetchBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
   createPaymentMethod, updatePaymentMethod, deletePaymentMethod,
-  updateOrderSettings, updateBusinessSettings,
+  updateOrderSettings, updateBusinessSettings, updateCustomerConfig,
   fetchBranches, createBranch, updateBranch, deleteBranch,
   fetchUserBranches, setUserBranches,
   fetchStaff, createStaff, deleteStaff, setStaffRole, setStaffPermissions,
@@ -425,6 +425,22 @@ function OrdersSection({ business, refreshBusiness }) {
   const [discSaved, setDiscSaved] = useState(false);
   const [discError, setDiscError] = useState(null);
 
+  const [custCfg, setCustCfg] = useState(business.customer_config || {});
+  const [custError, setCustError] = useState(null);
+
+  async function saveCustCfg(next) {
+    setCustError(null);
+    setCustCfg(next); // optimista; se revierte si falla
+    try {
+      const updated = await updateCustomerConfig(next);
+      setCustCfg(updated.customer_config || {});
+      await refreshBusiness();
+    } catch (e) {
+      setCustError(e.message);
+      setCustCfg(business.customer_config || {});
+    }
+  }
+
   useEffect(() => {
     fetchBcvRates().then(setBcv).catch(() => {});
   }, []);
@@ -508,6 +524,33 @@ function OrdersSection({ business, refreshBusiness }) {
         <button type="button" className="btn primary" disabled={discBusy} onClick={saveDiscount}>
           {discBusy ? 'Guardando…' : 'Guardar descuento'}
         </button>
+      </section>
+
+      <section className="card vsection">
+        <h2>Cliente en la venta</h2>
+        <p className="hint">
+          Qué exige el punto de venta al finalizar. El nombre siempre es obligatorio al
+          crear un cliente nuevo; documento y teléfono aplican al crearlo desde el POS.
+        </p>
+        {[
+          ['required', 'Cliente obligatorio', 'No se puede finalizar una venta sin elegir o crear el cliente.', custCfg.required,
+            () => saveCustCfg({ ...custCfg, required: !custCfg.required })],
+          ['document', 'Documento obligatorio', 'Cédula/RIF requerido al crear el cliente en el POS.', custCfg.fields?.document,
+            () => saveCustCfg({ ...custCfg, fields: { ...custCfg.fields, document: !custCfg.fields?.document } })],
+          ['phone', 'Teléfono obligatorio', 'Teléfono requerido al crear el cliente en el POS.', custCfg.fields?.phone,
+            () => saveCustCfg({ ...custCfg, fields: { ...custCfg.fields, phone: !custCfg.fields?.phone } })],
+        ].map(([key, label, hint, on, onToggle]) => (
+          <div className="method-row" key={key}>
+            <div className="module-info">
+              <span className="method-name">{label}</span>
+              <span className="muted">{hint}</span>
+            </div>
+            <button type="button" className={`switch${on ? ' on' : ''}`} role="switch" aria-checked={!!on} onClick={onToggle}>
+              <span className="switch-knob" />
+            </button>
+          </div>
+        ))}
+        {custError && <div className="form-error">{custError}</div>}
       </section>
 
       <BankAccountsManager business={business} />

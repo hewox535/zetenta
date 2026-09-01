@@ -13,6 +13,54 @@ import OrderReceipt from '../components/OrderReceipt';
 
 const EMPTY_CUST = { name: '', document: '', phone: '', email: '' };
 
+// Bloque de cliente de la venta: buscar existente o crear nuevo. Se monta dos
+// veces (resumen desktop y hoja de pago móvil) compartiendo el mismo estado.
+function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCustomer,
+  showNewCust, setShowNewCust, newCust, setNew, setNewCust, custSearch, setCustSearch,
+  custMatches, pickCustomer }) {
+  return (
+    <div className={`order-customer-block${desktop ? '' : ' oc-mobile'}`}>
+      <div className="oc-label">Cliente{required ? '' : ' (opcional)'}</div>
+      {selectedCustomer ? (
+        <div className="oc-selected">
+          <div>
+            <strong>{selectedCustomer.name}</strong>
+            {selectedCustomer.document && <span className="muted"> · {selectedCustomer.document}</span>}
+          </div>
+          <button type="button" className="btn ghost sm" onClick={resetCustomer}>Quitar</button>
+        </div>
+      ) : showNewCust ? (
+        <div className="oc-new">
+          <input placeholder="Nombre" value={newCust.name} onChange={setNew('name')} autoFocus={desktop} />
+          <input placeholder={`Documento${fieldReq('document') ? '' : ' (opcional)'}`}
+            value={newCust.document} onChange={setNew('document')} />
+          <input placeholder={`Teléfono${fieldReq('phone') ? '' : ' (opcional)'}`}
+            value={newCust.phone} onChange={setNew('phone')} inputMode="tel" />
+          <input placeholder="Correo (opcional)" value={newCust.email} onChange={setNew('email')} type="email" />
+          <button type="button" className="btn ghost sm" onClick={() => { setShowNewCust(false); setNewCust(EMPTY_CUST); }}>
+            Cancelar
+          </button>
+        </div>
+      ) : (
+        <>
+          <input className="oc-search" placeholder="Buscar cliente por nombre o documento…"
+            value={custSearch} onChange={(e) => setCustSearch(e.target.value)} />
+          {custMatches.length > 0 && (
+            <div className="oc-results">
+              {custMatches.map((c) => (
+                <button type="button" key={c.id} onClick={() => pickCustomer(c)}>
+                  {c.name}{c.document && <span className="muted"> · {c.document}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          <button type="button" className="btn ghost sm" onClick={() => setShowNewCust(true)}>+ Nuevo cliente</button>
+        </>
+      )}
+    </div>
+  );
+}
+
 const variantsOf = (p) => p.product_variants || [];
 // Stock de la variante en la sucursal actual (0 si no hay fila para esa sucursal).
 const branchStock = (v, branchId) => {
@@ -257,6 +305,21 @@ export default function Orders() {
   const setNew = (k) => (e) => setNewCust((f) => ({ ...f, [k]: e.target.value }));
   const resetCustomer = () => { setSelectedCustomer(null); setCustSearch(''); setShowNewCust(false); setNewCust(EMPTY_CUST); };
 
+  // Configuración del negocio: cliente obligatorio y qué datos exige al
+  // crearlo desde el POS (el nombre siempre es obligatorio al crear).
+  const custCfg = business?.customer_config || {};
+  const custRequired = !!custCfg.required;
+  const custFieldReq = (k) => !!custCfg.fields?.[k];
+
+  // Props compartidas del bloque de cliente: se renderiza en el resumen
+  // (desktop) y dentro de la hoja de pago (móvil, donde el resumen queda
+  // tapado por la hoja).
+  const customerBlockProps = {
+    required: custRequired, fieldReq: custFieldReq,
+    selectedCustomer, resetCustomer, showNewCust, setShowNewCust,
+    newCust, setNew, setNewCust, custSearch, setCustSearch, custMatches, pickCustomer,
+  };
+
   // ------- categorías / filtros -------
   const filterables = taxonomies.filter((t) => t.taxonomy_terms.length > 0);
 
@@ -270,6 +333,16 @@ export default function Orders() {
   async function onFinish() {
     setError(null);
     if (!rate.value) { setError('No hay tasa de cambio disponible. Configúrala en Negocio → Ventas.'); return; }
+    // Validación del cliente según la configuración del negocio.
+    const creatingCust = !selectedCustomer && showNewCust && newCust.name.trim();
+    if (custRequired && !selectedCustomer && !creatingCust) {
+      setError('Este negocio requiere registrar el cliente: búscalo o créalo antes de finalizar.');
+      return;
+    }
+    if (creatingCust) {
+      if (custFieldReq('document') && !newCust.document.trim()) { setError('El documento del cliente es obligatorio.'); return; }
+      if (custFieldReq('phone') && !newCust.phone.trim()) { setError('El teléfono del cliente es obligatorio.'); return; }
+    }
     setBusy(true);
     try {
       // Resuelve el cliente: existente, nuevo (se crea) o ninguno.
@@ -455,43 +528,7 @@ export default function Orders() {
               </table>
 
               {/* -------- Cliente: elegir existente o crear nuevo -------- */}
-              <div className="order-customer-block">
-                <div className="oc-label">Cliente (opcional)</div>
-                {selectedCustomer ? (
-                  <div className="oc-selected">
-                    <div>
-                      <strong>{selectedCustomer.name}</strong>
-                      {selectedCustomer.document && <span className="muted"> · {selectedCustomer.document}</span>}
-                    </div>
-                    <button type="button" className="btn ghost sm" onClick={resetCustomer}>Quitar</button>
-                  </div>
-                ) : showNewCust ? (
-                  <div className="oc-new">
-                    <input placeholder="Nombre" value={newCust.name} onChange={setNew('name')} autoFocus />
-                    <input placeholder="Documento (opcional)" value={newCust.document} onChange={setNew('document')} />
-                    <input placeholder="Teléfono (opcional)" value={newCust.phone} onChange={setNew('phone')} inputMode="tel" />
-                    <input placeholder="Correo (opcional)" value={newCust.email} onChange={setNew('email')} type="email" />
-                    <button type="button" className="btn ghost sm" onClick={() => { setShowNewCust(false); setNewCust(EMPTY_CUST); }}>
-                      Cancelar
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <input className="oc-search" placeholder="Buscar cliente por nombre o documento…"
-                      value={custSearch} onChange={(e) => setCustSearch(e.target.value)} />
-                    {custMatches.length > 0 && (
-                      <div className="oc-results">
-                        {custMatches.map((c) => (
-                          <button type="button" key={c.id} onClick={() => pickCustomer(c)}>
-                            {c.name}{c.document && <span className="muted"> · {c.document}</span>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <button type="button" className="btn ghost sm" onClick={() => setShowNewCust(true)}>+ Nuevo cliente</button>
-                  </>
-                )}
-              </div>
+              <CustomerBlock desktop {...customerBlockProps} />
             </div>
           )}
         </section>
@@ -578,12 +615,16 @@ export default function Orders() {
                       )}
                     </>
                   )}
+                  {/* En móvil el resumen queda tapado por esta hoja: el
+                      cliente se captura aquí mismo. */}
+                  <CustomerBlock {...customerBlockProps} />
                 </>
               )}
             </div>
 
             {/* Totales y acción (fijos abajo) */}
             <div className="pos-panel-foot">
+              {error && stage === 'pay' && <div className="form-error">{error}</div>}
               <div className="totals">
                 {stage === 'pay' && discountUsd > 0.005 ? (
                   <>

@@ -417,6 +417,11 @@ export async function updateOrderSettings(rateConfig) {
   return unwrap(await supabase.rpc('update_order_settings', { p_rate_config: rateConfig }));
 }
 
+// Cliente en la venta: si es obligatorio y qué datos exige al crearlo del POS.
+export async function updateCustomerConfig(customerConfig) {
+  return unwrap(await supabase.rpc('update_customer_config', { p_customer_config: customerConfig }));
+}
+
 // Descuento por pago en divisa (%) y umbral de stock bajo (%).
 export async function updateBusinessSettings({ foreignDiscountPercent, lowStockPercent }) {
   return unwrap(await supabase.rpc('update_business_settings', {

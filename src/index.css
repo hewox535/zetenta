@@ -706,6 +706,8 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 
 /* Selector / creación de cliente en el resumen del pedido */
 .order-customer-block { padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+/* Instancia del bloque de cliente dentro de la hoja de pago: solo móvil */
+.oc-mobile { display: none; }
 .oc-label { font-size: 14px; font-weight: 600; }
 .oc-selected {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -930,6 +932,8 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   }
   .pos-panel-body { display: none; overflow-y: auto; }
   .pos-panel.open .pos-panel-body { display: flex; }
+  /* Cliente dentro de la hoja de pago (el resumen queda tapado por la hoja) */
+  .oc-mobile { display: flex; padding: 0 16px 12px; }
   .cart-lines { max-height: none; }
   /* Espacio para que la hoja no tape el contenido al final */
   .pos-page { padding-bottom: 72px; }
