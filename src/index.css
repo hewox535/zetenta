@@ -710,6 +710,9 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .oc-mobile { display: none; }
 /* Lista de tarjetas del inventario: solo móvil (la tabla vive en desktop) */
 .inv-cards { display: none; }
+/* Listas móviles genéricas (clientes, historial de ventas): .m-hide oculta
+   la tabla en móvil y .mlist muestra las tarjetas */
+.mlist { display: none; }
 .oc-label { font-size: 14px; font-weight: 600; }
 .oc-selected {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -942,6 +945,32 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   .inv-card-body .icon-btn { width: 38px; height: 38px; }
   .inv-card-foot { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
   .inv-card-foot .btn { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* Listas móviles genéricas: clientes e historial de ventas */
+  .m-hide { display: none; }
+  .mlist { display: flex; flex-direction: column; gap: 10px; }
+  .mcard {
+    display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow); color: var(--text);
+  }
+  .mcard-link { text-decoration: none; }
+  .mcard-link:active { background: var(--accent-soft); }
+  .mcard-check { flex: 0 0 auto; width: 20px; height: 20px; }
+  .mcard-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .mcard-title { font-weight: 600; font-size: 14.5px; }
+  .mcard-info .muted { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mcard-actions { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, 38px); gap: 4px; }
+  .mcard-actions .icon-btn { width: 38px; height: 38px; }
+  .mcard-amount { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-variant-numeric: tabular-nums; }
+  .mcard-amount .muted { font-size: 12px; }
+  .mcard-chev { flex: 0 0 auto; color: var(--text-2); font-size: 20px; line-height: 1; }
+
+  /* Inventario: acciones del encabezado ordenadas para móvil */
+  .inv-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+  .inv-actions > * { width: 100%; justify-content: center; }
+  .inv-actions > .btn.primary { grid-column: 1 / -1; order: -1; }
+  .inv-actions > a:first-child { grid-column: 1 / -1; order: 3; }
 
   .comprobante { padding: 12px; }
 

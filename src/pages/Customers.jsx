@@ -326,7 +326,8 @@ export default function Customers() {
       ) : filtered.length === 0 ? (
         <div className="empty">Ningún cliente coincide con la búsqueda.</div>
       ) : (
-        <div className="card table-card">
+        <>
+        <div className="card table-card m-hide">
           <table className="list">
             <thead>
               <tr>
@@ -358,6 +359,36 @@ export default function Customers() {
             </tbody>
           </table>
         </div>
+
+        {/* -------- Lista móvil: tarjetas en vez de tabla con scroll -------- */}
+        <div className="mlist">
+          {filtered.map((c) => (
+            <div className="mcard" key={c.id}>
+              {campaign && (
+                <input type="checkbox" className="mcard-check" checked={selected.has(c.id)}
+                  onChange={() => toggleSel(c.id)} aria-label={`Marcar ${c.name}`} />
+              )}
+              <div className="mcard-info">
+                <span className="mcard-title">{c.name}</span>
+                {c.document && <span className="muted mono">{c.document}</span>}
+                <span className="muted">{[c.phone, c.email].filter(Boolean).join(' · ') || 'Sin contacto'}</span>
+              </div>
+              <div className="mcard-actions">
+                {waNumber(c.phone) && (
+                  <a className="icon-btn" title="WhatsApp" aria-label="WhatsApp" href={waHref(c)} target="_blank" rel="noreferrer">{ICON.wa}</a>
+                )}
+                {c.email && (
+                  <a className="icon-btn" title="Correo" aria-label="Correo"
+                    href={`mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`}>{ICON.mail}</a>
+                )}
+                <button className="icon-btn" title="Editar" aria-label={`Editar ${c.name}`}
+                  onClick={() => { startEdit(c); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{ICON.edit}</button>
+                <button className="icon-btn danger" title="Eliminar" aria-label={`Eliminar ${c.name}`} onClick={() => onDelete(c)}>{ICON.trash}</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        </>
       )}
     </div>
   );

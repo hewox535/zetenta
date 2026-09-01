@@ -38,7 +38,8 @@ export default function OrdersHistory() {
       ) : orders.length === 0 ? (
         <div className="empty">Aún no hay ventas. Registra la primera en <Link to="/orders">Ventas</Link>.</div>
       ) : (
-        <div className="card table-card">
+        <>
+        <div className="card table-card m-hide">
           <table className="list">
             <thead>
               <tr>
@@ -68,6 +69,29 @@ export default function OrdersHistory() {
             </tbody>
           </table>
         </div>
+
+        {/* -------- Lista móvil: cada venta es una tarjeta que abre el detalle -------- */}
+        <div className="mlist">
+          {orders.map((o) => (
+            <Link to={`/orders/${o.id}`} className="mcard mcard-link" key={o.id}>
+              <div className="mcard-info">
+                <span className="mcard-title">
+                  <span className="mono">#{o.number}</span> · {o.customer_name || 'Sin cliente'}
+                </span>
+                <span className="muted">
+                  {formatDate(o.created_at)}{staffName.get(o.created_by) ? ` · ${staffName.get(o.created_by)}` : ''}
+                </span>
+                <span className="muted">{(o.order_payments || []).map((p) => p.method_name).join(', ') || '—'}</span>
+              </div>
+              <div className="mcard-amount">
+                <strong>{usd(o.total_usd)}</strong>
+                <span className="muted">{bs(o.total_ves)}</span>
+              </div>
+              <span className="mcard-chev" aria-hidden="true">›</span>
+            </Link>
+          ))}
+        </div>
+        </>
       )}
     </div>
   );

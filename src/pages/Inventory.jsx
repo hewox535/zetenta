@@ -454,7 +454,7 @@ export default function Inventory() {
           <h1>Inventario</h1>
           <p className="page-sub">Productos, variantes y movimientos de stock.</p>
         </div>
-        <div className="page-actions">
+        <div className="page-actions inv-actions">
           <Link to="/inventory/history" className="btn ghost">Historial completo</Link>
           <button className="btn ghost" title="Descarga el modelo con las columnas esperadas (ábrelo en Excel, llénalo y guárdalo como CSV)"
             onClick={() => downloadInvTemplate(varTax.map((t) => t.name))}>
