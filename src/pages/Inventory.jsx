@@ -635,9 +635,8 @@ export default function Inventory() {
                 <label>SKU
                   <input value={modal.sku} onChange={(e) => setM({ sku: e.target.value })} placeholder="CAM-OXF" />
                 </label>
-                <label>Unidad
-                  <input value={modal.unit} onChange={(e) => setM({ unit: e.target.value })} placeholder="und" />
-                </label>
+                {/* La unidad (products.unit) se mantiene internamente con su
+                    default 'und'; se configurará por negocio más adelante. */}
               </div>
 
               {(() => {
@@ -700,7 +699,7 @@ export default function Inventory() {
               {modal.mode === 'create' ? (
                 <div className="np-block">
                   {modal.cmode === 'simple' ? (
-                    <label className="short">Stock inicial
+                    <label className="short">Cantidad
                       <input type="number" step="1" min="0" value={modal.simpleStock}
                         onChange={(e) => setM({ simpleStock: e.target.value })} placeholder="0" />
                     </label>
@@ -906,7 +905,7 @@ function VarRows({ axisNames, termsFor, rows, onChange, emptyHint }) {
             </label>
           </div>
           <button type="button" className="var-row-del" aria-label="Quitar variación" title="Quitar variación"
-            onClick={() => onChange(rows.filter((_, j) => j !== i))}>×</button>
+            onClick={() => onChange(rows.filter((_, j) => j !== i))}>{ICON.trash}</button>
         </div>
       ))}
       <button type="button" className="btn ghost sm" onClick={() => onChange([...rows, newRow()])}>

@@ -575,7 +575,7 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .var-card-fields { display: flex; flex-wrap: wrap; gap: 10px; }
 .var-field { flex: 1 1 130px; min-width: 110px; font-size: 12.5px; }
 .var-field.num { flex: 0 1 96px; min-width: 84px; }
-.var-row-del { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: none; background: transparent; color: var(--danger); font-size: 19px; line-height: 1; cursor: pointer; border-radius: 8px; }
+.var-row-del { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; display: grid; place-items: center; border: none; background: transparent; color: var(--danger); cursor: pointer; border-radius: 8px; }
 .var-row-del:hover { background: var(--danger-bg); }
 
 /* Pills tipo radio: elegir producto simple o con variaciones */
