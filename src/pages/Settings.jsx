@@ -9,7 +9,7 @@ import {
   updateOrderSettings, updateBusinessSettings,
   fetchBranches, createBranch, updateBranch, deleteBranch,
   fetchUserBranches, setUserBranches,
-  fetchStaff, createStaff, deleteStaff, setStaffRole,
+  fetchStaff, createStaff, deleteStaff, setStaffRole, setStaffPermissions,
   updateNotificationPrefs,
 } from '../lib/api';
 import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/push';
@@ -821,8 +821,15 @@ function BranchesSection({ business }) {
 // ---------- Personal: administradores y vendedoras ----------
 const EMPTY_STAFF = { username: '', email: '', password: '', fullName: '' };
 const ROLE_LABEL = { admin: 'Administrador', seller: 'Vendedora' };
+// Módulos de administración que el admin puede delegar a una vendedora.
+const PERM_OPTIONS = [
+  ['inventory', 'Inventario'],
+  ['stats', 'Estadísticas'],
+  ['retentions', 'Retenciones'],
+];
 
 function StaffSection({ profile }) {
+  const { capabilities } = useAuth();
   const [staff, setStaff] = useState(null);
   const [form, setForm] = useState(EMPTY_STAFF);
   const [showNew, setShowNew] = useState(false);
@@ -858,6 +865,15 @@ function StaffSection({ profile }) {
     } catch (err) { setError(err.message); }
   }
 
+  async function onTogglePerm(u, key) {
+    setError(null); setOk(null);
+    const permissions = { ...(u.permissions || {}), [key]: !u.permissions?.[key] };
+    try {
+      const updated = await setStaffPermissions(u.id, permissions);
+      setStaff((prev) => prev.map((x) => (x.id === u.id ? { ...x, permissions: updated.permissions } : x)));
+    } catch (err) { setError(err.message); }
+  }
+
   async function onDelete(u) {
     if (!confirm(`¿Eliminar a ${u.full_name || u.email}? Perderá el acceso.`)) return;
     setError(null); setOk(null);
@@ -873,7 +889,8 @@ function StaffSection({ profile }) {
         <h2>Personal</h2>
         <p className="hint">
           El <strong>administrador</strong> tiene acceso completo (inventario, estadísticas,
-          configuración). La <strong>vendedora</strong> solo accede a Ventas y Clientes.
+          configuración). La <strong>vendedora</strong> accede a Ventas y Clientes, más los
+          módulos extra que le actives aquí.
         </p>
         {staff === null ? (
           <div className="empty">Cargando…</div>
@@ -882,28 +899,48 @@ function StaffSection({ profile }) {
             {staff.map((u) => {
               const isMe = u.id === profile?.id;
               const isPlatform = u.role === 'platform_admin';
+              const grantable = u.business_role === 'seller' && !isPlatform
+                ? PERM_OPTIONS.filter(([key]) => capabilities?.[key]) : [];
               return (
-                <div className="method-row" key={u.id}>
-                  <div className="method-info">
-                    <span className="method-name">
-                      {u.full_name || u.email || (u.username ? `@${u.username}` : '')}{isMe && <span className="muted"> · tú</span>}
-                    </span>
-                    <span className="muted">{u.email || (u.username ? `@${u.username}` : '')}</span>
+                <div className="staff-item" key={u.id}>
+                  <div className="method-row">
+                    <div className="method-info">
+                      <span className="method-name">
+                        {u.full_name || u.email || (u.username ? `@${u.username}` : '')}{isMe && <span className="muted"> · tú</span>}
+                      </span>
+                      <span className="muted">{u.email || (u.username ? `@${u.username}` : '')}</span>
+                    </div>
+                    <div className="method-actions">
+                      {isPlatform ? (
+                        <span className="badge adjustment">Plataforma</span>
+                      ) : (
+                        <select value={u.business_role} disabled={isMe}
+                          onChange={(e) => onChangeRole(u, e.target.value)}>
+                          <option value="admin">{ROLE_LABEL.admin}</option>
+                          <option value="seller">{ROLE_LABEL.seller}</option>
+                        </select>
+                      )}
+                      {!isMe && !isPlatform && (
+                        <button type="button" className="btn danger sm" onClick={() => onDelete(u)}>Eliminar</button>
+                      )}
+                    </div>
                   </div>
-                  <div className="method-actions">
-                    {isPlatform ? (
-                      <span className="badge adjustment">Plataforma</span>
-                    ) : (
-                      <select value={u.business_role} disabled={isMe}
-                        onChange={(e) => onChangeRole(u, e.target.value)}>
-                        <option value="admin">{ROLE_LABEL.admin}</option>
-                        <option value="seller">{ROLE_LABEL.seller}</option>
-                      </select>
-                    )}
-                    {!isMe && !isPlatform && (
-                      <button type="button" className="btn danger sm" onClick={() => onDelete(u)}>Eliminar</button>
-                    )}
-                  </div>
+                  {grantable.length > 0 && (
+                    <div className="perm-row">
+                      <span className="muted">Acceso extra:</span>
+                      {grantable.map(([key, label]) => (
+                        <label className="perm-item" key={key}>
+                          <button type="button" className={`switch sm${u.permissions?.[key] ? ' on' : ''}`}
+                            role="switch" aria-checked={!!u.permissions?.[key]}
+                            aria-label={`${label} para ${u.full_name || u.username || u.email}`}
+                            onClick={() => onTogglePerm(u, key)}>
+                            <span className="switch-knob" />
+                          </button>
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

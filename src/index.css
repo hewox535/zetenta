@@ -372,6 +372,16 @@ a.icon-btn { text-decoration: none; }
   transition: transform .18s ease;
 }
 .switch.on .switch-knob { transform: translateX(18px); }
+.switch.sm { width: 34px; height: 20px; }
+.switch.sm .switch-knob { width: 16px; height: 16px; }
+.switch.sm.on .switch-knob { transform: translateX(14px); }
+
+/* Permisos extra por vendedora (Negocio → Personal) */
+.staff-item { border-bottom: 1px solid var(--border); }
+.staff-item .method-row { border-bottom: none; padding-bottom: 6px; }
+.perm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 0 0 12px; }
+.perm-row > .muted { font-size: 12.5px; }
+.perm-item { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
 
 /* ============================================================
    Comprobante: réplica exacta del formato oficial (Google Sheet)

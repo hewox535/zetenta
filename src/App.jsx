@@ -57,11 +57,19 @@ function RequireAdmin({ children }) {
   return children;
 }
 
-// Pantallas de administración del negocio (inventario, stats, configuración):
-// la vendedora no accede a ellas.
+// Pantallas de administración del negocio (configuración): la vendedora no
+// accede a ellas.
 function RequireBusinessAdmin({ children }) {
   const { isBusinessAdmin } = useAuth();
   if (!isBusinessAdmin) return <Navigate to="/" replace />;
+  return children;
+}
+
+// Módulos de administración delegables: entra el admin del negocio o una
+// vendedora con el permiso otorgado (inventory/stats/retentions).
+function RequirePermission({ name, children }) {
+  const { isBusinessAdmin, permissions } = useAuth();
+  if (!isBusinessAdmin && !permissions?.[name]) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -96,18 +104,18 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<RequireAuth><Shell /></RequireAuth>}>
             <Route index element={<Home />} />
-            <Route path="retentions" element={<RequireBusinessAdmin><RequireCapability name="retentions"><Retentions /></RequireCapability></RequireBusinessAdmin>} />
-            <Route path="retentions/new" element={<RequireBusinessAdmin><RequireCapability name="retentions"><RetentionNew /></RequireCapability></RequireBusinessAdmin>} />
-            <Route path="retentions/:id/edit" element={<RequireBusinessAdmin><RequireCapability name="retentions"><RetentionNew /></RequireCapability></RequireBusinessAdmin>} />
-            <Route path="retentions/:id" element={<RequireBusinessAdmin><RetentionView /></RequireBusinessAdmin>} />
-            <Route path="suppliers" element={<RequireBusinessAdmin><RequireCapability name="retentions"><Suppliers /></RequireCapability></RequireBusinessAdmin>} />
+            <Route path="retentions" element={<RequirePermission name="retentions"><RequireCapability name="retentions"><Retentions /></RequireCapability></RequirePermission>} />
+            <Route path="retentions/new" element={<RequirePermission name="retentions"><RequireCapability name="retentions"><RetentionNew /></RequireCapability></RequirePermission>} />
+            <Route path="retentions/:id/edit" element={<RequirePermission name="retentions"><RequireCapability name="retentions"><RetentionNew /></RequireCapability></RequirePermission>} />
+            <Route path="retentions/:id" element={<RequirePermission name="retentions"><RetentionView /></RequirePermission>} />
+            <Route path="suppliers" element={<RequirePermission name="retentions"><RequireCapability name="retentions"><Suppliers /></RequireCapability></RequirePermission>} />
             <Route path="customers" element={<RequireCapability name="customers"><Customers /></RequireCapability>} />
-            <Route path="inventory" element={<RequireBusinessAdmin><RequireCapability name="inventory"><Inventory /></RequireCapability></RequireBusinessAdmin>} />
-            <Route path="inventory/history" element={<RequireBusinessAdmin><RequireCapability name="inventory"><InventoryHistory /></RequireCapability></RequireBusinessAdmin>} />
+            <Route path="inventory" element={<RequirePermission name="inventory"><RequireCapability name="inventory"><Inventory /></RequireCapability></RequirePermission>} />
+            <Route path="inventory/history" element={<RequirePermission name="inventory"><RequireCapability name="inventory"><InventoryHistory /></RequireCapability></RequirePermission>} />
             <Route path="orders" element={<RequireCapability name="orders"><Orders /></RequireCapability>} />
             <Route path="orders/history" element={<RequireCapability name="orders"><OrdersHistory /></RequireCapability>} />
             <Route path="orders/:id" element={<RequireCapability name="orders"><OrderView /></RequireCapability>} />
-            <Route path="stats" element={<RequireBusinessAdmin><RequireCapability name="stats"><Stats /></RequireCapability></RequireBusinessAdmin>} />
+            <Route path="stats" element={<RequirePermission name="stats"><RequireCapability name="stats"><Stats /></RequireCapability></RequirePermission>} />
             <Route path="settings" element={<RequireBusinessAdmin><Settings /></RequireBusinessAdmin>} />
             <Route path="account" element={<Account />} />
             <Route path="admin" element={<RequireAdmin><Admin /></RequireAdmin>} />

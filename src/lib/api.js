@@ -429,7 +429,7 @@ export async function updateBusinessSettings({ foreignDiscountPercent, lowStockP
 
 export async function fetchStaff() {
   return unwrap(await supabase.from('profiles')
-    .select('id, full_name, email, username, business_role, role, all_branches')
+    .select('id, full_name, email, username, business_role, role, all_branches, permissions')
     .not('business_id', 'is', null)
     .order('full_name'));
 }
@@ -461,6 +461,11 @@ export async function deleteStaff(userId) {
 
 export async function setStaffRole(userId, role) {
   return unwrap(await supabase.rpc('set_staff_role', { p_user: userId, p_role: role }));
+}
+
+// Permisos por módulo de una vendedora (inventory/stats/retentions).
+export async function setStaffPermissions(userId, permissions) {
+  return unwrap(await supabase.rpc('set_staff_permissions', { p_user: userId, p_permissions: permissions }));
 }
 
 // ---------- Clientes ----------

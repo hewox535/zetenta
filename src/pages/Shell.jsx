@@ -31,7 +31,7 @@ const Icon = {
 };
 
 export default function Shell() {
-  const { profile, business, capabilities, isAdmin, isBusinessAdmin, signOut } = useAuth();
+  const { profile, business, capabilities, permissions, isAdmin, isBusinessAdmin, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   // Menú lateral contraído a solo íconos (preferencia por dispositivo; el
   // default es abierto). En móvil no aplica: ahí es un cajón deslizante.
@@ -53,21 +53,21 @@ export default function Shell() {
   if (capabilities.customers) {
     items.push({ to: '/customers', label: 'Clientes', icon: Icon.user });
   }
-  // Módulos de administración del negocio: ocultos para la vendedora.
-  if (isBusinessAdmin) {
-    if (capabilities.inventory) {
-      items.push({ to: '/inventory', label: 'Inventario', icon: Icon.box });
-    }
-    if (capabilities.stats) {
-      items.push({ to: '/stats', label: 'Estadísticas', icon: Icon.chart });
-    }
-    if (capabilities.retentions) {
-      items.push({ to: '/retentions', label: 'Retenciones', icon: Icon.doc });
-      items.push({ to: '/suppliers', label: 'Proveedores', icon: Icon.people });
-    }
-    if (business) {
-      items.push({ to: '/settings', label: 'Negocio', icon: Icon.gear });
-    }
+  // Módulos de administración del negocio: para el admin, o para la vendedora
+  // con el permiso otorgado en Negocio → Personal.
+  const canModule = (name) => capabilities[name] && (isBusinessAdmin || !!permissions?.[name]);
+  if (canModule('inventory')) {
+    items.push({ to: '/inventory', label: 'Inventario', icon: Icon.box });
+  }
+  if (canModule('stats')) {
+    items.push({ to: '/stats', label: 'Estadísticas', icon: Icon.chart });
+  }
+  if (canModule('retentions')) {
+    items.push({ to: '/retentions', label: 'Retenciones', icon: Icon.doc });
+    items.push({ to: '/suppliers', label: 'Proveedores', icon: Icon.people });
+  }
+  if (isBusinessAdmin && business) {
+    items.push({ to: '/settings', label: 'Negocio', icon: Icon.gear });
   }
   if (isAdmin) {
     items.push({ to: '/admin', label: 'Administración', icon: Icon.shield });

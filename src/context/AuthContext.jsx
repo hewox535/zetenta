@@ -87,6 +87,9 @@ export function AuthProvider({ children }) {
     isBusinessAdmin: profile?.role === 'platform_admin' || profile?.business_role === 'admin',
     isSeller: profile?.role !== 'platform_admin' && profile?.business_role === 'seller',
     capabilities: business?.capabilities ?? {},
+    // Permisos extra otorgados por el admin del negocio a una vendedora
+    // (inventory/stats/retentions). El admin tiene todo sin necesitarlos.
+    permissions: profile?.permissions ?? {},
     refreshBusiness,
     refreshProfile,
     signIn,
