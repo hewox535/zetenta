@@ -432,14 +432,14 @@ export default function Inventory() {
 
   const moveButtons = (p, v) => (
     <>
-      <button className="icon-btn" title="Entrada (sumar stock)"
+      <button className="icon-btn" title="Entrada (sumar stock)" aria-label="Entrada (sumar stock)"
         onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'in', quantity: '', note: '' })}>{ICON.plus}</button>
-      <button className="icon-btn" title="Salida (restar stock)"
+      <button className="icon-btn" title="Salida (restar stock)" aria-label="Salida (restar stock)"
         onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'out', quantity: '', note: '' })}>{ICON.minus}</button>
-      <button className="icon-btn" title="Ajustar stock"
+      <button className="icon-btn" title="Ajustar stock" aria-label="Ajustar stock"
         onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'adjustment', quantity: String(branchStock(v, branchId)), note: '' })}>{ICON.adjust}</button>
       {multiBranch && (
-        <button className="icon-btn" title="Trasladar a otra sucursal"
+        <button className="icon-btn" title="Trasladar a otra sucursal" aria-label="Trasladar a otra sucursal"
           onClick={() => setTransfer({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes, p.variant_axes) || 'Estándar', to: '', quantity: '' })}>{ICON.transfer}</button>
       )}
     </>
@@ -515,7 +515,8 @@ export default function Inventory() {
         {visibleProducts.length === 0 ? (
           <div className="empty">Ningún producto coincide con el filtro.</div>
         ) : (
-        <div className="card table-card">
+        <>
+        <div className="card table-card inv-table">
           <table className="list">
             <thead>
               <tr><th>Producto</th><th>SKU</th><th className="num">Precio</th><th className="num">Stock</th><th /></tr>
@@ -594,6 +595,75 @@ export default function Inventory() {
             </tbody>
           </table>
         </div>
+
+        {/* -------- Lista móvil: tarjetas expandibles en vez de tabla con
+             scroll horizontal. Mismo estado de expansión que la tabla. -------- */}
+        <div className="inv-cards">
+          {visibleProducts.map((p) => {
+            const simple = isSimple(p);
+            const dv = defaultVariant(p);
+            const open = expanded[p.id];
+            const stock = variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0);
+            const hasLow = simple ? (dv && isLow(dv)) : productHasLow(p);
+            return (
+              <div className="inv-card" key={p.id}>
+                <button type="button" className="inv-card-head" aria-expanded={!!open}
+                  onClick={() => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }))}>
+                  <span className="list-thumb">
+                    {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
+                  </span>
+                  <span className="inv-card-info">
+                    <span className="inv-card-name">
+                      {p.name}
+                      {hasLow && <span className="badge low">Bajo</span>}
+                    </span>
+                    <span className="muted">
+                      {p.sku ? `${p.sku} · ` : ''}{money(p.price)} · <strong>{stock}</strong> en stock
+                      {!simple && ` · ${variantsOf(p).length} variantes`}
+                    </span>
+                    {(p.product_terms || []).length > 0 && (
+                      <span className="muted inv-card-tags">
+                        {p.product_terms.map((pt) => termName.get(pt.term_id)).filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                  </span>
+                  <span className={`inv-card-chev${open ? ' open' : ''}`} aria-hidden="true">{ICON.chevron}</span>
+                </button>
+                {open && (
+                  <div className="inv-card-body">
+                    {simple && dv ? (
+                      <div className="inv-var-row">
+                        <div className="inv-var-info">
+                          <span className="muted">Stock: <strong>{branchStock(dv, branchId)}</strong>{multiBranch ? ` · total ${Number(dv.stock)}` : ''}</span>
+                        </div>
+                        <div className="inv-var-actions">{moveButtons(p, dv)}</div>
+                      </div>
+                    ) : variantsOf(p).map((v) => (
+                      <div className="inv-var-row" key={v.id}>
+                        <div className="inv-var-info">
+                          <span>{variantLabel(v.attributes, p.variant_axes) || 'Estándar'}{isLow(v) && <span className="badge low">Bajo</span>}</span>
+                          <span className="muted">
+                            <strong>{branchStock(v, branchId)}</strong> en stock · {v.price != null ? money(v.price) : money(p.price)}
+                          </span>
+                        </div>
+                        <div className="inv-var-actions">
+                          {moveButtons(p, v)}
+                          <button className="icon-btn danger" title="Quitar variante" aria-label="Quitar variante"
+                            onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="inv-card-foot">
+                      <button className="btn ghost sm" onClick={() => openEdit(p)}>{ICON.edit} Editar</button>
+                      <button className="btn danger sm" onClick={() => onDeleteProduct(p)}>{ICON.trash} Eliminar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        </>
         )}
         </>
       )}
