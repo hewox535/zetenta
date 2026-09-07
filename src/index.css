@@ -960,6 +960,7 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   .mcard-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .mcard-title { font-weight: 600; font-size: 14.5px; }
   .mcard-info .muted { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mcard-info-link { text-decoration: none; color: inherit; }
   .mcard-actions { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, 38px); gap: 4px; }
   .mcard-actions .icon-btn { width: 38px; height: 38px; }
   .mcard-amount { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-variant-numeric: tabular-nums; }

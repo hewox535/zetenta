@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { fetchSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../lib/api';
 
+const ICON = {
+  edit: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16v4z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.6"/></svg>,
+  trash: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M6 7l1 12a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9L18 7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+};
+
 export default function Suppliers() {
   const { business } = useAuth();
   const [rows, setRows] = useState(null);
@@ -88,7 +93,8 @@ export default function Suppliers() {
       ) : rows.length === 0 ? (
         <div className="empty">Aún no tienes proveedores registrados.</div>
       ) : (
-        <div className="card table-card">
+        <>
+        <div className="card table-card m-hide">
           <table className="list">
             <thead>
               <tr><th>Razón social</th><th>RIF</th><th /></tr>
@@ -107,6 +113,24 @@ export default function Suppliers() {
             </tbody>
           </table>
         </div>
+
+        {/* -------- Lista móvil -------- */}
+        <div className="mlist">
+          {rows.map((s) => (
+            <div className="mcard" key={s.id}>
+              <div className="mcard-info">
+                <span className="mcard-title">{s.name}</span>
+                <span className="muted mono">{s.rif}</span>
+              </div>
+              <div className="mcard-actions">
+                <button className="icon-btn" title="Editar" aria-label={`Editar ${s.name}`}
+                  onClick={() => { startEdit(s); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{ICON.edit}</button>
+                <button className="icon-btn danger" title="Eliminar" aria-label={`Eliminar ${s.name}`} onClick={() => onDelete(s)}>{ICON.trash}</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        </>
       )}
     </div>
   );
