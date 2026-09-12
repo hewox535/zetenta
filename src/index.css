@@ -525,9 +525,29 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .variant-row td { background: var(--accent-soft); }
 .variant-cell { padding-left: 54px !important; color: var(--text); font-weight: 500; }
 
-/* Barra de filtros del inventario (tipo + categorías) */
+/* Menú desplegable del header (⋯): oculto en escritorio, donde las acciones
+   caben como botones; en móvil recoge las acciones secundarias. */
+.inv-more { position: relative; display: none; }
+.inv-more-btn { width: 40px; height: 40px; border-radius: var(--radius-sm); }
+.menu-backdrop { position: fixed; inset: 0; z-index: 29; }
+.menu-pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
+  min-width: 210px; padding: 6px; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow);
+}
+.menu-item {
+  display: flex; align-items: center; gap: 8px; padding: 11px 12px;
+  border: none; background: transparent; border-radius: 8px;
+  font: inherit; font-size: 14px; color: var(--text); text-align: left;
+  cursor: pointer; text-decoration: none;
+}
+.menu-item:hover, .menu-item:active { background: var(--accent-soft); text-decoration: none; }
+
+/* Barra de filtros del inventario (buscador + tipo + categorías) */
 .inv-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
 .inv-filters select { width: auto; padding: 7px 32px 7px 12px; font-size: 14px; }
+.inv-search { flex: 1 1 220px; min-width: 160px; }
 .seg.sm .seg-btn { padding: 6px 14px; font-size: 12px; }
 .variant-config { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
 .variant-axis-pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
@@ -967,11 +987,12 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   .mcard-amount .muted { font-size: 12px; }
   .mcard-chev { flex: 0 0 auto; color: var(--text-2); font-size: 20px; line-height: 1; }
 
-  /* Inventario: acciones del encabezado ordenadas para móvil */
-  .inv-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
-  .inv-actions > * { width: 100%; justify-content: center; }
-  .inv-actions > .btn.primary { grid-column: 1 / -1; order: -1; }
-  .inv-actions > a:first-child { grid-column: 1 / -1; order: 3; }
+  /* Inventario: en móvil una sola fila — "+ Nuevo producto" a lo ancho y el
+     menú ⋯ con las acciones secundarias (historial, plantilla, importar). */
+  .inv-actions { width: 100%; gap: 8px; }
+  .inv-actions > .inv-desktop { display: none; }
+  .inv-actions > .btn.primary { flex: 1; justify-content: center; }
+  .inv-more { display: block; flex: 0 0 auto; }
 
   .comprobante { padding: 12px; }
 
