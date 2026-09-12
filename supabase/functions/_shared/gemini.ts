@@ -46,29 +46,44 @@ export interface ExtractedInvoice {
   vat_rate: number;
 }
 
+// 503/429/500 son fallas transitorias de Gemini (sobrecarga): se reintenta con
+// espera creciente antes de rendirse.
+const RETRYABLE = new Set([429, 500, 503]);
+const RETRY_DELAYS_MS = [1000, 2500, 5000];
+
 export async function extractInvoiceImage(imageBase64: string, mimeType: string): Promise<ExtractedInvoice> {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY no está configurada en el servidor.');
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { inline_data: { mime_type: mimeType, data: imageBase64 } },
-            { text: PROMPT },
-          ],
-        }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-          temperature: 0,
-        },
-      }),
-    },
-  );
-  if (!res.ok) {
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: mimeType, data: imageBase64 } },
+              { text: PROMPT },
+            ],
+          }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: RESPONSE_SCHEMA,
+            temperature: 0,
+          },
+        }),
+      },
+    );
+    if (res.ok) break;
+    if (RETRYABLE.has(res.status) && attempt < RETRY_DELAYS_MS.length) {
+      await res.body?.cancel();
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+      continue;
+    }
+    if (RETRYABLE.has(res.status)) {
+      throw new Error('El servicio de lectura de facturas está saturado en este momento. Intenta de nuevo en unos segundos.');
+    }
     const detail = (await res.text()).slice(0, 300);
     throw new Error(`El modelo respondió ${res.status}: ${detail}`);
   }
