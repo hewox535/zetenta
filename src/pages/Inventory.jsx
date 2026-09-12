@@ -122,6 +122,7 @@ const ICON = {
   adjust: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 8h11M19 8h1M4 16h1M9 16h11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><circle cx="17" cy="8" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.6"/><circle cx="7" cy="16" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.6"/></svg>,
   transfer: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   upload: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 16V5M8 9l4-4 4 4M5 19h14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  dots: <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="5" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="19" r="1.7" fill="currentColor"/></svg>,
 };
 
 // Selector con las opciones existentes + "＋ Otro…" para escribir un valor nuevo.
@@ -161,11 +162,13 @@ export default function Inventory() {
   const [busy, setBusy] = useState(false);
 
   const [taxonomies, setTaxonomies] = useState([]);
+  const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({});
   const [ptype, setPtype] = useState('all');   // 'all' | 'variants' | 'simple'
   const [expanded, setExpanded] = useState({});
   const [move, setMove] = useState(null);
   const [modal, setModal] = useState(null);   // modal crear/editar producto
+  const [moreOpen, setMoreOpen] = useState(false); // menú ⋯ del header (móvil)
 
   const catTax = taxonomies.filter((t) => t.kind !== 'variant');
   const varTax = taxonomies.filter((t) => t.kind === 'variant');
@@ -187,9 +190,19 @@ export default function Inventory() {
   const termName = new Map();
   taxonomies.forEach((t) => t.taxonomy_terms.forEach((term) => termName.set(term.id, term.name)));
 
+  // Búsqueda sin acentos sobre nombre, SKUs (producto y variantes), valores de
+  // variación (Azul, M…) y etiquetas de categoría.
+  const q = normHeader(search);
+  const matchesSearch = (p) => !q || [
+    p.name, p.sku,
+    ...variantsOf(p).flatMap((v) => [v.sku, ...Object.values(v.attributes || {})]),
+    ...(p.product_terms || []).map((pt) => termName.get(pt.term_id)),
+  ].some((s) => s && normHeader(s).includes(q));
+
   const visibleProducts = (products || []).filter((p) => {
     if (ptype === 'variants' && isSimple(p)) return false;
     if (ptype === 'simple' && !isSimple(p)) return false;
+    if (!matchesSearch(p)) return false;
     return Object.entries(filters).every(([, termId]) =>
       !termId || (p.product_terms || []).some((pt) => pt.term_id === termId));
   });
@@ -455,16 +468,40 @@ export default function Inventory() {
           <p className="page-sub">Productos, variantes y movimientos de stock.</p>
         </div>
         <div className="page-actions inv-actions">
-          <Link to="/inventory/history" className="btn ghost">Historial completo</Link>
-          <button className="btn ghost" title="Descarga el modelo con las columnas esperadas (ábrelo en Excel, llénalo y guárdalo como CSV)"
+          <Link to="/inventory/history" className="btn ghost inv-desktop">Historial completo</Link>
+          <button className="btn ghost inv-desktop" title="Descarga el modelo con las columnas esperadas (ábrelo en Excel, llénalo y guárdalo como CSV)"
             onClick={() => downloadInvTemplate(varTax.map((t) => t.name))}>
             ⬇ Plantilla
           </button>
-          <label className="btn ghost">
+          <label className="btn ghost inv-desktop">
             ⬆ Importar CSV
             <input type="file" accept=".csv,text/csv" hidden disabled={busy} onChange={onImportProducts} />
           </label>
           <button className="btn primary" onClick={openCreate}>+ Nuevo producto</button>
+          {/* Móvil: Historial, Plantilla e Importar se recogen en un menú ⋯ */}
+          <div className="inv-more">
+            <button type="button" className="icon-btn inv-more-btn" aria-label="Más acciones"
+              aria-haspopup="menu" aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((o) => !o)}>{ICON.dots}</button>
+            {moreOpen && (
+              <>
+                <div className="menu-backdrop" onClick={() => setMoreOpen(false)} />
+                <div className="menu-pop" role="menu">
+                  <Link to="/inventory/history" className="menu-item" role="menuitem"
+                    onClick={() => setMoreOpen(false)}>Historial completo</Link>
+                  <button type="button" className="menu-item" role="menuitem"
+                    onClick={() => { downloadInvTemplate(varTax.map((t) => t.name)); setMoreOpen(false); }}>
+                    ⬇ Descargar plantilla
+                  </button>
+                  <label className="menu-item" role="menuitem">
+                    ⬆ Importar CSV
+                    <input type="file" accept=".csv,text/csv" hidden disabled={busy}
+                      onChange={(e) => { setMoreOpen(false); onImportProducts(e); }} />
+                  </label>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -497,6 +534,8 @@ export default function Inventory() {
       ) : (
         <>
         <div className="inv-filters">
+          <input className="inv-search" type="search" placeholder="Buscar por nombre, SKU o variante…"
+            value={search} onChange={(e) => setSearch(e.target.value)} />
           <div className="seg sm">
             <button type="button" className={`seg-btn${ptype === 'all' ? ' active' : ''}`} onClick={() => setPtype('all')}>Todos</button>
             <button type="button" className={`seg-btn${ptype === 'variants' ? ' active' : ''}`} onClick={() => setPtype('variants')}>Con variantes</button>
@@ -513,7 +552,7 @@ export default function Inventory() {
           ))}
         </div>
         {visibleProducts.length === 0 ? (
-          <div className="empty">Ningún producto coincide con el filtro.</div>
+          <div className="empty">Ningún producto coincide con la búsqueda o los filtros.</div>
         ) : (
         <>
         <div className="card table-card inv-table">
