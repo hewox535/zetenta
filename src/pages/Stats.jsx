@@ -41,11 +41,22 @@ export default function Stats() {
   const stats = useMemo(() => {
     if (!orders) return null;
     const scoped = branchFilter === 'all' ? orders : orders.filter((o) => o.branch_id === branchFilter);
+    // Costo actual por variante/producto: respaldo para ventas anteriores al
+    // registro del costo en la línea (unit_cost_usd NULL).
+    const productCost = new Map();
+    const variantCost = new Map();
+    for (const p of allProducts) {
+      productCost.set(p.id, Number(p.cost) || 0);
+      for (const v of p.product_variants || []) {
+        variantCost.set(v.id, v.cost != null ? Number(v.cost) : (Number(p.cost) || 0));
+      }
+    }
     let revenueUsd = 0, revenueVes = 0;     // venta bruta (precio lista, antes de descuento)
     let receivedVes = 0, receivedUsd = 0;   // ingresos reales por moneda de pago
     let receivedTotalUsd = 0;               // ingreso neto real (lo que efectivamente entró), en USD
     let discountUsd = 0;
-    const byProduct = new Map();      // name → { qty, revenue }
+    let cogsUsd = 0;                        // costo de lo vendido
+    const byProduct = new Map();      // name → { qty, revenue, cost }
     const byMethod = new Map();       // etiqueta cuenta·método → usd
     const byAccount = new Map();      // cuenta → usd (ingreso por cuenta)
     const byDay = new Map();          // yyyy-mm-dd → usd
@@ -57,9 +68,15 @@ export default function Stats() {
       const day = (o.created_at || '').slice(0, 10);
       byDay.set(day, (byDay.get(day) || 0) + (Number(o.total_usd) || 0));
       for (const it of o.order_items || []) {
-        const cur = byProduct.get(it.name) || { qty: 0, revenue: 0 };
-        cur.qty += Number(it.quantity) || 0;
+        const qty = Number(it.quantity) || 0;
+        const unitCost = it.unit_cost_usd != null
+          ? Number(it.unit_cost_usd) || 0
+          : (variantCost.get(it.variant_id) ?? productCost.get(it.product_id) ?? 0);
+        const cur = byProduct.get(it.name) || { qty: 0, revenue: 0, cost: 0 };
+        cur.qty += qty;
         cur.revenue += Number(it.line_total_usd) || 0;
+        cur.cost += unitCost * qty;
+        cogsUsd += unitCost * qty;
         byProduct.set(it.name, cur);
         if (!productDays.has(it.name)) productDays.set(it.name, new Map());
         const pd = productDays.get(it.name);
@@ -82,8 +99,11 @@ export default function Stats() {
     // Baja rotación: productos del catálogo sin ninguna venta en el período.
     const sold = new Set(byProduct.keys());
     const noSales = allProducts.filter((p) => !sold.has(p.name)).map((p) => p.name);
+    const profitUsd = receivedTotalUsd - cogsUsd;
     return {
       revenueUsd, revenueVes, count, receivedVes, receivedUsd, receivedTotalUsd, discountUsd,
+      cogsUsd, profitUsd,
+      marginPct: receivedTotalUsd > 0 ? (profitUsd / receivedTotalUsd) * 100 : 0,
       avgTicket: count ? receivedTotalUsd / count : 0,
       topProducts,
       bottomProducts: [...topProducts].reverse().slice(0, 5),
@@ -97,8 +117,8 @@ export default function Stats() {
 
   function exportCsv() {
     if (!stats) return;
-    const rows = [['Producto', 'Cantidad', 'Ingresos USD']];
-    stats.topProducts.forEach((p) => rows.push([p.name, p.qty, p.revenue.toFixed(2)]));
+    const rows = [['Producto', 'Cantidad', 'Ingresos USD', 'Costo USD', 'Utilidad USD']];
+    stats.topProducts.forEach((p) => rows.push([p.name, p.qty, p.revenue.toFixed(2), p.cost.toFixed(2), (p.revenue - p.cost).toFixed(2)]));
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a');
@@ -154,6 +174,11 @@ export default function Stats() {
               </div>
             </div>
             <div className="card kpi">
+              <div className="kpi-label">Utilidad</div>
+              <div className="kpi-value">{usd(stats.profitUsd)}</div>
+              <div className="kpi-sub">Margen {stats.marginPct.toFixed(0)}%</div>
+            </div>
+            <div className="card kpi">
               <div className="kpi-label">Ventas</div>
               <div className="kpi-value">{stats.count}</div>
             </div>
@@ -176,7 +201,10 @@ export default function Stats() {
                   <button className="rank-row rank-click" key={p.name} onClick={() => setDetail(p.name)}>
                     <div className="rank-info">
                       <span className="rank-name">{p.name}</span>
-                      <span className="muted">{p.qty} und · {usd(p.revenue)}</span>
+                      <span className="muted">
+                        {p.qty} und · {usd(p.revenue)}
+                        {p.cost > 0 && ` · utilidad ${usd(p.revenue - p.cost)}`}
+                      </span>
                     </div>
                     <div className="rank-bar"><span style={{ width: `${(p.qty / maxProdQty) * 100}%` }} /></div>
                   </button>
@@ -214,6 +242,20 @@ export default function Stats() {
             </div>
 
             <div className="stats-side">
+              <section className="card vsection">
+                <h2>Utilidad</h2>
+                <p className="hint">
+                  Lo recibido menos el costo de lo vendido. El costo se congela al vender;
+                  las ventas previas al registro de costos usan el costo actual del producto.
+                </p>
+                <div className="totals">
+                  <div className="totals-row"><span>Ingresos (recibido)</span><span>{usd(stats.receivedTotalUsd)}</span></div>
+                  <div className="totals-row"><span>Costo de lo vendido</span><span>−{usd(stats.cogsUsd)}</span></div>
+                  <div className="totals-row grand"><span>Utilidad</span><span>{usd(stats.profitUsd)}</span></div>
+                  <div className="totals-row"><span className="muted">Margen</span><span className="muted">{stats.marginPct.toFixed(1)}%</span></div>
+                </div>
+              </section>
+
               <section className="card vsection">
                 <h2>Ingresos por moneda</h2>
                 <p className="hint">Lo que realmente entró a caja, por moneda de pago. Es lo que debe cuadrar con tus cuentas.</p>
