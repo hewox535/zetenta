@@ -326,6 +326,7 @@ a.icon-btn { text-decoration: none; }
 .filters select { width: auto; padding: 7px 32px 7px 12px; font-size: 14px; }
 
 .product-tags { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.product-note { font-size: 12px; color: var(--text-2); font-style: italic; margin-top: 2px; }
 
 .tax-section { gap: 4px; }
 .tax-row { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }

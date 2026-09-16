@@ -204,7 +204,7 @@ export default function Inventory() {
   // variación (Azul, M…) y etiquetas de categoría.
   const q = normHeader(search);
   const matchesSearch = (p) => !q || [
-    p.name, p.sku,
+    p.name, p.sku, p.note,
     ...variantsOf(p).flatMap((v) => [v.sku, ...Object.values(v.attributes || {})]),
     ...(p.product_terms || []).map((pt) => termName.get(pt.term_id)),
   ].some((s) => s && normHeader(s).includes(q));
@@ -222,7 +222,7 @@ export default function Inventory() {
   function openCreate() {
     setError(null);
     setModal({
-      mode: 'create', name: '', price: '', cost: '', sku: '', unit: 'und', categories: {},
+      mode: 'create', name: '', price: '', cost: '', sku: '', unit: 'und', note: '', categories: {},
       cmode: 'simple', simpleStock: '', axisIds: [], rows: [newRow()], stagedFiles: [],
     });
   }
@@ -239,7 +239,7 @@ export default function Inventory() {
     setModal({
       mode: 'edit', id: p.id, axes: p.variant_axes || [], simple: isSimple(p),
       name: p.name, price: String(p.price ?? ''), cost: p.cost != null && Number(p.cost) !== 0 ? String(p.cost) : '',
-      sku: p.sku || '', unit: p.unit || 'und',
+      sku: p.sku || '', unit: p.unit || 'und', note: p.note || '',
       categories,
       variants: variantsOf(p).map((v) => ({
         id: v.id, label: variantLabel(v.attributes, p.variant_axes),
@@ -299,7 +299,7 @@ export default function Inventory() {
         }
         const created = await createProductWithVariants({
           name: modal.name.trim(), sku: modal.sku.trim(), unit: modal.unit.trim() || 'und',
-          price: Number(modal.price) || 0, cost: Number(modal.cost) || 0,
+          price: Number(modal.price) || 0, cost: Number(modal.cost) || 0, note: modal.note.trim(),
           categories, variantAxes, variants, branchId,
         });
         for (let i = 0; i < (modal.stagedFiles || []).length; i++) {
@@ -309,7 +309,8 @@ export default function Inventory() {
         // EDIT
         await updateProductDetails(modal.id, {
           name: modal.name.trim(), sku: modal.sku.trim(), unit: modal.unit.trim() || 'und',
-          price: Number(modal.price) || 0, cost: Number(modal.cost) || 0, categories,
+          price: Number(modal.price) || 0, cost: Number(modal.cost) || 0, note: modal.note.trim(),
+          categories,
         });
         for (const v of modal.variants) {
           const patch = {};
@@ -613,6 +614,7 @@ export default function Inventory() {
                                 {p.product_terms.map((pt) => termName.get(pt.term_id)).filter(Boolean).join(' · ')}
                               </div>
                             )}
+                            {p.note && <div className="product-note">📝 {p.note}</div>}
                           </div>
                         </div>
                       </td>
@@ -695,6 +697,7 @@ export default function Inventory() {
                         {p.product_terms.map((pt) => termName.get(pt.term_id)).filter(Boolean).join(' · ')}
                       </span>
                     )}
+                    {p.note && <span className="product-note">📝 {p.note}</span>}
                   </span>
                   <span className={`inv-card-chev${open ? ' open' : ''}`} aria-hidden="true">{ICON.chevron}</span>
                 </button>
@@ -785,6 +788,10 @@ export default function Inventory() {
                 )}
                 {/* La unidad (products.unit) se mantiene internamente con su
                     default 'und'; se configurará por negocio más adelante. */}
+                <label className="np-name">Nota (opcional)
+                  <textarea rows={2} value={modal.note} placeholder="p. ej. Este pantalón tiene una mancha"
+                    onChange={(e) => setM({ note: e.target.value })} />
+                </label>
               </div>
 
               {(() => {
@@ -966,6 +973,7 @@ export default function Inventory() {
                   {!isSimple(p) && ` · ${variantsOf(p).length} variantes`}
                 </div>
                 {tags.length > 0 && <div className="muted">{tags.join(' · ')}</div>}
+                {p.note && <div className="product-note">📝 {p.note}</div>}
                 <button type="button" className="btn ghost sm" onClick={() => { setViewer(null); openEdit(p); }}>
                   {ICON.edit} Editar producto
                 </button>
