@@ -577,6 +577,14 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 }
 .lowstock-banner .muted { color: inherit; opacity: .8; }
 
+/* Aviso de productos vendidos sin costo (sección Utilidad de Estadísticas) */
+.nocost-warn {
+  background: var(--danger-bg); color: var(--danger);
+  border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 12px; font-size: 13px;
+}
+.nocost-warn a { color: inherit; text-decoration: underline; }
+.nocost-warn .muted { color: inherit; opacity: .8; }
+
 /* ----- Modal de alta de producto ----- */
 .modal { max-height: 90vh; overflow-y: auto; }
 .modal-wide { max-width: 720px; }
@@ -970,6 +978,9 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   /* Tablas: desplazamiento horizontal en vez de columnas aplastadas */
   .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table.list td, table.list th { white-space: nowrap; }
+
+  /* Selectores de filtro: que nunca desborden el ancho (nombres largos) */
+  .filters select, .inv-filters select { max-width: 100%; }
 
   /* Inventario: en móvil la tabla se sustituye por la lista de tarjetas */
   .inv-table { display: none; }
