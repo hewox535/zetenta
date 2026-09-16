@@ -634,9 +634,34 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .edit-var-label { flex: 1 1 120px; font-weight: 600; font-size: 13px; }
 
 /* Imágenes de producto */
-.list-thumb { flex: 0 0 34px; display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; overflow: hidden; background: var(--accent-soft); }
+.list-thumb { flex: 0 0 48px; display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 10px; overflow: hidden; background: var(--accent-soft); }
 .list-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.list-thumb .thumb-ph { font-size: 14px; font-weight: 700; color: var(--accent); opacity: .45; }
+.list-thumb .thumb-ph { font-size: 18px; font-weight: 700; color: var(--accent); opacity: .45; }
+.thumb-click { cursor: zoom-in; }
+
+/* Visor de foto del producto: imagen grande + datos */
+.photo-viewer { max-width: 520px; padding: 0; overflow: hidden; }
+.pv-img { position: relative; background: var(--accent-soft); aspect-ratio: 1; }
+.pv-img > img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.pv-nav, .pv-close {
+  position: absolute; display: grid; place-items: center;
+  width: 38px; height: 38px; border: none; border-radius: 999px; cursor: pointer;
+  background: rgba(255,255,255,.85); color: var(--text); font-size: 22px; line-height: 1;
+  box-shadow: var(--shadow);
+}
+.pv-nav { top: 50%; transform: translateY(-50%); }
+.pv-nav.prev { left: 10px; }
+.pv-nav.next { right: 10px; }
+.pv-close { top: 10px; right: 10px; font-size: 20px; }
+.pv-count {
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,.55); color: #fff; font-size: 12px; font-weight: 600;
+  padding: 3px 10px; border-radius: 999px;
+}
+.pv-info { display: flex; flex-direction: column; gap: 4px; padding: 14px 18px 18px; }
+.pv-name { font-weight: 700; font-size: 16px; }
+.pv-info .muted { font-size: 13.5px; }
+.pv-info .btn { align-self: flex-start; margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; }
 .img-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .img-thumb { position: relative; width: 76px; height: 76px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
 .img-thumb img { width: 100%; height: 100%; object-fit: cover; }
@@ -953,7 +978,7 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
     display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px;
     border: none; background: transparent; text-align: left; font: inherit; cursor: pointer; color: var(--text);
   }
-  .inv-card-head .list-thumb { flex: 0 0 44px; width: 44px; height: 44px; }
+  .inv-card-head .list-thumb { flex: 0 0 56px; width: 56px; height: 56px; }
   .inv-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .inv-card-name { font-weight: 600; font-size: 14.5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .inv-card-info .muted { font-size: 12.5px; }

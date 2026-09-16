@@ -38,6 +38,7 @@ const PROD_ALIASES = {
   name: ['nombre', 'name', 'producto'],
   sku: ['sku', 'codigo', 'código', 'code'],
   price: ['precio', 'price', 'precio_usd', 'preciousd'],
+  cost: ['costo', 'cost', 'precio_compra', 'compra'],
   unit: ['unidad', 'unit', 'und'],
   stock: ['stock', 'cantidad', 'existencia', 'inicial', 'qty'],
 };
@@ -78,22 +79,23 @@ function productsFromCSV(text, axisNames = []) {
     }
     out.push({
       name, sku: get('sku'), unit: get('unit') || 'und',
-      price: numFrom(get('price')), stock: numFrom(get('stock')), attrs,
+      price: numFrom(get('price')), cost: numFrom(get('cost')),
+      stock: numFrom(get('stock')), attrs,
     });
   }
   return out;
 }
 function downloadInvTemplate(axisNames = []) {
   const axes = axisNames.map((n) => n.toLowerCase());
-  const header = ['nombre', 'sku', 'precio', 'unidad', 'stock', ...axes].join(',');
+  const header = ['nombre', 'sku', 'precio', 'costo', 'unidad', 'stock', ...axes].join(',');
   const pad = (vals) => axes.map((_, i) => vals[i] || '').join(',');
   const rows = axes.length
     ? [
-        `Camisa Oxford,CAM-OXF-M,12.50,und,10,${pad(['M', 'Azul'])}`,
-        `Camisa Oxford,CAM-OXF-L,12.50,und,8,${pad(['L', 'Azul'])}`,
-        `Correa de cuero,ACC-01,9,und,15,${pad([])}`,
+        `Camisa Oxford,CAM-OXF-M,12.50,7.00,und,10,${pad(['M', 'Azul'])}`,
+        `Camisa Oxford,CAM-OXF-L,12.50,7.00,und,8,${pad(['L', 'Azul'])}`,
+        `Correa de cuero,ACC-01,9,4.50,und,15,${pad([])}`,
       ]
-    : ['Camisa Oxford,CAM-OXF,12.50,und,20'];
+    : ['Camisa Oxford,CAM-OXF,12.50,7.00,und,20'];
   const csv = `${header}\n${rows.join('\n')}\n`;
   const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
   const a = document.createElement('a'); a.href = url; a.download = 'inventario-plantilla.csv'; a.click();
@@ -110,7 +112,7 @@ const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).leng
 const defaultVariant = (p) =>
   variantsOf(p).find((v) => Object.keys(v.attributes || {}).length === 0) || variantsOf(p)[0];
 
-const newRow = () => ({ key: Math.random().toString(36).slice(2), values: {}, stock: '', sku: '', price: '' });
+const newRow = () => ({ key: Math.random().toString(36).slice(2), values: {}, stock: '', sku: '', price: '', cost: '' });
 
 // Iconos limpios para acciones de la tabla.
 const ICON = {
@@ -169,6 +171,14 @@ export default function Inventory() {
   const [move, setMove] = useState(null);
   const [modal, setModal] = useState(null);   // modal crear/editar producto
   const [moreOpen, setMoreOpen] = useState(false); // menú ⋯ del header (móvil)
+  const [viewer, setViewer] = useState(null); // visor de fotos: { p, i } (índice en mediaOf(p))
+
+  function openViewer(p) {
+    const media = mediaOf(p);
+    if (media.length === 0) return;
+    const main = media.find((x) => !x.variant_id) || media[0];
+    setViewer({ p, i: media.indexOf(main) });
+  }
 
   const catTax = taxonomies.filter((t) => t.kind !== 'variant');
   const varTax = taxonomies.filter((t) => t.kind === 'variant');
@@ -212,7 +222,7 @@ export default function Inventory() {
   function openCreate() {
     setError(null);
     setModal({
-      mode: 'create', name: '', price: '', sku: '', unit: 'und', categories: {},
+      mode: 'create', name: '', price: '', cost: '', sku: '', unit: 'und', categories: {},
       cmode: 'simple', simpleStock: '', axisIds: [], rows: [newRow()], stagedFiles: [],
     });
   }
@@ -228,12 +238,14 @@ export default function Inventory() {
     }
     setModal({
       mode: 'edit', id: p.id, axes: p.variant_axes || [], simple: isSimple(p),
-      name: p.name, price: String(p.price ?? ''), sku: p.sku || '', unit: p.unit || 'und',
+      name: p.name, price: String(p.price ?? ''), cost: p.cost != null && Number(p.cost) !== 0 ? String(p.cost) : '',
+      sku: p.sku || '', unit: p.unit || 'und',
       categories,
       variants: variantsOf(p).map((v) => ({
         id: v.id, label: variantLabel(v.attributes, p.variant_axes),
         stock: String(branchStock(v, branchId)), origStock: branchStock(v, branchId),
         sku: v.sku || '', price: v.price != null ? String(v.price) : '',
+        cost: v.cost != null ? String(v.cost) : '',
         target: v.target_stock != null ? String(v.target_stock) : '',
       })),
       newRows: [], media: mediaOf(p),
@@ -287,7 +299,8 @@ export default function Inventory() {
         }
         const created = await createProductWithVariants({
           name: modal.name.trim(), sku: modal.sku.trim(), unit: modal.unit.trim() || 'und',
-          price: Number(modal.price) || 0, categories, variantAxes, variants, branchId,
+          price: Number(modal.price) || 0, cost: Number(modal.cost) || 0,
+          categories, variantAxes, variants, branchId,
         });
         for (let i = 0; i < (modal.stagedFiles || []).length; i++) {
           await uploadProductImage(business.id, created.id, modal.stagedFiles[i], { sortOrder: i });
@@ -296,12 +309,13 @@ export default function Inventory() {
         // EDIT
         await updateProductDetails(modal.id, {
           name: modal.name.trim(), sku: modal.sku.trim(), unit: modal.unit.trim() || 'und',
-          price: Number(modal.price) || 0, categories,
+          price: Number(modal.price) || 0, cost: Number(modal.cost) || 0, categories,
         });
         for (const v of modal.variants) {
           const patch = {};
           if (v.sku !== undefined) patch.sku = v.sku.trim();
           patch.price = v.price === '' ? null : Number(v.price);
+          patch.cost = v.cost === '' ? null : Number(v.cost);
           patch.target_stock = v.target === '' ? null : Number(v.target);
           await updateVariant(v.id, patch);
           const ns = Number(v.stock) || 0;
@@ -317,7 +331,8 @@ export default function Inventory() {
             attributes[ax] = val;
           }
           await addProductVariant(modal.id, {
-            attributes, sku: r.sku.trim(), price: r.price === '' ? null : Number(r.price), stock: Number(r.stock) || 0, branchId,
+            attributes, sku: r.sku.trim(), price: r.price === '' ? null : Number(r.price),
+            cost: r.cost === '' ? null : Number(r.cost), stock: Number(r.stock) || 0, branchId,
           });
         }
       }
@@ -341,7 +356,11 @@ export default function Inventory() {
       const sig = axisNames.map((n) => attributes[n]).join('|');
       if (seen.has(sig)) throw new Error(`Variación repetida: ${axisNames.map((n) => attributes[n]).join(' · ')}.`);
       seen.add(sig);
-      return { attributes, stock: Number(r.stock) || 0, sku: r.sku.trim(), price: r.price === '' ? null : Number(r.price) };
+      return {
+        attributes, stock: Number(r.stock) || 0, sku: r.sku.trim(),
+        price: r.price === '' ? null : Number(r.price),
+        cost: r.cost === '' ? null : Number(r.cost),
+      };
     });
     if (out.length === 0) throw new Error('Agrega al menos una variación.');
     return out;
@@ -399,7 +418,8 @@ export default function Inventory() {
           .filter((ax) => group.some((r) => r.attrs[ax]));
         if (axes.length === 0) {
           await createProductWithVariants({
-            name: base.name, sku: base.sku, unit: base.unit, price: base.price, categories: {}, variantAxes: [],
+            name: base.name, sku: base.sku, unit: base.unit, price: base.price, cost: base.cost,
+            categories: {}, variantAxes: [],
             variants: [{ attributes: {}, stock: group.reduce((s, r) => s + r.stock, 0) }], branchId,
           });
         } else {
@@ -412,12 +432,13 @@ export default function Inventory() {
             else byCombo.set(ck, {
               attributes, sku: r.sku, stock: r.stock,
               price: r.price && r.price !== base.price ? r.price : null,
+              cost: r.cost && r.cost !== base.cost ? r.cost : null,
             });
           }
           const variants = [...byCombo.values()];
           await createProductWithVariants({
-            name: base.name, sku: '', unit: base.unit, price: base.price, categories: {},
-            variantAxes: axes, variants, branchId,
+            name: base.name, sku: '', unit: base.unit, price: base.price, cost: base.cost,
+            categories: {}, variantAxes: axes, variants, branchId,
           });
           vars += variants.length;
         }
@@ -577,7 +598,9 @@ export default function Inventory() {
                               title={open ? 'Ocultar variantes' : 'Ver variantes'}
                               onClick={() => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }))}>{ICON.chevron}</button>
                           )}
-                          <span className="list-thumb">
+                          <span className={`list-thumb${productImg(p) ? ' thumb-click' : ''}`}
+                            title={productImg(p) ? 'Ver foto' : undefined}
+                            onClick={() => openViewer(p)}>
                             {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
                           </span>
                           <div className="prod-info">
@@ -594,7 +617,10 @@ export default function Inventory() {
                         </div>
                       </td>
                       <td className="mono">{p.sku}</td>
-                      <td className="num">{money(p.price)}</td>
+                      <td className="num">
+                        {money(p.price)}
+                        {Number(p.cost) > 0 && <div className="muted">costo {money(p.cost)}</div>}
+                      </td>
                       <td className="num">
                         <strong>{variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0)}</strong> {p.unit}
                         {multiBranch && <div className="muted">total {totalStock(p)}</div>}
@@ -611,7 +637,10 @@ export default function Inventory() {
                       <tr key={v.id} className="variant-row">
                         <td className="variant-cell">↳ {variantLabel(v.attributes, p.variant_axes) || 'Estándar'}</td>
                         <td className="mono">{v.sku}</td>
-                        <td className="num">{v.price != null ? money(v.price) : <span className="muted">{money(p.price)}</span>}</td>
+                        <td className="num">
+                          {v.price != null ? money(v.price) : <span className="muted">{money(p.price)}</span>}
+                          {Number(v.cost ?? p.cost) > 0 && <div className="muted">costo {money(v.cost ?? p.cost)}</div>}
+                        </td>
                         <td className="num">
                           <strong>{branchStock(v, branchId)}</strong> {p.unit}
                           {multiBranch && <div className="muted">total {Number(v.stock)}</div>}
@@ -648,7 +677,8 @@ export default function Inventory() {
               <div className="inv-card" key={p.id}>
                 <button type="button" className="inv-card-head" aria-expanded={!!open}
                   onClick={() => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }))}>
-                  <span className="list-thumb">
+                  <span className={`list-thumb${productImg(p) ? ' thumb-click' : ''}`}
+                    onClick={(e) => { if (productImg(p)) { e.stopPropagation(); openViewer(p); } }}>
                     {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
                   </span>
                   <span className="inv-card-info">
@@ -740,6 +770,9 @@ export default function Inventory() {
                 </label>
                 <label>Precio (USD)
                   <input type="number" step="0.01" min="0" value={modal.price} onChange={(e) => setM({ price: e.target.value })} placeholder="0,00" />
+                </label>
+                <label title="Lo que te costó comprar o producir una unidad; sirve para calcular la utilidad">Costo (USD)
+                  <input type="number" step="0.01" min="0" value={modal.cost} onChange={(e) => setM({ cost: e.target.value })} placeholder="0,00" />
                 </label>
                 <label>SKU
                   <input value={modal.sku} onChange={(e) => setM({ sku: e.target.value })} placeholder="CAM-OXF" />
@@ -848,7 +881,7 @@ export default function Inventory() {
                   <div className="oc-label">Variantes</div>
                   <div className="edit-variants">
                     <div className="edit-var-head">
-                      <span className="evh-img" /><span>Variante</span><span>Stock</span><span>SKU</span><span>Precio</span><span>Objetivo</span>
+                      <span className="evh-img" /><span>Variante</span><span>Stock</span><span>SKU</span><span>Precio</span><span>Costo</span><span>Objetivo</span>
                     </div>
                     {modal.variants.map((v, i) => {
                       const vm = (modal.media || []).find((m) => m.variant_id === v.id);
@@ -866,6 +899,8 @@ export default function Inventory() {
                           onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, sku: e.target.value } : x) })} />
                         <input type="number" min="0" step="0.01" value={v.price} placeholder="hereda"
                           onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, price: e.target.value } : x) })} />
+                        <input type="number" min="0" step="0.01" value={v.cost} placeholder="hereda"
+                          onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, cost: e.target.value } : x) })} />
                         <input type="number" min="0" step="1" value={v.target} placeholder="—"
                           onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, target: e.target.value } : x) })} />
                       </div>
@@ -897,6 +932,48 @@ export default function Inventory() {
           </div>
         </div>
       )}
+
+      {/* ============ Visor de fotos del producto ============ */}
+      {viewer && (() => {
+        const p = viewer.p;
+        const media = mediaOf(p);
+        const m = media[viewer.i] || media[0];
+        const stock = variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0);
+        const tags = (p.product_terms || []).map((pt) => termName.get(pt.term_id)).filter(Boolean);
+        const mVar = m?.variant_id ? variantsOf(p).find((v) => v.id === m.variant_id) : null;
+        const go = (d) => setViewer((s) => ({ ...s, i: (s.i + d + media.length) % media.length }));
+        return (
+          <div className="modal-backdrop" onClick={() => setViewer(null)}>
+            <div className="modal card photo-viewer" onClick={(e) => e.stopPropagation()}>
+              <div className="pv-img">
+                <img src={mediaUrl(m)} alt={p.name} />
+                {media.length > 1 && (
+                  <>
+                    <button type="button" className="pv-nav prev" aria-label="Foto anterior" onClick={() => go(-1)}>‹</button>
+                    <button type="button" className="pv-nav next" aria-label="Foto siguiente" onClick={() => go(1)}>›</button>
+                    <span className="pv-count">{viewer.i + 1} / {media.length}</span>
+                  </>
+                )}
+                <button type="button" className="pv-close" aria-label="Cerrar" onClick={() => setViewer(null)}>×</button>
+              </div>
+              <div className="pv-info">
+                <div className="pv-name">
+                  {p.name}
+                  {mVar && <span className="muted"> · {variantLabel(mVar.attributes, p.variant_axes) || 'Estándar'}</span>}
+                </div>
+                <div className="muted">
+                  {p.sku ? `${p.sku} · ` : ''}{money(p.price)} · <strong>{stock}</strong> {p.unit} en stock
+                  {!isSimple(p) && ` · ${variantsOf(p).length} variantes`}
+                </div>
+                {tags.length > 0 && <div className="muted">{tags.join(' · ')}</div>}
+                <button type="button" className="btn ghost sm" onClick={() => { setViewer(null); openEdit(p); }}>
+                  {ICON.edit} Editar producto
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ============ Modal movimiento ============ */}
       {move && (
@@ -1015,6 +1092,10 @@ function VarRows({ axisNames, termsFor, rows, onChange, emptyHint }) {
             <label className="var-field num">Precio
               <input type="number" min="0" step="0.01" value={r.price} placeholder="hereda"
                 onChange={(e) => update(i, { price: e.target.value })} />
+            </label>
+            <label className="var-field num">Costo
+              <input type="number" min="0" step="0.01" value={r.cost} placeholder="hereda"
+                onChange={(e) => update(i, { cost: e.target.value })} />
             </label>
           </div>
           <button type="button" className="var-row-del" aria-label="Quitar variación" title="Quitar variación"
