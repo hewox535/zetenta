@@ -221,13 +221,14 @@ export async function createProduct(businessId, { name, sku, unit, price, varian
 }
 
 // Alta atómica: producto + categorías + variaciones con stock inicial.
-// categories: { taxonomyName: value }   variants: [{ attributes, sku, price, stock }]
-export async function createProductWithVariants({ name, sku, unit, price, categories, variantAxes, variants, branchId }) {
+// categories: { taxonomyName: value }   variants: [{ attributes, sku, price, cost, stock }]
+export async function createProductWithVariants({ name, sku, unit, price, cost, categories, variantAxes, variants, branchId }) {
   return unwrap(await supabase.rpc('create_product_with_variants', {
     p_name: name,
     p_sku: sku || '',
     p_unit: unit || 'und',
     p_price: Number(price) || 0,
+    p_cost: Number(cost) || 0,
     p_categories: categories || {},
     p_variant_axes: variantAxes || [],
     p_variants: variants || [],
@@ -235,12 +236,13 @@ export async function createProductWithVariants({ name, sku, unit, price, catego
   }));
 }
 
-export async function addProductVariant(productId, { attributes, sku, price, stock, branchId }) {
+export async function addProductVariant(productId, { attributes, sku, price, cost, stock, branchId }) {
   return unwrap(await supabase.rpc('add_product_variant', {
     p_product_id: productId,
     p_attributes: attributes || {},
     p_sku: sku || '',
     p_price: price ?? null,
+    p_cost: cost ?? null,
     p_stock: Number(stock) || 0,
     p_branch_id: branchId || null,
   }));
@@ -252,10 +254,10 @@ export async function updateProduct(id, patch) {
 }
 
 // Editar datos del producto + reemplazar sus categorías (atómico).
-export async function updateProductDetails(id, { name, sku, unit, price, categories }) {
+export async function updateProductDetails(id, { name, sku, unit, price, cost, categories }) {
   return unwrap(await supabase.rpc('update_product_details', {
     p_id: id, p_name: name, p_sku: sku || '', p_unit: unit || 'und',
-    p_price: Number(price) || 0, p_categories: categories || {},
+    p_price: Number(price) || 0, p_cost: Number(cost) || 0, p_categories: categories || {},
   }));
 }
 
