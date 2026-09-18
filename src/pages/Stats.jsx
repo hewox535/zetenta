@@ -56,6 +56,7 @@ export default function Stats() {
     let receivedTotalUsd = 0;               // ingreso neto real (lo que efectivamente entró), en USD
     let discountUsd = 0;
     let cogsUsd = 0;                        // costo de lo vendido
+    const noCostSold = new Set();           // vendidos sin costo registrado
     const byProduct = new Map();      // name → { qty, revenue, cost }
     const byMethod = new Map();       // etiqueta cuenta·método → usd
     const byAccount = new Map();      // cuenta → usd (ingreso por cuenta)
@@ -72,6 +73,7 @@ export default function Stats() {
         const unitCost = it.unit_cost_usd != null
           ? Number(it.unit_cost_usd) || 0
           : (variantCost.get(it.variant_id) ?? productCost.get(it.product_id) ?? 0);
+        if (unitCost <= 0 && qty > 0) noCostSold.add(it.name);
         const cur = byProduct.get(it.name) || { qty: 0, revenue: 0, cost: 0 };
         cur.qty += qty;
         cur.revenue += Number(it.line_total_usd) || 0;
@@ -103,6 +105,7 @@ export default function Stats() {
     return {
       revenueUsd, revenueVes, count, receivedVes, receivedUsd, receivedTotalUsd, discountUsd,
       cogsUsd, profitUsd,
+      noCost: [...noCostSold].sort((a, b) => a.localeCompare(b)),
       marginPct: receivedTotalUsd > 0 ? (profitUsd / receivedTotalUsd) * 100 : 0,
       avgTicket: count ? receivedTotalUsd / count : 0,
       topProducts,
@@ -254,6 +257,15 @@ export default function Stats() {
                   <div className="totals-row grand"><span>Utilidad</span><span>{usd(stats.profitUsd)}</span></div>
                   <div className="totals-row"><span className="muted">Margen</span><span className="muted">{stats.marginPct.toFixed(1)}%</span></div>
                 </div>
+                {stats.noCost.length > 0 && (
+                  <div className="nocost-warn">
+                    ⚠ {stats.noCost.length === 1
+                      ? '1 producto vendido sin costo registrado'
+                      : `${stats.noCost.length} productos vendidos sin costo registrado`}
+                    ; su utilidad sale sobreestimada. Regístralo en <Link to="/inventory">Inventario</Link>.
+                    <span className="muted"> {stats.noCost.slice(0, 6).join(' · ')}{stats.noCost.length > 6 ? '…' : ''}</span>
+                  </div>
+                )}
               </section>
 
               <section className="card vsection">

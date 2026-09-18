@@ -63,7 +63,8 @@ export default function InventoryHistory() {
       ) : movements.length === 0 ? (
         <div className="empty">Sin movimientos para ese filtro.</div>
       ) : (
-        <div className="card table-card">
+        <>
+        <div className="card table-card m-hide">
           <table className="list">
             <thead>
               <tr>
@@ -88,6 +89,30 @@ export default function InventoryHistory() {
             </tbody>
           </table>
         </div>
+
+        {/* -------- Lista móvil: tarjetas en vez de tabla con scroll -------- */}
+        <div className="mlist">
+          {movements.map((m) => {
+            const vlabel = variantLabel(m.product_variants?.attributes);
+            const who = staffName.get(m.created_by);
+            return (
+              <div className="mcard" key={m.id}>
+                <div className="mcard-info">
+                  <span className="mcard-title">
+                    {m.products?.name ?? '—'}{vlabel && <span className="muted"> · {vlabel}</span>}
+                  </span>
+                  <span className="muted">{formatDate(m.created_at)}{who ? ` · ${who}` : ''}</span>
+                  {m.note && <span className="muted">{m.note}</span>}
+                </div>
+                <div className="mcard-amount">
+                  <span className={`badge ${m.type}`}>{MOVE_LABELS[m.type]}</span>
+                  <strong>{m.type === 'out' ? '−' : m.type === 'in' ? '+' : ''}{Number(m.quantity)}</strong>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        </>
       )}
     </div>
   );

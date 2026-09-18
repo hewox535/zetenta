@@ -1045,7 +1045,7 @@ export default function Inventory() {
       {movements.length > 0 && (
         <>
           <h2 className="section-title">Últimos movimientos</h2>
-          <div className="card table-card">
+          <div className="card table-card m-hide">
             <table className="list">
               <thead>
                 <tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th className="num">Cantidad</th><th>Nota</th></tr>
@@ -1065,6 +1065,28 @@ export default function Inventory() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* -------- Lista móvil: tarjetas en vez de tabla con scroll -------- */}
+          <div className="mlist">
+            {movements.map((m) => {
+              const vlabel = variantLabel(m.product_variants?.attributes);
+              return (
+                <div className="mcard" key={m.id}>
+                  <div className="mcard-info">
+                    <span className="mcard-title">
+                      {m.products?.name ?? '—'}{vlabel && <span className="muted"> · {vlabel}</span>}
+                    </span>
+                    <span className="muted">{formatDate(m.created_at)}</span>
+                    {m.note && <span className="muted">{m.note}</span>}
+                  </div>
+                  <div className="mcard-amount">
+                    <span className={`badge ${m.type}`}>{MOVE_LABELS[m.type]}</span>
+                    <strong>{m.type === 'out' ? '−' : m.type === 'in' ? '+' : ''}{Number(m.quantity)}</strong>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </>
       )}
