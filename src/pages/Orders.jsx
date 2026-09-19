@@ -8,7 +8,7 @@ import {
 } from '../lib/api';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { notifySale } from '../lib/push';
-import { usd, bs, money, variantLabel } from '../lib/calc';
+import { usd, bs, money, variantLabel, offerPrice } from '../lib/calc';
 import OrderReceipt from '../components/OrderReceipt';
 
 const EMPTY_CUST = { name: '', document: '', phone: '', email: '' };
@@ -72,6 +72,8 @@ const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).leng
 const defaultVariant = (p) =>
   variantsOf(p).find((v) => Object.keys(v.attributes || {}).length === 0) || variantsOf(p)[0];
 const variantPrice = (p, v) => (v.price != null ? Number(v.price) : Number(p.price));
+// Precio efectivo: el de la variante (o producto) con la oferta aplicada.
+const effPrice = (p, v) => offerPrice(variantPrice(p, v), p.offer_percent);
 const mediaOf = (p) => (p.product_media || []).slice().sort((a, b) => a.sort_order - b.sort_order);
 const productImg = (p) => { const m = mediaOf(p).find((x) => !x.variant_id) || mediaOf(p)[0]; return m ? mediaUrl(m) : null; };
 const variantImg = (p, v) => {
@@ -173,6 +175,7 @@ export default function Orders() {
 
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({});          // { taxonomyId: termId }
+  const [offerOnly, setOfferOnly] = useState(false);   // filtro "En oferta"
 
   const [cart, setCart] = useState([]);                // [{ id(variantId), productId, name, label, price, unit, stock, qty }]
   const [picker, setPicker] = useState(null);          // producto cuyo selector de variante está abierto
@@ -208,7 +211,7 @@ export default function Orders() {
       if (found) return prev.map((c) => (c.id === v.id ? { ...c, qty: c.qty + 1 } : c));
       return [...prev, {
         id: v.id, productId: p.id, name: p.name, label: variantLabel(v.attributes, p.variant_axes),
-        price: variantPrice(p, v), unit: p.unit, stock: branchStock(v, branchId), qty: 1,
+        price: effPrice(p, v), unit: p.unit, stock: branchStock(v, branchId), qty: 1,
       }];
     });
   };
@@ -324,6 +327,7 @@ export default function Orders() {
   const filterables = taxonomies.filter((t) => t.taxonomy_terms.length > 0);
 
   const visible = (products || []).filter((p) => {
+    if (offerOnly && !p.offer_percent) return false;
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())
       && !(p.sku || '').toLowerCase().includes(search.toLowerCase())) return false;
     return Object.entries(filters).every(([, termId]) =>
@@ -440,8 +444,12 @@ export default function Orders() {
               <div className="pos-toolbar">
                 <input className="pos-search" placeholder="Buscar producto o SKU…"
                   value={search} onChange={(e) => setSearch(e.target.value)} />
-                {filterables.length > 0 && (
+                {(filterables.length > 0 || (products || []).some((p) => p.offer_percent)) && (
                   <div className="filters">
+                    {(products || []).some((p) => p.offer_percent) && (
+                      <button type="button" className={`chip-btn${offerOnly ? ' active' : ''}`}
+                        onClick={() => setOfferOnly((v) => !v)}>🏷 En oferta</button>
+                    )}
                     {filterables.map((t) => (
                       <select key={t.id} value={filters[t.id] || ''}
                         onChange={(e) => setFilters((f) => ({ ...f, [t.id]: e.target.value }))}>
@@ -485,9 +493,20 @@ export default function Orders() {
                           <span className={`stock-badge${stock <= 0 ? ' out' : ''}`}>{stock} {p.unit}</span>
                           {!simple && <span className="variant-count">{variantsOf(p).length} variantes</span>}
                         </div>
+                        {p.offer_percent && <span className="offer-flag">🏷 −{Number(p.offer_percent)}%</span>}
                         <div className="product-card-prices">
-                          <strong>{usd(p.price)}</strong>
-                          <span className="product-card-bs">{bs(Number(p.price) * rate.value)}</span>
+                          {p.offer_percent ? (
+                            <>
+                              <strong>{usd(offerPrice(p.price, p.offer_percent))}</strong>
+                              <span className="offer-old">{usd(p.price)}</span>
+                              <span className="product-card-bs">{bs(offerPrice(p.price, p.offer_percent) * rate.value)}</span>
+                            </>
+                          ) : (
+                            <>
+                              <strong>{usd(p.price)}</strong>
+                              <span className="product-card-bs">{bs(Number(p.price) * rate.value)}</span>
+                            </>
+                          )}
                         </div>
                         {simple && inCartLine && (
                           <div className="qty-stepper card-stepper" onClick={(e) => e.stopPropagation()}>
@@ -692,7 +711,8 @@ export default function Orders() {
                       <span className={`stock-badge${out ? ' out' : ''}`}>{vStock} {picker.unit}</span>
                     </div>
                     <div className="product-card-prices">
-                      <strong>{usd(variantPrice(picker, v))}</strong>
+                      <strong>{usd(effPrice(picker, v))}</strong>
+                      {picker.offer_percent && <span className="offer-old">{usd(variantPrice(picker, v))}</span>}
                     </div>
                     {inCart && (
                       <div className="qty-stepper card-stepper" onClick={(e) => e.stopPropagation()}>

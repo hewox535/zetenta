@@ -267,6 +267,13 @@ export async function deleteProduct(id) {
   unwrap(await supabase.from('products').delete().eq('id', id));
 }
 
+// Aplica (percent 1–99) o quita (percent null) la oferta a varios productos.
+export async function setProductsOffer(ids, percent) {
+  return unwrap(await supabase.rpc('set_products_offer', {
+    p_ids: ids, p_percent: percent ?? null,
+  }));
+}
+
 // ---------- Variantes de producto ----------
 
 export async function createVariant(businessId, productId, { sku, price, stock, attributes }) {
