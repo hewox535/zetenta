@@ -58,3 +58,11 @@ export function variantLabel(attributes, axes) {
   const keys = axes && axes.length ? axes : Object.keys(attrs).sort();
   return keys.map((k) => attrs[k]).filter(Boolean).join(' · ');
 }
+
+// Precio con la oferta del producto aplicada (redondeado a céntimos, igual
+// que create_order en el servidor). offerPercent NULL/0 = sin oferta.
+export function offerPrice(price, offerPercent) {
+  const p = Number(price) || 0;
+  const off = Number(offerPercent) || 0;
+  return off > 0 && off < 100 ? Math.round(p * (1 - off / 100) * 100) / 100 : p;
+}
