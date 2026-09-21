@@ -4,14 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import {
   fetchProducts, deleteProduct,
-  fetchMovements, createMovement,
+  createMovement,
   fetchTaxonomies,
   createProductWithVariants, updateProductDetails,
   addProductVariant, updateVariant, deleteVariant,
   transferStock, setProductsOffer,
   mediaUrl, uploadProductImage, deleteProductMedia,
 } from '../lib/api';
-import { money, formatDate, variantLabel, offerPrice } from '../lib/calc';
+import { money, variantLabel, offerPrice } from '../lib/calc';
 
 // Stock de una variante en una sucursal concreta (0 si no tiene fila).
 const branchStock = (v, branchId) => {
@@ -159,7 +159,6 @@ export default function Inventory() {
   const [products, setProducts] = useState(null);
   const [transfer, setTransfer] = useState(null);  // { productId, variantId, label, to, quantity }
   const [importMsg, setImportMsg] = useState(null);
-  const [movements, setMovements] = useState([]);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -213,8 +212,8 @@ export default function Inventory() {
   const productHasLow = (p) => variantsOf(p).some(isLow);
 
   async function reload() {
-    const [p, m, t] = await Promise.all([fetchProducts(), fetchMovements(), fetchTaxonomies()]);
-    setProducts(p); setMovements(m); setTaxonomies(t);
+    const [p, t] = await Promise.all([fetchProducts(), fetchTaxonomies()]);
+    setProducts(p); setTaxonomies(t);
   }
   useEffect(() => { reload().catch((e) => setError(e.message)); }, []);
 
@@ -597,8 +596,8 @@ export default function Inventory() {
             </select>
           ))}
           {!offerMode && (
-            <button type="button" className="btn ghost sm inv-offer-enter"
-              onClick={() => setOfferMode(true)}>Marcar ofertas</button>
+            <button type="button" className="btn offer sm inv-offer-enter"
+              onClick={() => setOfferMode(true)}>🏷 Marcar ofertas</button>
           )}
         </div>
 
@@ -1125,54 +1124,6 @@ export default function Inventory() {
         </div>
       )}
 
-      {movements.length > 0 && (
-        <>
-          <h2 className="section-title">Últimos movimientos</h2>
-          <div className="card table-card m-hide">
-            <table className="list">
-              <thead>
-                <tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th className="num">Cantidad</th><th>Nota</th></tr>
-              </thead>
-              <tbody>
-                {movements.map((m) => {
-                  const vlabel = variantLabel(m.product_variants?.attributes);
-                  return (
-                    <tr key={m.id}>
-                      <td>{formatDate(m.created_at)}</td>
-                      <td>{m.products?.name ?? '—'}{vlabel && <span className="muted"> · {vlabel}</span>}</td>
-                      <td><span className={`badge ${m.type}`}>{MOVE_LABELS[m.type]}</span></td>
-                      <td className="num">{Number(m.quantity)}</td>
-                      <td className="muted">{m.note}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* -------- Lista móvil: tarjetas en vez de tabla con scroll -------- */}
-          <div className="mlist">
-            {movements.map((m) => {
-              const vlabel = variantLabel(m.product_variants?.attributes);
-              return (
-                <div className="mcard" key={m.id}>
-                  <div className="mcard-info">
-                    <span className="mcard-title">
-                      {m.products?.name ?? '—'}{vlabel && <span className="muted"> · {vlabel}</span>}
-                    </span>
-                    <span className="muted">{formatDate(m.created_at)}</span>
-                    {m.note && <span className="muted">{m.note}</span>}
-                  </div>
-                  <div className="mcard-amount">
-                    <span className={`badge ${m.type}`}>{MOVE_LABELS[m.type]}</span>
-                    <strong>{m.type === 'out' ? '−' : m.type === 'in' ? '+' : ''}{Number(m.quantity)}</strong>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
     </div>
   );
 }
