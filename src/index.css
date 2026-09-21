@@ -545,6 +545,24 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 }
 .menu-item:hover, .menu-item:active { background: var(--accent-soft); text-decoration: none; }
 
+/* ---------- Ofertas: precio tachado, badge y modo selección ---------- */
+.offer-old { text-decoration: line-through; color: var(--text-2); font-weight: 400; font-size: .92em; }
+.badge.offer { background: var(--accent-soft); color: var(--accent); }
+.offer-flag {
+  position: absolute; top: 8px; left: 8px; z-index: 1;
+  background: var(--accent); color: #fff; font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 999px;
+}
+.offer-check { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--accent); }
+.offer-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  padding: 10px 14px; margin-bottom: 14px; font-size: 14px;
+}
+.offer-bar-gap { flex: 1; }
+.offer-pct-label { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; font-size: 14px; font-weight: 600; }
+.offer-pct { width: 74px; padding: 7px 10px; }
+.inv-offer-enter { margin-left: auto; }
+
 /* Barra de filtros del inventario (buscador + tipo + categorías) */
 .inv-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
 .inv-filters select { width: auto; padding: 7px 32px 7px 12px; font-size: 14px; }

@@ -8,10 +8,10 @@ import {
   fetchTaxonomies,
   createProductWithVariants, updateProductDetails,
   addProductVariant, updateVariant, deleteVariant,
-  transferStock,
+  transferStock, setProductsOffer,
   mediaUrl, uploadProductImage, deleteProductMedia,
 } from '../lib/api';
-import { money, formatDate, variantLabel } from '../lib/calc';
+import { money, formatDate, variantLabel, offerPrice } from '../lib/calc';
 
 // Stock de una variante en una sucursal concreta (0 si no tiene fila).
 const branchStock = (v, branchId) => {
@@ -173,6 +173,27 @@ export default function Inventory() {
   const [moreOpen, setMoreOpen] = useState(false); // menú ⋯ del header (móvil)
   const [viewer, setViewer] = useState(null); // visor de fotos: { p, i } (índice en mediaOf(p))
 
+  // Ofertas: filtro "En oferta" y modo selección para aplicar/quitar % en lote.
+  const [offerOnly, setOfferOnly] = useState(false);
+  const [offerMode, setOfferMode] = useState(false);
+  const [offerSel, setOfferSel] = useState(new Set());
+  const [offerPct, setOfferPct] = useState('');
+
+  const toggleOfferSel = (id) => setOfferSel((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  function exitOfferMode() { setOfferMode(false); setOfferSel(new Set()); setOfferPct(''); }
+  async function applyOffer(percent) {
+    setBusy(true); setError(null);
+    try {
+      await setProductsOffer([...offerSel], percent);
+      await reload();
+      exitOfferMode();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
   function openViewer(p) {
     const media = mediaOf(p);
     if (media.length === 0) return;
@@ -212,6 +233,7 @@ export default function Inventory() {
   const visibleProducts = (products || []).filter((p) => {
     if (ptype === 'variants' && isSimple(p)) return false;
     if (ptype === 'simple' && !isSimple(p)) return false;
+    if (offerOnly && !p.offer_percent) return false;
     if (!matchesSearch(p)) return false;
     return Object.entries(filters).every(([, termId]) =>
       !termId || (p.product_terms || []).some((pt) => pt.term_id === termId));
@@ -563,6 +585,8 @@ export default function Inventory() {
             <button type="button" className={`seg-btn${ptype === 'variants' ? ' active' : ''}`} onClick={() => setPtype('variants')}>Con variantes</button>
             <button type="button" className={`seg-btn${ptype === 'simple' ? ' active' : ''}`} onClick={() => setPtype('simple')}>Simples</button>
           </div>
+          <button type="button" className={`chip-btn${offerOnly ? ' active' : ''}`}
+            onClick={() => setOfferOnly((v) => !v)}>🏷 En oferta</button>
           {filterables.map((t) => (
             <select key={t.id} value={filters[t.id] || ''}
               onChange={(e) => setFilters((f) => ({ ...f, [t.id]: e.target.value }))}>
@@ -572,7 +596,35 @@ export default function Inventory() {
               ))}
             </select>
           ))}
+          {!offerMode && (
+            <button type="button" className="btn ghost sm inv-offer-enter"
+              onClick={() => setOfferMode(true)}>Marcar ofertas</button>
+          )}
         </div>
+
+        {/* -------- Barra del modo ofertas: aplicar/quitar % a la selección -------- */}
+        {offerMode && (
+          <div className="offer-bar card">
+            <strong>{offerSel.size} seleccionado{offerSel.size === 1 ? '' : 's'}</strong>
+            <button type="button" className="linklike" onClick={() => {
+              const all = visibleProducts.map((p) => p.id);
+              setOfferSel((s) => (s.size === all.length ? new Set() : new Set(all)));
+            }}>
+              {offerSel.size === visibleProducts.length ? 'Ninguno' : 'Todos los visibles'}
+            </button>
+            <span className="offer-bar-gap" />
+            <label className="offer-pct-label">
+              <input type="number" min="1" max="99" step="1" placeholder="%" value={offerPct}
+                onChange={(e) => setOfferPct(e.target.value)} className="offer-pct" />
+              %
+            </label>
+            <button type="button" className="btn primary sm" disabled={busy || offerSel.size === 0 || !(Number(offerPct) > 0 && Number(offerPct) < 100)}
+              onClick={() => applyOffer(Number(offerPct))}>Aplicar</button>
+            <button type="button" className="btn ghost sm" disabled={busy || offerSel.size === 0}
+              onClick={() => applyOffer(null)}>Quitar oferta</button>
+            <button type="button" className="btn ghost sm" onClick={exitOfferMode}>Cancelar</button>
+          </div>
+        )}
         {visibleProducts.length === 0 ? (
           <div className="empty">Ningún producto coincide con la búsqueda o los filtros.</div>
         ) : (
@@ -592,6 +644,10 @@ export default function Inventory() {
                     <tr>
                       <td>
                         <div className="prod-cell">
+                          {offerMode && (
+                            <input type="checkbox" className="offer-check" checked={offerSel.has(p.id)}
+                              onChange={() => toggleOfferSel(p.id)} aria-label={`Seleccionar ${p.name}`} />
+                          )}
                           {simple ? (
                             <span className="tree-spacer" />
                           ) : (
@@ -620,7 +676,13 @@ export default function Inventory() {
                       </td>
                       <td className="mono">{p.sku}</td>
                       <td className="num">
-                        {money(p.price)}
+                        {p.offer_percent ? (
+                          <>
+                            <span className="offer-old">{money(p.price)}</span>{' '}
+                            <strong>{money(offerPrice(p.price, p.offer_percent))}</strong>
+                            <div><span className="badge offer">🏷 −{Number(p.offer_percent)}%</span></div>
+                          </>
+                        ) : money(p.price)}
                         {Number(p.cost) > 0 && <div className="muted">costo {money(p.cost)}</div>}
                       </td>
                       <td className="num">
@@ -640,7 +702,12 @@ export default function Inventory() {
                         <td className="variant-cell">↳ {variantLabel(v.attributes, p.variant_axes) || 'Estándar'}</td>
                         <td className="mono">{v.sku}</td>
                         <td className="num">
-                          {v.price != null ? money(v.price) : <span className="muted">{money(p.price)}</span>}
+                          {p.offer_percent ? (
+                            <>
+                              <span className="offer-old">{money(v.price ?? p.price)}</span>{' '}
+                              <strong>{money(offerPrice(v.price ?? p.price, p.offer_percent))}</strong>
+                            </>
+                          ) : (v.price != null ? money(v.price) : <span className="muted">{money(p.price)}</span>)}
                           {Number(v.cost ?? p.cost) > 0 && <div className="muted">costo {money(v.cost ?? p.cost)}</div>}
                         </td>
                         <td className="num">
@@ -678,18 +745,30 @@ export default function Inventory() {
             return (
               <div className="inv-card" key={p.id}>
                 <button type="button" className="inv-card-head" aria-expanded={!!open}
-                  onClick={() => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }))}>
+                  onClick={() => {
+                    if (offerMode) { toggleOfferSel(p.id); return; }
+                    setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }));
+                  }}>
+                  {offerMode && (
+                    <input type="checkbox" className="offer-check" checked={offerSel.has(p.id)}
+                      readOnly tabIndex={-1} aria-hidden="true" />
+                  )}
                   <span className={`list-thumb${productImg(p) ? ' thumb-click' : ''}`}
-                    onClick={(e) => { if (productImg(p)) { e.stopPropagation(); openViewer(p); } }}>
+                    onClick={(e) => { if (!offerMode && productImg(p)) { e.stopPropagation(); openViewer(p); } }}>
                     {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
                   </span>
                   <span className="inv-card-info">
                     <span className="inv-card-name">
                       {p.name}
+                      {p.offer_percent && <span className="badge offer">🏷 −{Number(p.offer_percent)}%</span>}
                       {hasLow && <span className="badge low">Bajo</span>}
                     </span>
                     <span className="muted">
-                      {p.sku ? `${p.sku} · ` : ''}{money(p.price)} · <strong>{stock}</strong> en stock
+                      {p.sku ? `${p.sku} · ` : ''}
+                      {p.offer_percent
+                        ? <><span className="offer-old">{money(p.price)}</span> {money(offerPrice(p.price, p.offer_percent))}</>
+                        : money(p.price)}
+                      {' · '}<strong>{stock}</strong> en stock
                       {!simple && ` · ${variantsOf(p).length} variantes`}
                     </span>
                     {(p.product_terms || []).length > 0 && (
@@ -715,7 +794,7 @@ export default function Inventory() {
                         <div className="inv-var-info">
                           <span>{variantLabel(v.attributes, p.variant_axes) || 'Estándar'}{isLow(v) && <span className="badge low">Bajo</span>}</span>
                           <span className="muted">
-                            <strong>{branchStock(v, branchId)}</strong> en stock · {v.price != null ? money(v.price) : money(p.price)}
+                            <strong>{branchStock(v, branchId)}</strong> en stock · {money(offerPrice(v.price ?? p.price, p.offer_percent))}
                           </span>
                         </div>
                         <div className="inv-var-actions">
@@ -969,7 +1048,11 @@ export default function Inventory() {
                   {mVar && <span className="muted"> · {variantLabel(mVar.attributes, p.variant_axes) || 'Estándar'}</span>}
                 </div>
                 <div className="muted">
-                  {p.sku ? `${p.sku} · ` : ''}{money(p.price)} · <strong>{stock}</strong> {p.unit} en stock
+                  {p.sku ? `${p.sku} · ` : ''}
+                  {p.offer_percent
+                    ? <><span className="offer-old">{money(p.price)}</span> {money(offerPrice(p.price, p.offer_percent))} (−{Number(p.offer_percent)}%)</>
+                    : money(p.price)}
+                  {' · '}<strong>{stock}</strong> {p.unit} en stock
                   {!isSimple(p) && ` · ${variantsOf(p).length} variantes`}
                 </div>
                 {tags.length > 0 && <div className="muted">{tags.join(' · ')}</div>}
