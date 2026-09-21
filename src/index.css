@@ -554,6 +554,10 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   padding: 2px 8px; border-radius: 999px;
 }
 .offer-check { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--accent); }
+/* Botón que entra al modo ofertas: relleno suave del acento para que no se
+   pierda entre los filtros (ghost lo hacía pasar desapercibido). */
+.btn.offer { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.btn.offer:hover { background: var(--accent-ring); }
 .offer-bar {
   display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
   padding: 10px 14px; margin-bottom: 14px; font-size: 14px;
