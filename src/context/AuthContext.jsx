@@ -75,6 +75,9 @@ export function AuthProvider({ children }) {
 
   const signOut = () => supabase.auth.signOut();
 
+  const isBusinessAdmin = profile?.role === 'platform_admin' || profile?.business_role === 'admin';
+  const permissions = profile?.permissions ?? {};
+
   const value = {
     session: session ?? null,
     loading: session === undefined || !ready,
@@ -84,12 +87,16 @@ export function AuthProvider({ children }) {
     isAdmin: profile?.role === 'platform_admin',
     // Rol dentro del negocio: 'admin' (acceso completo) | 'seller' (solo ventas).
     businessRole: profile?.business_role ?? 'admin',
-    isBusinessAdmin: profile?.role === 'platform_admin' || profile?.business_role === 'admin',
+    isBusinessAdmin,
     isSeller: profile?.role !== 'platform_admin' && profile?.business_role === 'seller',
     capabilities: business?.capabilities ?? {},
     // Permisos extra otorgados por el admin del negocio a una vendedora
     // (inventory/stats/retentions). El admin tiene todo sin necesitarlos.
-    permissions: profile?.permissions ?? {},
+    permissions,
+    // Acciones dentro del inventario (inv_edit_info, inv_edit_media,
+    // inv_edit_price, inv_edit_stock, inv_create, inv_delete). Requieren
+    // además el acceso al módulo; el servidor aplica las mismas reglas.
+    canInventory: (key) => isBusinessAdmin || (!!permissions.inventory && !!permissions[key]),
     refreshBusiness,
     refreshProfile,
     signIn,
