@@ -128,22 +128,22 @@ const ICON = {
 };
 
 // Selector con las opciones existentes + "＋ Otro…" para escribir un valor nuevo.
-function TermSelect({ terms, value, onChange, placeholder }) {
+function TermSelect({ terms, value, onChange, placeholder, disabled }) {
   const names = terms.map((t) => t.name);
   const [custom, setCustom] = useState(() => !!value && !names.includes(value));
 
   if (custom) {
     return (
       <div className="term-select">
-        <input autoFocus value={value} placeholder={placeholder || 'Nuevo valor'}
+        <input autoFocus value={value} placeholder={placeholder || 'Nuevo valor'} disabled={disabled}
           onChange={(e) => onChange(e.target.value)} />
-        <button type="button" className="term-select-back" title="Elegir de la lista"
+        <button type="button" className="term-select-back" title="Elegir de la lista" disabled={disabled}
           onClick={() => { setCustom(false); onChange(''); }}>▾</button>
       </div>
     );
   }
   return (
-    <select value={names.includes(value) ? value : ''}
+    <select value={names.includes(value) ? value : ''} disabled={disabled}
       onChange={(e) => { if (e.target.value === '__new__') { setCustom(true); onChange(''); } else onChange(e.target.value); }}>
       <option value="">{placeholder || 'Elegir…'}</option>
       {names.map((n) => <option key={n} value={n}>{n}</option>)}
@@ -153,7 +153,16 @@ function TermSelect({ terms, value, onChange, placeholder }) {
 }
 
 export default function Inventory() {
-  const { business } = useAuth();
+  const { business, canInventory } = useAuth();
+  // Qué puede hacer este usuario en el inventario (el admin, todo). El
+  // servidor aplica las mismas reglas; aquí solo se ocultan o bloquean controles.
+  const canInfo = canInventory('inv_edit_info');
+  const canMedia = canInventory('inv_edit_media');
+  const canPrice = canInventory('inv_edit_price');
+  const canStock = canInventory('inv_edit_stock');
+  const canCreate = canInventory('inv_create');
+  const canDelete = canInventory('inv_delete');
+  const canEdit = canInfo || canMedia || canPrice || canStock;
   const { branchId, currentBranch, allBranches } = useBranch();
   const multiBranch = allBranches.length > 1;
   const [products, setProducts] = useState(null);
@@ -258,7 +267,7 @@ export default function Inventory() {
       if (pt) categories[t.id] = termName.get(pt.term_id) || '';
     }
     setModal({
-      mode: 'edit', id: p.id, axes: p.variant_axes || [], simple: isSimple(p),
+      mode: 'edit', id: p.id, orig: p, axes: p.variant_axes || [], simple: isSimple(p),
       name: p.name, price: String(p.price ?? ''), cost: p.cost != null && Number(p.cost) !== 0 ? String(p.cost) : '',
       sku: p.sku || '', unit: p.unit || 'und', note: p.note || '',
       categories,
@@ -327,25 +336,35 @@ export default function Inventory() {
           await uploadProductImage(business.id, created.id, modal.stagedFiles[i], { sortOrder: i });
         }
       } else {
-        // EDIT
-        await updateProductDetails(modal.id, {
-          name: modal.name.trim(), sku: modal.sku.trim(), unit: modal.unit.trim() || 'und',
-          price: Number(modal.price) || 0, cost: Number(modal.cost) || 0, note: modal.note.trim(),
-          categories,
-        });
+        // EDIT: solo se envía lo que el usuario puede cambiar; lo demás va
+        // con el valor original para que el servidor no lo vea como cambio.
+        const o = modal.orig;
+        if (canInfo || canPrice) {
+          await updateProductDetails(modal.id, {
+            name: canInfo ? modal.name.trim() : o.name,
+            sku: canInfo ? modal.sku.trim() : o.sku,
+            unit: canInfo ? modal.unit.trim() || 'und' : o.unit,
+            note: canInfo ? modal.note.trim() : o.note,
+            price: canPrice ? Number(modal.price) || 0 : o.price,
+            cost: canPrice ? Number(modal.cost) || 0 : o.cost,
+            categories,
+          });
+        }
         for (const v of modal.variants) {
           const patch = {};
-          if (v.sku !== undefined) patch.sku = v.sku.trim();
-          patch.price = v.price === '' ? null : Number(v.price);
-          patch.cost = v.cost === '' ? null : Number(v.cost);
-          patch.target_stock = v.target === '' ? null : Number(v.target);
-          await updateVariant(v.id, patch);
+          if (canInfo) patch.sku = v.sku.trim();
+          if (canPrice) {
+            patch.price = v.price === '' ? null : Number(v.price);
+            patch.cost = v.cost === '' ? null : Number(v.cost);
+          }
+          if (canStock) patch.target_stock = v.target === '' ? null : Number(v.target);
+          if (Object.keys(patch).length) await updateVariant(v.id, patch);
           const ns = Number(v.stock) || 0;
-          if (ns !== v.origStock) {
+          if (canStock && ns !== v.origStock) {
             await createMovement(business.id, { productId: modal.id, variantId: v.id, type: 'adjustment', quantity: ns, note: 'Ajuste (edición)', branchId });
           }
         }
-        for (const r of modal.newRows) {
+        for (const r of canCreate ? modal.newRows : []) {
           const attributes = {};
           for (const ax of modal.axes) {
             const val = (r.values[ax] || '').trim();
@@ -486,7 +505,7 @@ export default function Inventory() {
     } finally { setBusy(false); }
   }
 
-  const moveButtons = (p, v) => (
+  const moveButtons = (p, v) => canStock && (
     <>
       <button className="icon-btn" title="Entrada (sumar stock)" aria-label="Entrada (sumar stock)"
         onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'in', quantity: '', note: '' })}>{ICON.plus}</button>
@@ -503,6 +522,14 @@ export default function Inventory() {
 
   const axisTaxOfModal = () => varTax.filter((t) => modal.axisIds.includes(t.id));
 
+  // Modal en edición: cada grupo de campos depende de su permiso. Al crear
+  // (inv_create) se llenan todos los datos iniciales.
+  const editing = modal?.mode === 'edit';
+  const lockInfo = editing && !canInfo;
+  const lockPrice = editing && !canPrice;
+  const lockStock = editing && !canStock;
+  const lockMedia = editing && !canMedia;
+
   return (
     <div className="page">
       <header className="page-head">
@@ -512,15 +539,19 @@ export default function Inventory() {
         </div>
         <div className="page-actions inv-actions">
           <Link to="/inventory/history" className="btn ghost inv-desktop">Historial completo</Link>
-          <button className="btn ghost inv-desktop" title="Descarga el modelo con las columnas esperadas (ábrelo en Excel, llénalo y guárdalo como CSV)"
-            onClick={() => downloadInvTemplate(varTax.map((t) => t.name))}>
-            ⬇ Plantilla
-          </button>
-          <label className="btn ghost inv-desktop">
-            ⬆ Importar CSV
-            <input type="file" accept=".csv,text/csv" hidden disabled={busy} onChange={onImportProducts} />
-          </label>
-          <button className="btn primary" onClick={openCreate}>+ Nuevo producto</button>
+          {canCreate && (
+            <>
+              <button className="btn ghost inv-desktop" title="Descarga el modelo con las columnas esperadas (ábrelo en Excel, llénalo y guárdalo como CSV)"
+                onClick={() => downloadInvTemplate(varTax.map((t) => t.name))}>
+                ⬇ Plantilla
+              </button>
+              <label className="btn ghost inv-desktop">
+                ⬆ Importar CSV
+                <input type="file" accept=".csv,text/csv" hidden disabled={busy} onChange={onImportProducts} />
+              </label>
+              <button className="btn primary" onClick={openCreate}>+ Nuevo producto</button>
+            </>
+          )}
           {/* Móvil: Historial, Plantilla e Importar se recogen en un menú ⋯ */}
           <div className="inv-more">
             <button type="button" className="icon-btn inv-more-btn" aria-label="Más acciones"
@@ -532,15 +563,19 @@ export default function Inventory() {
                 <div className="menu-pop" role="menu">
                   <Link to="/inventory/history" className="menu-item" role="menuitem"
                     onClick={() => setMoreOpen(false)}>Historial completo</Link>
-                  <button type="button" className="menu-item" role="menuitem"
-                    onClick={() => { downloadInvTemplate(varTax.map((t) => t.name)); setMoreOpen(false); }}>
-                    ⬇ Descargar plantilla
-                  </button>
-                  <label className="menu-item" role="menuitem">
-                    ⬆ Importar CSV
-                    <input type="file" accept=".csv,text/csv" hidden disabled={busy}
-                      onChange={(e) => { setMoreOpen(false); onImportProducts(e); }} />
-                  </label>
+                  {canCreate && (
+                    <>
+                      <button type="button" className="menu-item" role="menuitem"
+                        onClick={() => { downloadInvTemplate(varTax.map((t) => t.name)); setMoreOpen(false); }}>
+                        ⬇ Descargar plantilla
+                      </button>
+                      <label className="menu-item" role="menuitem">
+                        ⬆ Importar CSV
+                        <input type="file" accept=".csv,text/csv" hidden disabled={busy}
+                          onChange={(e) => { setMoreOpen(false); onImportProducts(e); }} />
+                      </label>
+                    </>
+                  )}
                 </div>
               </>
             )}
@@ -573,7 +608,9 @@ export default function Inventory() {
       {products === null ? (
         <div className="empty">Cargando…</div>
       ) : products.length === 0 ? (
-        <div className="empty">Aún no tienes productos. Usa <strong>+ Nuevo producto</strong> para agregar el primero.</div>
+        <div className="empty">
+          Aún no hay productos.{canCreate && <> Usa <strong>+ Nuevo producto</strong> para agregar el primero.</>}
+        </div>
       ) : (
         <>
         <div className="inv-filters">
@@ -595,7 +632,7 @@ export default function Inventory() {
               ))}
             </select>
           ))}
-          {!offerMode && (
+          {canPrice && !offerMode && (
             <button type="button" className="btn offer sm inv-offer-enter"
               onClick={() => setOfferMode(true)}>🏷 Marcar ofertas</button>
           )}
@@ -692,8 +729,8 @@ export default function Inventory() {
                       </td>
                       <td className="row-actions">
                         {simple && dv && moveButtons(p, dv)}
-                        <button className="icon-btn" title="Editar producto" onClick={() => openEdit(p)}>{ICON.edit}</button>
-                        <button className="icon-btn danger" title="Eliminar producto" onClick={() => onDeleteProduct(p)}>{ICON.trash}</button>
+                        {canEdit && <button className="icon-btn" title="Editar producto" onClick={() => openEdit(p)}>{ICON.edit}</button>}
+                        {canDelete && <button className="icon-btn danger" title="Eliminar producto" onClick={() => onDeleteProduct(p)}>{ICON.trash}</button>}
                       </td>
                     </tr>
                     {!simple && open && variantsOf(p).map((v) => (
@@ -717,11 +754,11 @@ export default function Inventory() {
                         </td>
                         <td className="row-actions">
                           {moveButtons(p, v)}
-                          {multiBranch && (
+                          {canStock && multiBranch && (
                             <button className="icon-btn" title="Trasladar a otra sucursal"
                               onClick={() => setTransfer({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes, p.variant_axes) || 'Estándar', to: '', quantity: '' })}>{ICON.transfer}</button>
                           )}
-                          <button className="icon-btn danger" title="Quitar variante" onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>
+                          {canDelete && <button className="icon-btn danger" title="Quitar variante" onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>}
                         </td>
                       </tr>
                     ))}
@@ -798,15 +835,19 @@ export default function Inventory() {
                         </div>
                         <div className="inv-var-actions">
                           {moveButtons(p, v)}
-                          <button className="icon-btn danger" title="Quitar variante" aria-label="Quitar variante"
-                            onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>
+                          {canDelete && (
+                            <button className="icon-btn danger" title="Quitar variante" aria-label="Quitar variante"
+                              onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>
+                          )}
                         </div>
                       </div>
                     ))}
-                    <div className="inv-card-foot">
-                      <button className="btn ghost sm" onClick={() => openEdit(p)}>{ICON.edit} Editar</button>
-                      <button className="btn danger sm" onClick={() => onDeleteProduct(p)}>{ICON.trash} Eliminar</button>
-                    </div>
+                    {(canEdit || canDelete) && (
+                      <div className="inv-card-foot">
+                        {canEdit && <button className="btn ghost sm" onClick={() => openEdit(p)}>{ICON.edit} Editar</button>}
+                        {canDelete && <button className="btn danger sm" onClick={() => onDeleteProduct(p)}>{ICON.trash} Eliminar</button>}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -847,16 +888,16 @@ export default function Inventory() {
               )}
               <div className="np-grid">
                 <label className="np-name">Nombre
-                  <input value={modal.name} onChange={(e) => setM({ name: e.target.value })} required autoFocus placeholder="Camisa Oxford" />
+                  <input value={modal.name} onChange={(e) => setM({ name: e.target.value })} required autoFocus placeholder="Camisa Oxford" disabled={lockInfo} />
                 </label>
                 <label>Precio (USD)
-                  <input type="number" step="0.01" min="0" value={modal.price} onChange={(e) => setM({ price: e.target.value })} placeholder="0,00" />
+                  <input type="number" step="0.01" min="0" value={modal.price} onChange={(e) => setM({ price: e.target.value })} placeholder="0,00" disabled={lockPrice} />
                 </label>
                 <label title="Lo que te costó comprar o producir una unidad; sirve para calcular la utilidad">Costo (USD)
-                  <input type="number" step="0.01" min="0" value={modal.cost} onChange={(e) => setM({ cost: e.target.value })} placeholder="0,00" />
+                  <input type="number" step="0.01" min="0" value={modal.cost} onChange={(e) => setM({ cost: e.target.value })} placeholder="0,00" disabled={lockPrice} />
                 </label>
                 <label>SKU
-                  <input value={modal.sku} onChange={(e) => setM({ sku: e.target.value })} placeholder="CAM-OXF" />
+                  <input value={modal.sku} onChange={(e) => setM({ sku: e.target.value })} placeholder="CAM-OXF" disabled={lockInfo} />
                 </label>
                 {modal.mode === 'create' && modal.cmode === 'simple' && (
                   <label>Cantidad
@@ -867,7 +908,7 @@ export default function Inventory() {
                 {/* La unidad (products.unit) se mantiene internamente con su
                     default 'und'; se configurará por negocio más adelante. */}
                 <label className="np-name">Nota (opcional)
-                  <textarea rows={2} value={modal.note} placeholder="p. ej. Este pantalón tiene una mancha"
+                  <textarea rows={2} value={modal.note} placeholder="p. ej. Este pantalón tiene una mancha" disabled={lockInfo}
                     onChange={(e) => setM({ note: e.target.value })} />
                 </label>
               </div>
@@ -887,7 +928,7 @@ export default function Inventory() {
                         <label key={t.id}>{t.name}
                           <TermSelect terms={t.taxonomy_terms} value={modal.categories[t.id] || ''}
                             onChange={(val) => setM({ categories: { ...modal.categories, [t.id]: val } })}
-                            placeholder={`Elegir ${t.name.toLowerCase()}…`} />
+                            placeholder={`Elegir ${t.name.toLowerCase()}…`} disabled={lockInfo} />
                         </label>
                       ))}
                     </div>
@@ -912,19 +953,21 @@ export default function Inventory() {
                     : (modal.media || []).filter((m) => !m.variant_id).map((m) => (
                         <div className="img-thumb" key={m.id}>
                           <img src={mediaUrl(m)} alt="" />
-                          <button type="button" className="img-del" onClick={() => onRemoveImage(m)}>×</button>
+                          {!lockMedia && <button type="button" className="img-del" onClick={() => onRemoveImage(m)}>×</button>}
                         </div>
                       ))}
-                  <label className="img-add">
-                    <input type="file" accept="image/*" multiple={modal.mode === 'create'} hidden disabled={busy}
-                      onChange={(e) => {
-                        const files = [...e.target.files];
-                        if (modal.mode === 'create') setM({ stagedFiles: [...(modal.stagedFiles || []), ...files] });
-                        else if (files[0]) onUploadImage(files[0], null);
-                        e.target.value = '';
-                      }} />
-                    <span>＋ Foto</span>
-                  </label>
+                  {!lockMedia && (
+                    <label className="img-add">
+                      <input type="file" accept="image/*" multiple={modal.mode === 'create'} hidden disabled={busy}
+                        onChange={(e) => {
+                          const files = [...e.target.files];
+                          if (modal.mode === 'create') setM({ stagedFiles: [...(modal.stagedFiles || []), ...files] });
+                          else if (files[0]) onUploadImage(files[0], null);
+                          e.target.value = '';
+                        }} />
+                      <span>＋ Foto</span>
+                    </label>
+                  )}
                 </div>
               </div>
 
@@ -973,27 +1016,29 @@ export default function Inventory() {
                       return (
                       <div className="edit-var-row" key={v.id}>
                         <label className="var-img" title="Imagen de la variación">
-                          {vm ? <img src={mediaUrl(vm)} alt="" /> : <span className="thumb-ph">＋</span>}
-                          <input type="file" accept="image/*" hidden disabled={busy}
+                          {vm ? <img src={mediaUrl(vm)} alt="" /> : <span className="thumb-ph">{lockMedia ? '' : '＋'}</span>}
+                          <input type="file" accept="image/*" hidden disabled={busy || lockMedia}
                             onChange={async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (vm) await onRemoveImage(vm); await onUploadImage(f, v.id); }} />
                         </label>
                         <span className="edit-var-label">{v.label || 'Estándar'}</span>
-                        <input type="number" min="0" step="1" value={v.stock}
+                        <input type="number" min="0" step="1" value={v.stock} disabled={lockStock}
                           onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, stock: e.target.value } : x) })} />
-                        <input value={v.sku} placeholder="—"
+                        <input value={v.sku} placeholder="—" disabled={lockInfo}
                           onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, sku: e.target.value } : x) })} />
-                        <input type="number" min="0" step="0.01" value={v.price} placeholder="hereda"
+                        <input type="number" min="0" step="0.01" value={v.price} placeholder="hereda" disabled={lockPrice}
                           onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, price: e.target.value } : x) })} />
-                        <input type="number" min="0" step="0.01" value={v.cost} placeholder="hereda"
+                        <input type="number" min="0" step="0.01" value={v.cost} placeholder="hereda" disabled={lockPrice}
                           onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, cost: e.target.value } : x) })} />
-                        <input type="number" min="0" step="1" value={v.target} placeholder="—"
+                        <input type="number" min="0" step="1" value={v.target} placeholder="—" disabled={lockStock}
                           onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, target: e.target.value } : x) })} />
                       </div>
                     ); })}
                   </div>
-                  <p className="hint">Cambiar el stock aquí registra un ajuste de inventario. Para separar entradas y salidas usa los botones de la tabla.</p>
+                  {!lockStock && (
+                    <p className="hint">Cambiar el stock aquí registra un ajuste de inventario. Para separar entradas y salidas usa los botones de la tabla.</p>
+                  )}
 
-                  {modal.axes.length > 0 && (
+                  {canCreate && modal.axes.length > 0 && (
                     <div style={{ marginTop: 14 }}>
                       <div className="oc-label">Agregar variaciones</div>
                       <VarRows
@@ -1056,9 +1101,11 @@ export default function Inventory() {
                 </div>
                 {tags.length > 0 && <div className="muted">{tags.join(' · ')}</div>}
                 {p.note && <div className="product-note">📝 {p.note}</div>}
-                <button type="button" className="btn ghost sm" onClick={() => { setViewer(null); openEdit(p); }}>
-                  {ICON.edit} Editar producto
-                </button>
+                {canEdit && (
+                  <button type="button" className="btn ghost sm" onClick={() => { setViewer(null); openEdit(p); }}>
+                    {ICON.edit} Editar producto
+                  </button>
+                )}
               </div>
             </div>
           </div>

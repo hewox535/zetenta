@@ -870,6 +870,16 @@ const PERM_OPTIONS = [
   ['stats', 'Estadísticas'],
   ['retentions', 'Retenciones'],
 ];
+// Qué puede hacer dentro del inventario (con el módulo activado). Sin
+// ninguno, la vendedora solo ve productos y existencias.
+const INV_PERM_OPTIONS = [
+  ['inv_edit_info', 'Editar nombre y datos'],
+  ['inv_edit_media', 'Imágenes'],
+  ['inv_edit_price', 'Precios y ofertas'],
+  ['inv_edit_stock', 'Cantidades'],
+  ['inv_create', 'Crear productos'],
+  ['inv_delete', 'Eliminar'],
+];
 
 function StaffSection({ profile }) {
   const { capabilities } = useAuth();
@@ -933,7 +943,7 @@ function StaffSection({ profile }) {
         <p className="hint">
           El <strong>administrador</strong> tiene acceso completo (inventario, estadísticas,
           configuración). La <strong>vendedora</strong> accede a Ventas y Clientes, más los
-          módulos extra que le actives aquí.
+          módulos extra que le actives aquí. En Inventario eliges además qué puede cambiar.
         </p>
         {staff === null ? (
           <div className="empty">Cargando…</div>
@@ -982,6 +992,25 @@ function StaffSection({ profile }) {
                           {label}
                         </label>
                       ))}
+                    </div>
+                  )}
+                  {grantable.some(([key]) => key === 'inventory') && u.permissions?.inventory && (
+                    <div className="perm-row perm-sub">
+                      <span className="muted">Inventario:</span>
+                      {INV_PERM_OPTIONS.map(([key, label]) => (
+                        <label className="perm-item" key={key}>
+                          <button type="button" className={`switch sm${u.permissions?.[key] ? ' on' : ''}`}
+                            role="switch" aria-checked={!!u.permissions?.[key]}
+                            aria-label={`Inventario: ${label} para ${u.full_name || u.username || u.email}`}
+                            onClick={() => onTogglePerm(u, key)}>
+                            <span className="switch-knob" />
+                          </button>
+                          {label}
+                        </label>
+                      ))}
+                      {!INV_PERM_OPTIONS.some(([key]) => u.permissions?.[key]) && (
+                        <span className="muted">· solo puede ver</span>
+                      )}
                     </div>
                   )}
                 </div>
