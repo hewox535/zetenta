@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { BranchProvider } from './context/BranchContext';
 import { BrandingProvider, useBranding } from './context/BrandingContext';
 import Brand from './components/Brand';
+import { ConfirmProvider } from './components/Confirm';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -96,6 +97,7 @@ export default function App() {
     <BrandGate>
     <AuthProvider>
       <BranchProvider>
+      <ConfirmProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -123,6 +125,7 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </ConfirmProvider>
       </BranchProvider>
     </AuthProvider>
     </BrandGate>

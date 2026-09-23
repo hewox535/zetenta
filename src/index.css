@@ -216,11 +216,18 @@ table.list .centro, table.list th.centro { text-align: center; }
 .btn.ghost { background: transparent; color: var(--accent); }
 .btn.ghost:hover { background: var(--accent-soft); }
 .btn.danger { background: transparent; color: var(--danger); }
+.btn.danger-solid { background: var(--danger); color: #fff; }
+.btn.danger-solid:hover { filter: brightness(.94); }
 .btn.danger:hover { background: var(--danger-bg); }
 .btn.sm { padding: 5px 12px; font-size: 13px; }
 .btn.lg { padding: 13px 24px; font-size: 16px; }
 .btn.block { width: 100%; }
 .btn:disabled { opacity: .55; cursor: default; }
+
+/* Campo que el usuario no tiene permiso de cambiar (o deshabilitado) */
+input:disabled, textarea:disabled, select:disabled {
+  background: rgba(0,0,0,.035); color: var(--text-2); cursor: not-allowed;
+}
 
 /* ---------- Formularios ---------- */
 
@@ -359,6 +366,12 @@ a.icon-btn { text-decoration: none; }
 }
 .modal { width: 100%; max-width: 420px; padding: 26px; }
 
+/* Confirmación de acciones sensibles */
+.confirm-modal { max-width: 400px; }
+.confirm-modal h2 { margin: 0; font-size: 19px; line-height: 1.3; }
+.confirm-text { margin: 10px 0 0; color: var(--text-2); font-size: 14px; line-height: 1.5; }
+.confirm-actions { margin-top: 22px; flex-direction: row-reverse; justify-content: flex-start; }
+
 /* ---------- Switch (capabilities) ---------- */
 
 .switch {
@@ -377,13 +390,22 @@ a.icon-btn { text-decoration: none; }
 .switch.sm .switch-knob { width: 16px; height: 16px; }
 .switch.sm.on .switch-knob { transform: translateX(14px); }
 
-/* Permisos extra por vendedora (Negocio → Personal) */
+/* Personal y su modal de permisos (Negocio → Personal) */
 .staff-item { border-bottom: 1px solid var(--border); }
-.staff-item .method-row { border-bottom: none; padding-bottom: 6px; }
-.perm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 0 0 12px; }
-.perm-row > .muted { font-size: 12.5px; }
-.perm-sub { margin-top: -6px; padding-left: 14px; border-left: 2px solid var(--border); margin-left: 4px; margin-bottom: 12px; padding-bottom: 0; }
-.perm-item { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+.staff-item .method-row { border-bottom: none; flex-wrap: wrap; }
+/* Nombre arriba y detalle debajo; el rol y los botones no se aplastan. */
+.staff-item .method-info { flex: 1 1 200px; min-width: 0; flex-direction: column; align-items: flex-start; gap: 2px; }
+.staff-item .method-info .muted { font-size: 12.5px; }
+.staff-item .method-actions { flex: 0 0 auto; }
+.staff-item .method-actions select { min-width: 132px; }
+.perm-modal { max-width: 460px; }
+.perm-group { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.perm-group .hint { margin: -2px 0 10px; }
+.perm-line { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 0; }
+.perm-line + .perm-line { border-top: 1px solid var(--border); }
+.perm-line-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.perm-line-label { font-weight: 600; font-size: 14px; }
+.perm-line-text .muted { font-size: 12.5px; }
 
 /* ============================================================
    Comprobante: réplica exacta del formato oficial (Google Sheet)

@@ -12,6 +12,7 @@ import {
   mediaUrl, uploadProductImage, deleteProductMedia,
 } from '../lib/api';
 import { money, variantLabel, offerPrice } from '../lib/calc';
+import { useConfirm } from '../components/Confirm';
 
 // Stock de una variante en una sucursal concreta (0 si no tiene fila).
 const branchStock = (v, branchId) => {
@@ -153,6 +154,7 @@ function TermSelect({ terms, value, onChange, placeholder, disabled }) {
 }
 
 export default function Inventory() {
+  const ask = useConfirm();
   const { business, canInventory } = useAuth();
   // Qué puede hacer este usuario en el inventario (el admin, todo). El
   // servidor aplica las mismas reglas; aquí solo se ocultan o bloquean controles.
@@ -409,12 +411,12 @@ export default function Inventory() {
 
   // ---------- Acciones de tabla ----------
   async function onDeleteProduct(p) {
-    if (!confirm(`¿Eliminar ${p.name}, sus variantes y su historial de movimientos?`)) return;
+    if (!await ask({ title: `¿Eliminar ${p.name}?`, message: 'Se eliminan también sus variantes y su historial de movimientos.', confirmLabel: 'Eliminar producto' })) return;
     try { await deleteProduct(p.id); await reload(); } catch (e) { setError(e.message); }
   }
   async function onDeleteVariant(p, v) {
     if (variantsOf(p).length <= 1) { setError('Un producto debe tener al menos una variante.'); return; }
-    if (!confirm(`¿Eliminar la variante ${variantLabel(v.attributes) || 'estándar'} de ${p.name}?`)) return;
+    if (!await ask({ title: `¿Eliminar la variación ${variantLabel(v.attributes) || 'estándar'}?`, message: `Se quita de ${p.name} junto con su stock.`, confirmLabel: 'Eliminar variación' })) return;
     try { await deleteVariant(v.id); await reload(); } catch (e) { setError(e.message); }
   }
   async function onSubmitMove(e) {
@@ -868,6 +870,11 @@ export default function Inventory() {
               <button className="btn ghost sm" onClick={() => setModal(null)}>Cerrar</button>
             </div>
             <form onSubmit={onSubmit} className="vform">
+              {editing && (lockInfo || lockPrice || lockStock || lockMedia) && (
+                <p className="hint">
+                  Los campos en gris no los puedes cambiar con tus permisos actuales.
+                </p>
+              )}
               {modal.mode === 'create' && (
                 <div className="mode-pills" role="radiogroup" aria-label="Tipo de producto">
                   {[

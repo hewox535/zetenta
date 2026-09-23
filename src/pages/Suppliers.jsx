@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { fetchSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../lib/api';
+import { useConfirm } from '../components/Confirm';
 
 const ICON = {
   edit: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16v4z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.6"/></svg>,
@@ -8,6 +9,7 @@ const ICON = {
 };
 
 export default function Suppliers() {
+  const ask = useConfirm();
   const { business } = useAuth();
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
@@ -47,7 +49,7 @@ export default function Suppliers() {
   }
 
   async function onDelete(s) {
-    if (!confirm(`¿Eliminar a ${s.name}? Sus comprobantes emitidos se conservan.`)) return;
+    if (!await ask({ title: `¿Eliminar a ${s.name}?`, message: 'Sus comprobantes emitidos se conservan.', confirmLabel: 'Eliminar proveedor' })) return;
     try {
       await deleteSupplier(s.id);
       setRows((prev) => prev.filter((r) => r.id !== s.id));

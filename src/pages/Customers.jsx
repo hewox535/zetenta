@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   fetchCustomers, createCustomer, createCustomersBulk, updateCustomer, deleteCustomer,
 } from '../lib/api';
+import { useConfirm } from '../components/Confirm';
 
 const EMPTY = { name: '', document: '', phone: '', email: '' };
 
@@ -88,6 +89,7 @@ const dedupeKey = (c) =>
   c.name.toLowerCase();
 
 export default function Customers() {
+  const ask = useConfirm();
   const { business, capabilities } = useAuth();
   const canCampaign = capabilities?.campaigns !== false; // módulo apagable por el admin de la plataforma
   const [rows, setRows] = useState(null);
@@ -155,7 +157,7 @@ export default function Customers() {
   function cancel() { setEditing(null); setForm(EMPTY); }
 
   async function onDelete(c) {
-    if (!confirm(`¿Eliminar a ${c.name}? Sus ventas se conservan.`)) return;
+    if (!await ask({ title: `¿Eliminar a ${c.name}?`, message: 'Sus ventas se conservan.', confirmLabel: 'Eliminar cliente' })) return;
     try {
       await deleteCustomer(c.id);
       setRows((prev) => prev.filter((r) => r.id !== c.id));
