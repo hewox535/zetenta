@@ -285,6 +285,13 @@ export async function createVariant(businessId, productId, { sku, price, stock, 
     .select().single());
 }
 
+// Variantes de un producto (para emparejar las fotos recién subidas con la
+// variante que les toca, después de crear el producto).
+export async function fetchProductVariants(productId) {
+  return unwrap(await supabase.from('product_variants')
+    .select('id, attributes').eq('product_id', productId));
+}
+
 export async function updateVariant(id, patch) {
   return unwrap(await supabase.from('product_variants')
     .update(patch).eq('id', id).select().single());

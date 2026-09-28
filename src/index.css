@@ -641,16 +641,52 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .seg-btn { padding: 8px 18px; border: none; background: transparent; cursor: pointer; font-weight: 600; font-size: 13px; color: var(--text); }
 .seg-btn.active { background: var(--accent); color: #fff; }
 .np-variants { margin-top: 14px; }
-.np-gen { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 12px 0; padding: 12px; background: var(--accent-soft); border-radius: var(--radius); }
-.np-gen label { flex: 1 1 120px; }
-.var-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; align-items: flex-start; }
-/* Tarjeta por variación: borde suave como divisor y campos con label propio */
-.var-card { position: relative; width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 44px 12px 12px; }
-.var-card-fields { display: flex; flex-wrap: wrap; gap: 10px; }
-.var-field { flex: 1 1 130px; min-width: 110px; font-size: 12.5px; }
-.var-field.num { flex: 0 1 96px; min-width: 84px; }
-.var-row-del { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; display: grid; place-items: center; border: none; background: transparent; color: var(--danger); cursor: pointer; border-radius: 8px; }
-.var-row-del:hover { background: var(--danger-bg); }
+/* ----- Constructor de variaciones (valores por eje → combinaciones) ----- */
+.vb { margin-top: 12px; }
+.axis-values + .axis-values { margin-top: 12px; }
+.axis-values-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.axis-name { font-size: 12.5px; font-weight: 700; letter-spacing: .02em; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 13px; font-weight: 600; padding: 6px 13px; border-radius: 999px; cursor: pointer;
+}
+.chip:hover { border-color: var(--accent-line); }
+.chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.chip-add { display: inline-flex; align-items: center; gap: 6px; }
+.chip-add input { width: 150px; padding: 6px 12px; font-size: 13px; }
+
+.vb-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin: 16px 0 10px; padding: 10px 12px; background: var(--accent-soft); border-radius: var(--radius);
+}
+.vb-bar-gap { flex: 1 1 auto; }
+.vb-bar .muted { font-size: 12.5px; }
+.vb-bulk { width: 92px; padding: 6px 10px; font-size: 13px; }
+
+.vb-list { display: flex; flex-direction: column; gap: 10px; }
+.vb-card { display: flex; gap: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+.vb-photo {
+  flex: 0 0 62px; width: 62px; height: 62px; border-radius: 10px; overflow: hidden;
+  border: 1px dashed var(--border); display: grid; place-items: center; cursor: pointer;
+  background: var(--accent-soft);
+}
+.vb-photo:hover { border-color: var(--accent-line); }
+.vb-photo img { width: 100%; height: 100%; object-fit: cover; }
+.vb-photo .thumb-ph { font-size: 18px; }
+.vb-card-body { flex: 1 1 auto; min-width: 0; }
+.vb-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.vb-label { font-size: 13.5px; font-weight: 700; }
+.vb-card-head .linklike { font-size: 12px; }
+.vb-del {
+  margin-left: auto; width: 30px; height: 30px; display: grid; place-items: center;
+  border: none; background: transparent; color: var(--danger); cursor: pointer; border-radius: 8px;
+}
+.vb-del:hover { background: var(--danger-bg); }
+.vb-fields { display: flex; flex-wrap: wrap; gap: 10px; }
+.vb-field { flex: 1 1 96px; min-width: 88px; font-size: 12.5px; }
+.pay-pill.ghost { border-style: dashed; color: var(--accent); }
+.np-subblock { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border); }
 
 /* Pills tipo radio: elegir producto simple o con variaciones */
 .mode-pills { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -678,14 +714,6 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .term-select input { flex: 1; min-width: 0; }
 .term-select-back { flex: 0 0 auto; width: 34px; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; cursor: pointer; color: var(--text-2); }
 .term-select-back:hover { border-color: var(--accent-line); }
-
-.edit-variants { display: flex; flex-direction: column; gap: 8px; }
-.edit-var-head { display: flex; gap: 8px; font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; padding: 0 2px; }
-.edit-var-head span { flex: 1 1 60px; }
-.edit-var-head span:first-child { flex: 1 1 120px; }
-.edit-var-row { display: flex; gap: 8px; align-items: center; }
-.edit-var-row input { flex: 1 1 60px; min-width: 52px; }
-.edit-var-label { flex: 1 1 120px; font-weight: 600; font-size: 13px; }
 
 /* Imágenes de producto */
 .list-thumb { flex: 0 0 48px; display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 10px; overflow: hidden; background: var(--accent-soft); }
@@ -722,14 +750,10 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .img-del { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border: none; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 13px; line-height: 1; }
 .img-add { width: 76px; height: 76px; border: 1px dashed var(--border); border-radius: 10px; display: grid; place-items: center; cursor: pointer; color: var(--text-2); font-size: 13px; font-weight: 600; }
 .img-add:hover { border-color: var(--accent-line); color: var(--accent); }
-.var-img { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); display: grid; place-items: center; cursor: pointer; background: var(--accent-soft); }
-.var-img img { width: 100%; height: 100%; object-fit: cover; }
-.var-img .thumb-ph { font-size: 16px; color: var(--accent); opacity: .5; }
-.edit-var-head .evh-img { flex: 0 0 44px; }
-
 @media (max-width: 640px) {
-  .edit-var-head { display: none; }
-  .edit-var-row { flex-wrap: wrap; }
+  .vb-card { flex-direction: column; }
+  .vb-photo { flex: 0 0 72px; width: 72px; height: 72px; }
+  .chip-add input { width: 120px; }
 }
 
 /* ----- Panel lateral (pedido / pago) ----- */
