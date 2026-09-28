@@ -14,7 +14,7 @@ import {
 } from '../lib/api';
 import { money, variantLabel, offerPrice } from '../lib/calc';
 import { useConfirm } from '../components/Confirm';
-import VariantBuilder, { emptyBuilder, builderVariants, sigOf } from '../components/VariantBuilder';
+import VariantBuilder, { emptyVariations, sigOf } from '../components/VariantBuilder';
 
 // Stock de una variante en una sucursal concreta (0 si no tiene fila).
 const branchStock = (v, branchId) => {
@@ -250,6 +250,27 @@ export default function Inventory() {
   async function reload() {
     const [p, t] = await Promise.all([fetchProducts(), fetchTaxonomies()]);
     setProducts(p); setTaxonomies(t);
+    return p;
+  }
+
+  // Tras un movimiento hecho desde el modal de edición, las cantidades que
+  // muestra el modal quedarían viejas: se releen del producto recargado (y se
+  // fija origStock para no registrar un ajuste de más al guardar).
+  function syncModalStock(products) {
+    setModal((m) => {
+      if (!m || m.mode !== 'edit') return m;
+      const p = (products || []).find((x) => x.id === m.id);
+      if (!p) return m;
+      return {
+        ...m,
+        variants: m.variants.map((v) => {
+          const fresh = variantsOf(p).find((x) => x.id === v.id);
+          if (!fresh) return v;
+          const st = branchStock(fresh, branchId);
+          return { ...v, stock: String(st), origStock: st };
+        }),
+      };
+    });
   }
   useEffect(() => { reload().catch((e) => setError(e.message)); }, []);
 
@@ -280,7 +301,7 @@ export default function Inventory() {
     setError(null);
     setModal({
       mode: 'create', name: '', price: '', cost: '', sku: '', unit: 'und', note: '', categories: {},
-      cmode: 'simple', simpleStock: '', axisIds: [], vb: emptyBuilder(), stagedFiles: [],
+      cmode: 'simple', simpleStock: '', axisIds: [], vb: emptyVariations(), stagedFiles: [],
     });
   }
   function openEdit(p) {
@@ -306,7 +327,7 @@ export default function Inventory() {
         cost: v.cost != null ? String(v.cost) : '',
         target: v.target_stock != null ? String(v.target_stock) : '',
       })),
-      vbNew: emptyBuilder(), media: mediaOf(p),
+      vbNew: emptyVariations(), media: mediaOf(p),
     });
   }
 
@@ -354,8 +375,8 @@ export default function Inventory() {
           const axes = varTax.filter((t) => modal.axisIds.includes(t.id));
           if (axes.length === 0) throw new Error('Elige al menos un eje de variación (Color, Talla…).');
           variantAxes = axes.map((t) => t.name);
-          built = builderVariants(variantAxes, modal.vb);
-          if (built.length === 0) throw new Error('Elige los valores de cada eje para armar al menos una variación.');
+          built = modal.vb;
+          if (built.length === 0) throw new Error('Agrega al menos una variación.');
           variants = built.map((v) => ({
             attributes: v.attributes, stock: Number(v.stock) || 0, sku: (v.sku || '').trim(),
             price: v.price === '' || v.price == null ? null : Number(v.price),
@@ -377,7 +398,7 @@ export default function Inventory() {
           const saved = await fetchProductVariants(created.id);
           const byySig = new Map(saved.map((v) => [sigOf(variantAxes, v.attributes || {}), v.id]));
           for (const v of withPhoto) {
-            const variantId = byySig.get(v.sig);
+            const variantId = byySig.get(sigOf(variantAxes, v.attributes));
             if (variantId) await uploadProductImage(business.id, created.id, v.file, { variantId });
           }
         }
@@ -411,8 +432,7 @@ export default function Inventory() {
           }
         }
         if (canCreate) {
-          const existing = new Set(modal.variants.map((v) => v.sig));
-          for (const r of builderVariants(modal.axes, modal.vbNew, existing)) {
+          for (const r of modal.vbNew) {
             const created = await addProductVariant(modal.id, {
               attributes: r.attributes, sku: (r.sku || '').trim(),
               price: r.price === '' || r.price == null ? null : Number(r.price),
@@ -451,7 +471,7 @@ export default function Inventory() {
         productId: move.productId, variantId: move.variantId, type: move.type,
         quantity: Number(move.quantity), note: move.note.trim(), branchId,
       });
-      await reload();
+      syncModalStock(await reload());
       setMove(null);
     } catch (err) {
       setError(err.message.includes('Insufficient stock') ? 'No hay stock suficiente para esa salida.' : err.message);
@@ -523,7 +543,7 @@ export default function Inventory() {
     setError(null); setBusy(true);
     try {
       await transferStock({ variantId: transfer.variantId, fromBranch: branchId, toBranch: transfer.to, quantity: transfer.quantity, note: 'Traslado' });
-      await reload();
+      syncModalStock(await reload());
       setTransfer(null);
     } catch (err) {
       setError(err.message.includes('Insufficient') || err.message.includes('suficiente')
@@ -531,19 +551,25 @@ export default function Inventory() {
     } finally { setBusy(false); }
   }
 
-  const moveButtons = (p, v) => canStock && (
-    <>
-      <button className="icon-btn" title="Entrada (sumar stock)" aria-label="Entrada (sumar stock)"
-        onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'in', quantity: '', note: '' })}>{ICON.plus}</button>
-      <button className="icon-btn" title="Salida (restar stock)" aria-label="Salida (restar stock)"
-        onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'out', quantity: '', note: '' })}>{ICON.minus}</button>
-      <button className="icon-btn" title="Ajustar stock" aria-label="Ajustar stock"
-        onClick={() => setMove({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes), type: 'adjustment', quantity: String(branchStock(v, branchId)), note: '' })}>{ICON.adjust}</button>
+  // Entrada / salida / traslado de una variación, dentro del modal de edición.
+  // (El ajuste es el propio campo Cantidad de la tarjeta.)
+  const stockButtons = (v) => canStock && (
+    <div className="vb-moves">
+      <button type="button" className="btn ghost sm" title="Registrar una entrada, con su nota"
+        onClick={() => setMove({ productId: modal.id, variantId: v.id, label: v.label, type: 'in', quantity: '', note: '' })}>
+        {ICON.plus} Entrada
+      </button>
+      <button type="button" className="btn ghost sm" title="Registrar una salida, con su nota"
+        onClick={() => setMove({ productId: modal.id, variantId: v.id, label: v.label, type: 'out', quantity: '', note: '' })}>
+        {ICON.minus} Salida
+      </button>
       {multiBranch && (
-        <button className="icon-btn" title="Trasladar a otra sucursal" aria-label="Trasladar a otra sucursal"
-          onClick={() => setTransfer({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes, p.variant_axes) || 'Estándar', to: '', quantity: '' })}>{ICON.transfer}</button>
+        <button type="button" className="btn ghost sm" title="Trasladar a otra sucursal"
+          onClick={() => setTransfer({ productId: modal.id, variantId: v.id, label: v.label || 'Estándar', to: '', quantity: '' })}>
+          {ICON.transfer} Trasladar
+        </button>
       )}
-    </>
+    </div>
   );
 
   const axisTaxOfModal = () => varTax.filter((t) => modal.axisIds.includes(t.id));
@@ -769,7 +795,6 @@ export default function Inventory() {
                         {!simple && productHasLow(p) && <span className="badge low">Bajo</span>}
                       </td>
                       <td className="row-actions">
-                        {simple && dv && moveButtons(p, dv)}
                         {canEdit && <button className="icon-btn" title="Editar producto" onClick={() => openEdit(p)}>{ICON.edit}</button>}
                         {canDelete && <button className="icon-btn danger" title="Eliminar producto" onClick={() => onDeleteProduct(p)}>{ICON.trash}</button>}
                       </td>
@@ -794,11 +819,6 @@ export default function Inventory() {
                           {v.target_stock != null && <div className="muted">objetivo {Number(v.target_stock)}</div>}
                         </td>
                         <td className="row-actions">
-                          {moveButtons(p, v)}
-                          {canStock && multiBranch && (
-                            <button className="icon-btn" title="Trasladar a otra sucursal"
-                              onClick={() => setTransfer({ productId: p.id, variantId: v.id, label: variantLabel(v.attributes, p.variant_axes) || 'Estándar', to: '', quantity: '' })}>{ICON.transfer}</button>
-                          )}
                           {canDelete && <button className="icon-btn danger" title="Quitar variante" onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>}
                         </td>
                       </tr>
@@ -864,7 +884,6 @@ export default function Inventory() {
                         <div className="inv-var-info">
                           <span className="muted">Stock: <strong>{branchStock(dv, branchId)}</strong>{multiBranch ? ` · total ${Number(dv.stock)}` : ''}</span>
                         </div>
-                        <div className="inv-var-actions">{moveButtons(p, dv)}</div>
                       </div>
                     ) : variantsOf(p).map((v) => (
                       <div className="inv-var-row" key={v.id}>
@@ -875,7 +894,6 @@ export default function Inventory() {
                           </span>
                         </div>
                         <div className="inv-var-actions">
-                          {moveButtons(p, v)}
                           {canDelete && (
                             <button className="icon-btn danger" title="Quitar variante" aria-label="Quitar variante"
                               onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>
@@ -1041,7 +1059,7 @@ export default function Inventory() {
                     {axisTaxOfModal().length > 0 && (
                       <VariantBuilder
                         axes={axisTaxOfModal().map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
-                        state={modal.vb}
+                        rows={modal.vb}
                         onChange={(vb) => setM({ vb })}
                         disabled={busy}
                       />
@@ -1093,27 +1111,26 @@ export default function Inventory() {
                                   onChange={(e) => patch({ target: e.target.value })} />
                               </label>
                             </div>
+                            {stockButtons(v)}
                           </div>
                         </div>
                       );
                     })}
                   </div>
                   {!lockStock && (
-                    <p className="hint">Cambiar el stock aquí registra un ajuste de inventario. Para separar entradas y salidas usa los botones de la tabla.</p>
+                    <p className="hint">Cambiar la cantidad aquí registra un ajuste. Para dejar constancia de una entrada o salida (con su nota) usa los botones de cada variación.</p>
                   )}
 
                   {canCreate && modal.axes.length > 0 && (
                     <div className="np-subblock">
                       <div className="oc-label">Agregar variaciones</div>
-                      <p className="hint">Marca los valores nuevos; las combinaciones que ya tiene el producto no se repiten.</p>
                       <VariantBuilder
-                        axes={modal.axes.map((name) => ({
-                          id: name, name, terms: axisTermsByName(name),
-                        }))}
-                        state={modal.vbNew}
+                        axes={modal.axes.map((name) => ({ id: name, name, terms: axisTermsByName(name) }))}
+                        rows={modal.vbNew}
                         onChange={(vbNew) => setM({ vbNew })}
                         existingSigs={new Set(modal.variants.map((v) => v.sig))}
                         disabled={busy}
+                        addLabel="＋ Nueva variación"
                       />
                     </div>
                   )}
@@ -1181,10 +1198,10 @@ export default function Inventory() {
 
       {/* ============ Modal movimiento ============ */}
       {move && (
-        <div className="modal-backdrop" onClick={() => setMove(null)}>
+        <div className="modal-backdrop stacked" onClick={() => setMove(null)}>
           <div className="modal card" onClick={(e) => e.stopPropagation()}>
             <h2>
-              {MOVE_LABELS[move.type]} — {products.find((p) => p.id === move.productId)?.name}
+              {MOVE_LABELS[move.type]} — {products.find((p) => p.id === move.productId)?.name || modal?.name}
               {move.label && <span className="muted"> · {move.label}</span>}
             </h2>
             <form onSubmit={onSubmitMove} className="vform">
@@ -1209,7 +1226,7 @@ export default function Inventory() {
 
       {/* ============ Modal de traslado entre sucursales ============ */}
       {transfer && (
-        <div className="modal-backdrop" onClick={() => setTransfer(null)}>
+        <div className="modal-backdrop stacked" onClick={() => setTransfer(null)}>
           <div className="modal card" onClick={(e) => e.stopPropagation()}>
             <h2>
               Trasladar — {products.find((p) => p.id === transfer.productId)?.name}
