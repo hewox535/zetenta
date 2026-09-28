@@ -10,8 +10,11 @@ import {
   addProductVariant, updateVariant, deleteVariant,
   transferStock, setProductsOffer,
   mediaUrl, uploadProductImage, deleteProductMedia,
+  fetchProductVariants, createTaxonomy,
 } from '../lib/api';
 import { money, variantLabel, offerPrice } from '../lib/calc';
+import { useConfirm } from '../components/Confirm';
+import VariantBuilder, { emptyBuilder, builderVariants, sigOf } from '../components/VariantBuilder';
 
 // Stock de una variante en una sucursal concreta (0 si no tiene fila).
 const branchStock = (v, branchId) => {
@@ -112,8 +115,6 @@ const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).leng
 const defaultVariant = (p) =>
   variantsOf(p).find((v) => Object.keys(v.attributes || {}).length === 0) || variantsOf(p)[0];
 
-const newRow = () => ({ key: Math.random().toString(36).slice(2), values: {}, stock: '', sku: '', price: '', cost: '' });
-
 // Iconos limpios para acciones de la tabla.
 const ICON = {
   chevron: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>,
@@ -152,7 +153,33 @@ function TermSelect({ terms, value, onChange, placeholder, disabled }) {
   );
 }
 
+// Botón "＋ Nuevo eje" con su campito: crea un eje de variación que el negocio
+// todavía no tiene (p. ej. Color) sin salir del modal del producto.
+function NewAxis({ onCreate }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  if (!open) {
+    return (
+      <button type="button" className="pay-pill ghost" onClick={() => setOpen(true)}>＋ Nuevo eje</button>
+    );
+  }
+  const submit = () => { if (!name.trim()) return; onCreate(name); setName(''); setOpen(false); };
+  return (
+    <span className="chip-add">
+      <input autoFocus value={name} placeholder="Color, Material…"
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); submit(); }
+          if (e.key === 'Escape') { setOpen(false); setName(''); }
+        }} />
+      <button type="button" className="btn ghost sm" disabled={!name.trim()} onClick={submit}>Crear</button>
+      <button type="button" className="linklike" onClick={() => { setOpen(false); setName(''); }}>Cancelar</button>
+    </span>
+  );
+}
+
 export default function Inventory() {
+  const ask = useConfirm();
   const { business, canInventory } = useAuth();
   // Qué puede hacer este usuario en el inventario (el admin, todo). El
   // servidor aplica las mismas reglas; aquí solo se ocultan o bloquean controles.
@@ -253,7 +280,7 @@ export default function Inventory() {
     setError(null);
     setModal({
       mode: 'create', name: '', price: '', cost: '', sku: '', unit: 'und', note: '', categories: {},
-      cmode: 'simple', simpleStock: '', axisIds: [], rows: [newRow()], stagedFiles: [],
+      cmode: 'simple', simpleStock: '', axisIds: [], vb: emptyBuilder(), stagedFiles: [],
     });
   }
   function openEdit(p) {
@@ -273,12 +300,13 @@ export default function Inventory() {
       categories,
       variants: variantsOf(p).map((v) => ({
         id: v.id, label: variantLabel(v.attributes, p.variant_axes),
+        sig: sigOf(p.variant_axes || [], v.attributes || {}),
         stock: String(branchStock(v, branchId)), origStock: branchStock(v, branchId),
         sku: v.sku || '', price: v.price != null ? String(v.price) : '',
         cost: v.cost != null ? String(v.cost) : '',
         target: v.target_stock != null ? String(v.target_stock) : '',
       })),
-      newRows: [], media: mediaOf(p),
+      vbNew: emptyBuilder(), media: mediaOf(p),
     });
   }
 
@@ -319,13 +347,20 @@ export default function Inventory() {
 
       if (modal.mode === 'create') {
         let variants; let variantAxes = [];
+        let built = [];
         if (modal.cmode === 'simple') {
           variants = [{ attributes: {}, stock: Number(modal.simpleStock) || 0 }];
         } else {
           const axes = varTax.filter((t) => modal.axisIds.includes(t.id));
           if (axes.length === 0) throw new Error('Elige al menos un eje de variación (Color, Talla…).');
           variantAxes = axes.map((t) => t.name);
-          variants = buildVariants(modal.rows, axes.map((t) => t.name));
+          built = builderVariants(variantAxes, modal.vb);
+          if (built.length === 0) throw new Error('Elige los valores de cada eje para armar al menos una variación.');
+          variants = built.map((v) => ({
+            attributes: v.attributes, stock: Number(v.stock) || 0, sku: (v.sku || '').trim(),
+            price: v.price === '' || v.price == null ? null : Number(v.price),
+            cost: v.cost === '' || v.cost == null ? null : Number(v.cost),
+          }));
         }
         const created = await createProductWithVariants({
           name: modal.name.trim(), sku: modal.sku.trim(), unit: modal.unit.trim() || 'und',
@@ -334,6 +369,17 @@ export default function Inventory() {
         });
         for (let i = 0; i < (modal.stagedFiles || []).length; i++) {
           await uploadProductImage(business.id, created.id, modal.stagedFiles[i], { sortOrder: i });
+        }
+        // Fotos por variación: el RPC devuelve el producto, así que buscamos
+        // las variantes creadas y las emparejamos por su combinación.
+        const withPhoto = built.filter((v) => v.file);
+        if (withPhoto.length) {
+          const saved = await fetchProductVariants(created.id);
+          const byySig = new Map(saved.map((v) => [sigOf(variantAxes, v.attributes || {}), v.id]));
+          for (const v of withPhoto) {
+            const variantId = byySig.get(v.sig);
+            if (variantId) await uploadProductImage(business.id, created.id, v.file, { variantId });
+          }
         }
       } else {
         // EDIT: solo se envía lo que el usuario puede cambiar; lo demás va
@@ -364,17 +410,19 @@ export default function Inventory() {
             await createMovement(business.id, { productId: modal.id, variantId: v.id, type: 'adjustment', quantity: ns, note: 'Ajuste (edición)', branchId });
           }
         }
-        for (const r of canCreate ? modal.newRows : []) {
-          const attributes = {};
-          for (const ax of modal.axes) {
-            const val = (r.values[ax] || '').trim();
-            if (!val) throw new Error('Cada variación nueva debe tener todos sus valores.');
-            attributes[ax] = val;
+        if (canCreate) {
+          const existing = new Set(modal.variants.map((v) => v.sig));
+          for (const r of builderVariants(modal.axes, modal.vbNew, existing)) {
+            const created = await addProductVariant(modal.id, {
+              attributes: r.attributes, sku: (r.sku || '').trim(),
+              price: r.price === '' || r.price == null ? null : Number(r.price),
+              cost: r.cost === '' || r.cost == null ? null : Number(r.cost),
+              stock: Number(r.stock) || 0, branchId,
+            });
+            if (r.file && created?.id) {
+              await uploadProductImage(business.id, modal.id, r.file, { variantId: created.id });
+            }
           }
-          await addProductVariant(modal.id, {
-            attributes, sku: r.sku.trim(), price: r.price === '' ? null : Number(r.price),
-            cost: r.cost === '' ? null : Number(r.cost), stock: Number(r.stock) || 0, branchId,
-          });
         }
       }
       await reload();
@@ -385,36 +433,14 @@ export default function Inventory() {
     } finally { setBusy(false); }
   }
 
-  function buildVariants(rows, axisNames) {
-    const seen = new Set();
-    const out = rows.map((r) => {
-      const attributes = {};
-      for (const name of axisNames) {
-        const val = (r.values[name] || '').trim();
-        if (!val) throw new Error('Cada variación debe tener todos sus valores (Color, Talla…).');
-        attributes[name] = val;
-      }
-      const sig = axisNames.map((n) => attributes[n]).join('|');
-      if (seen.has(sig)) throw new Error(`Variación repetida: ${axisNames.map((n) => attributes[n]).join(' · ')}.`);
-      seen.add(sig);
-      return {
-        attributes, stock: Number(r.stock) || 0, sku: r.sku.trim(),
-        price: r.price === '' ? null : Number(r.price),
-        cost: r.cost === '' ? null : Number(r.cost),
-      };
-    });
-    if (out.length === 0) throw new Error('Agrega al menos una variación.');
-    return out;
-  }
-
   // ---------- Acciones de tabla ----------
   async function onDeleteProduct(p) {
-    if (!confirm(`¿Eliminar ${p.name}, sus variantes y su historial de movimientos?`)) return;
+    if (!await ask({ title: `¿Eliminar ${p.name}?`, message: 'Se eliminan también sus variantes y su historial de movimientos.', confirmLabel: 'Eliminar producto' })) return;
     try { await deleteProduct(p.id); await reload(); } catch (e) { setError(e.message); }
   }
   async function onDeleteVariant(p, v) {
     if (variantsOf(p).length <= 1) { setError('Un producto debe tener al menos una variante.'); return; }
-    if (!confirm(`¿Eliminar la variante ${variantLabel(v.attributes) || 'estándar'} de ${p.name}?`)) return;
+    if (!await ask({ title: `¿Eliminar la variación ${variantLabel(v.attributes) || 'estándar'}?`, message: `Se quita de ${p.name} junto con su stock.`, confirmLabel: 'Eliminar variación' })) return;
     try { await deleteVariant(v.id); await reload(); } catch (e) { setError(e.message); }
   }
   async function onSubmitMove(e) {
@@ -521,6 +547,21 @@ export default function Inventory() {
   );
 
   const axisTaxOfModal = () => varTax.filter((t) => modal.axisIds.includes(t.id));
+
+  // Eje nuevo (Color, Material…) desde el propio modal: se crea en el negocio
+  // y queda marcado para este producto, sin pasar por Configuración.
+  async function onCreateAxis(name) {
+    setError(null); setBusy(true);
+    try {
+      const tax = await createTaxonomy(business.id, name.trim(), 'variant');
+      const [t] = await Promise.all([fetchTaxonomies()]);
+      setTaxonomies(t);
+      setModal((m) => ({ ...m, axisIds: [...m.axisIds, tax.id] }));
+    } catch (e) {
+      setError(e.message.includes('duplicate') || e.message.includes('unique')
+        ? `Ya existe algo llamado "${name.trim()}".` : e.message);
+    } finally { setBusy(false); }
+  }
 
   // Modal en edición: cada grupo de campos depende de su permiso. Al crear
   // (inv_create) se llenan todos los datos iniciales.
@@ -868,6 +909,11 @@ export default function Inventory() {
               <button className="btn ghost sm" onClick={() => setModal(null)}>Cerrar</button>
             </div>
             <form onSubmit={onSubmit} className="vform">
+              {editing && (lockInfo || lockPrice || lockStock || lockMedia) && (
+                <p className="hint">
+                  Los campos en gris no los puedes cambiar con tus permisos actuales.
+                </p>
+              )}
               {modal.mode === 'create' && (
                 <div className="mode-pills" role="radiogroup" aria-label="Tipo de producto">
                   {[
@@ -976,77 +1022,98 @@ export default function Inventory() {
               {modal.mode === 'create' ? (
                 modal.cmode === 'simple' ? null : (
                 <div className="np-block">
-                  {varTax.length === 0 ? (
-                    <p className="hint">No hay ejes de variación. Créalos en <Link to="/settings">Negocio → Inventario → Variaciones</Link> (p. ej. Color, Talla).</p>
-                  ) : (
-                    <div className="np-variants">
-                      <div className="oc-label">Varía por</div>
-                      <div className="variant-axis-pills">
-                        {varTax.map((t) => (
-                          <button type="button" key={t.id}
-                            className={`pay-pill${modal.axisIds.includes(t.id) ? ' active' : ''}`}
-                            onClick={() => setM({ axisIds: modal.axisIds.includes(t.id) ? modal.axisIds.filter((x) => x !== t.id) : [...modal.axisIds, t.id], rows: [newRow()] })}>
-                            {t.name}
-                          </button>
-                        ))}
-                      </div>
-
-                      {axisTaxOfModal().length > 0 && (
-                        <VarRows
-                          axisNames={axisTaxOfModal().map((t) => t.name)}
-                          termsFor={axisTermsByName}
-                          rows={modal.rows}
-                          onChange={(rows) => setM({ rows })}
-                        />
-                      )}
+                  <div className="np-variants">
+                    <div className="oc-label">¿En qué varía este producto?</div>
+                    <p className="hint">Marca todos los que apliquen: una camisa puede variar por talla <em>y</em> color.</p>
+                    <div className="variant-axis-pills">
+                      {varTax.map((t) => (
+                        <button type="button" key={t.id}
+                          className={`pay-pill${modal.axisIds.includes(t.id) ? ' active' : ''}`}
+                          aria-pressed={modal.axisIds.includes(t.id)}
+                          onClick={() => setM({ axisIds: modal.axisIds.includes(t.id)
+                            ? modal.axisIds.filter((x) => x !== t.id) : [...modal.axisIds, t.id] })}>
+                          {modal.axisIds.includes(t.id) ? '✓ ' : ''}{t.name}
+                        </button>
+                      ))}
+                      <NewAxis onCreate={onCreateAxis} />
                     </div>
-                  )}
+
+                    {axisTaxOfModal().length > 0 && (
+                      <VariantBuilder
+                        axes={axisTaxOfModal().map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
+                        state={modal.vb}
+                        onChange={(vb) => setM({ vb })}
+                        disabled={busy}
+                      />
+                    )}
+                  </div>
                 </div>
                 )
               ) : (
                 /* -------- Editar: variantes existentes + agregar -------- */
                 <div className="np-block">
-                  <div className="oc-label">Variantes</div>
-                  <div className="edit-variants">
-                    <div className="edit-var-head">
-                      <span className="evh-img" /><span>Variante</span><span>Stock</span><span>SKU</span><span>Precio</span><span>Costo</span><span>Objetivo</span>
-                    </div>
+                  <div className="oc-label">Variaciones de este producto</div>
+                  <div className="vb-list">
                     {modal.variants.map((v, i) => {
                       const vm = (modal.media || []).find((m) => m.variant_id === v.id);
+                      const patch = (p) => setM({ variants: modal.variants.map((x, j) => (j === i ? { ...x, ...p } : x)) });
                       return (
-                      <div className="edit-var-row" key={v.id}>
-                        <label className="var-img" title="Imagen de la variación">
-                          {vm ? <img src={mediaUrl(vm)} alt="" /> : <span className="thumb-ph">{lockMedia ? '' : '＋'}</span>}
-                          <input type="file" accept="image/*" hidden disabled={busy || lockMedia}
-                            onChange={async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (vm) await onRemoveImage(vm); await onUploadImage(f, v.id); }} />
-                        </label>
-                        <span className="edit-var-label">{v.label || 'Estándar'}</span>
-                        <input type="number" min="0" step="1" value={v.stock} disabled={lockStock}
-                          onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, stock: e.target.value } : x) })} />
-                        <input value={v.sku} placeholder="—" disabled={lockInfo}
-                          onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, sku: e.target.value } : x) })} />
-                        <input type="number" min="0" step="0.01" value={v.price} placeholder="hereda" disabled={lockPrice}
-                          onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, price: e.target.value } : x) })} />
-                        <input type="number" min="0" step="0.01" value={v.cost} placeholder="hereda" disabled={lockPrice}
-                          onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, cost: e.target.value } : x) })} />
-                        <input type="number" min="0" step="1" value={v.target} placeholder="—" disabled={lockStock}
-                          onChange={(e) => setM({ variants: modal.variants.map((x, j) => j === i ? { ...x, target: e.target.value } : x) })} />
-                      </div>
-                    ); })}
+                        <div className="vb-card" key={v.id}>
+                          <label className="vb-photo" title={`Foto de ${v.label || 'la variación'}`}>
+                            {vm ? <img src={mediaUrl(vm)} alt="" /> : <span className="thumb-ph">{lockMedia ? '' : '＋'}</span>}
+                            <input type="file" accept="image/*" hidden disabled={busy || lockMedia}
+                              onChange={async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (vm) await onRemoveImage(vm); await onUploadImage(f, v.id); }} />
+                          </label>
+                          <div className="vb-card-body">
+                            <div className="vb-card-head">
+                              <span className="vb-label">{v.label || 'Estándar'}</span>
+                              {vm && !lockMedia && (
+                                <button type="button" className="linklike" onClick={() => onRemoveImage(vm)}>quitar foto</button>
+                              )}
+                            </div>
+                            <div className="vb-fields">
+                              <label className="vb-field">Cantidad
+                                <input type="number" min="0" step="1" value={v.stock} disabled={lockStock}
+                                  onChange={(e) => patch({ stock: e.target.value })} />
+                              </label>
+                              <label className="vb-field">Precio
+                                <input type="number" min="0" step="0.01" value={v.price} placeholder="hereda" disabled={lockPrice}
+                                  onChange={(e) => patch({ price: e.target.value })} />
+                              </label>
+                              <label className="vb-field">Costo
+                                <input type="number" min="0" step="0.01" value={v.cost} placeholder="hereda" disabled={lockPrice}
+                                  onChange={(e) => patch({ cost: e.target.value })} />
+                              </label>
+                              <label className="vb-field">SKU
+                                <input value={v.sku} placeholder="—" disabled={lockInfo}
+                                  onChange={(e) => patch({ sku: e.target.value })} />
+                              </label>
+                              <label className="vb-field">Stock objetivo
+                                <input type="number" min="0" step="1" value={v.target} placeholder="—" disabled={lockStock}
+                                  onChange={(e) => patch({ target: e.target.value })} />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                   {!lockStock && (
                     <p className="hint">Cambiar el stock aquí registra un ajuste de inventario. Para separar entradas y salidas usa los botones de la tabla.</p>
                   )}
 
                   {canCreate && modal.axes.length > 0 && (
-                    <div style={{ marginTop: 14 }}>
+                    <div className="np-subblock">
                       <div className="oc-label">Agregar variaciones</div>
-                      <VarRows
-                        axisNames={modal.axes}
-                        termsFor={axisTermsByName}
-                        rows={modal.newRows}
-                        emptyHint="Usa “+ Agregar variación” para sumar combinaciones nuevas."
-                        onChange={(newRows) => setM({ newRows })}
+                      <p className="hint">Marca los valores nuevos; las combinaciones que ya tiene el producto no se repiten.</p>
+                      <VariantBuilder
+                        axes={modal.axes.map((name) => ({
+                          id: name, name, terms: axisTermsByName(name),
+                        }))}
+                        state={modal.vbNew}
+                        onChange={(vbNew) => setM({ vbNew })}
+                        existingSigs={new Set(modal.variants.map((v) => v.sig))}
+                        disabled={busy}
                       />
                     </div>
                   )}
@@ -1171,51 +1238,6 @@ export default function Inventory() {
         </div>
       )}
 
-    </div>
-  );
-}
-
-// Constructor de variaciones: una fila por combinación, con selectores por eje.
-// Cada variación es una tarjeta con borde suave y cada campo lleva su propio
-// label (legible también en móvil, donde los campos se apilan).
-function VarRows({ axisNames, termsFor, rows, onChange, emptyHint }) {
-  const update = (i, patch) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const setValue = (i, name, val) => onChange(rows.map((r, j) => (j === i ? { ...r, values: { ...r.values, [name]: val } } : r)));
-  return (
-    <div className="var-rows">
-      {rows.length === 0 && emptyHint && <p className="hint">{emptyHint}</p>}
-      {rows.map((r, i) => (
-        <div className="var-card" key={r.key}>
-          <div className="var-card-fields">
-            {axisNames.map((name) => (
-              <label className="var-field" key={name}>{name}
-                <TermSelect terms={termsFor(name)} value={r.values[name] || ''}
-                  onChange={(val) => setValue(i, name, val)} placeholder={name} />
-              </label>
-            ))}
-            <label className="var-field num">Stock
-              <input type="number" min="0" step="1" value={r.stock} placeholder="0"
-                onChange={(e) => update(i, { stock: e.target.value })} />
-            </label>
-            <label className="var-field">SKU
-              <input value={r.sku} placeholder="opcional" onChange={(e) => update(i, { sku: e.target.value })} />
-            </label>
-            <label className="var-field num">Precio
-              <input type="number" min="0" step="0.01" value={r.price} placeholder="hereda"
-                onChange={(e) => update(i, { price: e.target.value })} />
-            </label>
-            <label className="var-field num">Costo
-              <input type="number" min="0" step="0.01" value={r.cost} placeholder="hereda"
-                onChange={(e) => update(i, { cost: e.target.value })} />
-            </label>
-          </div>
-          <button type="button" className="var-row-del" aria-label="Quitar variación" title="Quitar variación"
-            onClick={() => onChange(rows.filter((_, j) => j !== i))}>{ICON.trash}</button>
-        </div>
-      ))}
-      <button type="button" className="btn ghost sm" onClick={() => onChange([...rows, newRow()])}>
-        + Agregar variación
-      </button>
     </div>
   );
 }

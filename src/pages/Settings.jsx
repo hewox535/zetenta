@@ -15,6 +15,7 @@ import {
 import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/push';
 import { fetchBcvRates } from '../lib/rates';
 import { money } from '../lib/calc';
+import { useConfirm } from '../components/Confirm';
 
 // Iconos limpios para acciones (editar, eliminar, agregar).
 const ICON = {
@@ -222,6 +223,7 @@ function RetentionSection({ business, refreshBusiness }) {
 
 // ---------- Inventario: umbral de stock bajo + categorías + variaciones ----------
 function InventorySection({ business, refreshBusiness }) {
+  const ask = useConfirm();
   const [taxonomies, setTaxonomies] = useState([]);
   const [newCat, setNewCat] = useState('');
   const [newVar, setNewVar] = useState('');
@@ -260,14 +262,14 @@ function InventorySection({ business, refreshBusiness }) {
   }
   async function onDeleteTaxonomy(t) {
     const what = t.kind === 'variant' ? 'el eje de variación' : 'la categoría';
-    if (!confirm(`¿Eliminar ${what} "${t.name}" y todos sus valores? Los productos perderán esa clasificación.`)) return;
+    if (!await ask({ title: `¿Eliminar ${what} "${t.name}"?`, message: 'Se eliminan todos sus valores y los productos perderán esa clasificación.', confirmLabel: 'Eliminar' })) return;
     try {
       await deleteTaxonomy(t.id);
       setTaxonomies((prev) => prev.filter((x) => x.id !== t.id));
     } catch (e) { setTaxError(e.message); }
   }
   async function onDeleteTerm(t, term) {
-    if (!confirm(`¿Eliminar "${term.name}" de ${t.name}? Se quitará de los productos que lo usan.`)) return;
+    if (!await ask({ title: `¿Eliminar "${term.name}" de ${t.name}?`, message: 'Se quitará de los productos que lo usan.', confirmLabel: 'Eliminar' })) return;
     try {
       await deleteTerm(term.id);
       setTaxonomies((prev) => prev.map((x) => (
@@ -560,6 +562,7 @@ function OrdersSection({ business, refreshBusiness }) {
 
 // ---------- Cuentas bancarias: cada cuenta agrupa métodos y reporta su ingreso ----------
 function BankAccountsManager({ business }) {
+  const ask = useConfirm();
   const [accounts, setAccounts] = useState([]);
   const [error, setError] = useState(null);
   const [aName, setAName] = useState('');
@@ -594,7 +597,7 @@ function BankAccountsManager({ business }) {
     } catch (e) { setError(e.message); } finally { setEdit(null); }
   }
   async function removeAccount(a) {
-    if (!confirm(`¿Eliminar la cuenta "${a.name}" y sus métodos? Las ventas ya registradas conservan su información.`)) return;
+    if (!await ask({ title: `¿Eliminar la cuenta "${a.name}"?`, message: 'Se eliminan sus métodos de pago. Las ventas ya registradas conservan su información.', confirmLabel: 'Eliminar cuenta' })) return;
     try { await deleteBankAccount(a.id); setAccounts((prev) => prev.filter((x) => x.id !== a.id)); }
     catch (e) { setError(e.message); }
   }
@@ -614,7 +617,7 @@ function BankAccountsManager({ business }) {
     } catch (e) { setError(e.message); } finally { setEdit(null); }
   }
   async function removeMethod(a, m) {
-    if (!confirm(`¿Eliminar el método "${m.name}"?`)) return;
+    if (!await ask({ title: `¿Eliminar el método "${m.name}"?`, message: 'Dejará de aparecer al cobrar.', confirmLabel: 'Eliminar método' })) return;
     try { await deletePaymentMethod(m.id);
       patchAccount(a.id, (x) => ({ ...x, payment_methods: x.payment_methods.filter((y) => y.id !== m.id) }));
     } catch (e) { setError(e.message); }
@@ -715,6 +718,7 @@ function BankAccountsManager({ business }) {
 
 // ---------- Sucursales: alta/edición + acceso del personal ----------
 function BranchesSection({ business }) {
+  const ask = useConfirm();
   const { reload } = useBranch();
   const [branches, setBranches] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -758,7 +762,7 @@ function BranchesSection({ business }) {
   }
   async function removeBranch(b) {
     if (b.is_default) { setError('No se puede eliminar la sucursal principal.'); return; }
-    if (!confirm(`¿Eliminar la sucursal "${b.name}"? Su stock y su historial se eliminan.`)) return;
+    if (!await ask({ title: `¿Eliminar la sucursal "${b.name}"?`, message: 'Su stock y su historial se eliminan.', confirmLabel: 'Eliminar sucursal' })) return;
     try { await deleteBranch(b.id); setBranches((prev) => prev.filter((x) => x.id !== b.id)); reload(); }
     catch (e) { setError(e.message); }
   }
@@ -873,15 +877,32 @@ const PERM_OPTIONS = [
 // Qué puede hacer dentro del inventario (con el módulo activado). Sin
 // ninguno, la vendedora solo ve productos y existencias.
 const INV_PERM_OPTIONS = [
-  ['inv_edit_info', 'Editar nombre y datos'],
-  ['inv_edit_media', 'Imágenes'],
-  ['inv_edit_price', 'Precios y ofertas'],
-  ['inv_edit_stock', 'Cantidades'],
-  ['inv_create', 'Crear productos'],
-  ['inv_delete', 'Eliminar'],
+  ['inv_edit_info', 'Editar nombre y datos', 'Nombre, SKU, nota y categorías'],
+  ['inv_edit_media', 'Imágenes', 'Subir y quitar fotos'],
+  ['inv_edit_price', 'Precios y ofertas', 'Precio, costo y descuentos'],
+  ['inv_edit_stock', 'Cantidades', 'Entradas, salidas, ajustes y traslados'],
+  ['inv_create', 'Crear productos', 'Producto nuevo, importar CSV y variaciones'],
+  ['inv_delete', 'Eliminar', 'Borrar productos y variaciones'],
 ];
 
+// Una fila del modal de permisos: nombre, explicación y su interruptor.
+function PermSwitch({ label, hint, on, onToggle }) {
+  return (
+    <div className="perm-line">
+      <div className="perm-line-text">
+        <span className="perm-line-label">{label}</span>
+        {hint && <span className="muted">{hint}</span>}
+      </div>
+      <button type="button" className={`switch${on ? ' on' : ''}`} role="switch"
+        aria-checked={on} aria-label={label} onClick={onToggle}>
+        <span className="switch-knob" />
+      </button>
+    </div>
+  );
+}
+
 function StaffSection({ profile }) {
+  const ask = useConfirm();
   const { capabilities } = useAuth();
   const [staff, setStaff] = useState(null);
   const [form, setForm] = useState(EMPTY_STAFF);
@@ -889,6 +910,7 @@ function StaffSection({ profile }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [ok, setOk] = useState(null);
+  const [permFor, setPermFor] = useState(null); // usuario con el modal de permisos abierto
 
   useEffect(() => { fetchStaff().then(setStaff).catch((e) => setError(e.message)); }, []);
 
@@ -928,7 +950,7 @@ function StaffSection({ profile }) {
   }
 
   async function onDelete(u) {
-    if (!confirm(`¿Eliminar a ${u.full_name || u.email}? Perderá el acceso.`)) return;
+    if (!await ask({ title: `¿Eliminar a ${u.full_name || u.email || u.username}?`, message: 'Perderá el acceso al sistema.', confirmLabel: 'Eliminar usuario' })) return;
     setError(null); setOk(null);
     try {
       await deleteStaff(u.id);
@@ -943,7 +965,8 @@ function StaffSection({ profile }) {
         <p className="hint">
           El <strong>administrador</strong> tiene acceso completo (inventario, estadísticas,
           configuración). La <strong>vendedora</strong> accede a Ventas y Clientes, más los
-          módulos extra que le actives aquí. En Inventario eliges además qué puede cambiar.
+          módulos que le actives en <strong>Permisos</strong>. En Inventario eliges además
+          qué puede cambiar.
         </p>
         {staff === null ? (
           <div className="empty">Cargando…</div>
@@ -954,6 +977,7 @@ function StaffSection({ profile }) {
               const isPlatform = u.role === 'platform_admin';
               const grantable = u.business_role === 'seller' && !isPlatform
                 ? PERM_OPTIONS.filter(([key]) => capabilities?.[key]) : [];
+              const granted = grantable.filter(([key]) => u.permissions?.[key]).map(([, label]) => label);
               return (
                 <div className="staff-item" key={u.id}>
                   <div className="method-row">
@@ -961,7 +985,10 @@ function StaffSection({ profile }) {
                       <span className="method-name">
                         {u.full_name || u.email || (u.username ? `@${u.username}` : '')}{isMe && <span className="muted"> · tú</span>}
                       </span>
-                      <span className="muted">{u.email || (u.username ? `@${u.username}` : '')}</span>
+                      <span className="muted">
+                        {u.email || (u.username ? `@${u.username}` : '')}
+                        {grantable.length > 0 && ` · ${granted.length ? `Acceso a ${granted.join(', ')}` : 'Solo Ventas y Clientes'}`}
+                      </span>
                     </div>
                     <div className="method-actions">
                       {isPlatform ? (
@@ -973,53 +1000,63 @@ function StaffSection({ profile }) {
                           <option value="seller">{ROLE_LABEL.seller}</option>
                         </select>
                       )}
+                      {grantable.length > 0 && (
+                        <button type="button" className="btn ghost sm" onClick={() => setPermFor(u.id)}>Permisos</button>
+                      )}
                       {!isMe && !isPlatform && (
                         <button type="button" className="btn danger sm" onClick={() => onDelete(u)}>Eliminar</button>
                       )}
                     </div>
                   </div>
-                  {grantable.length > 0 && (
-                    <div className="perm-row">
-                      <span className="muted">Acceso extra:</span>
-                      {grantable.map(([key, label]) => (
-                        <label className="perm-item" key={key}>
-                          <button type="button" className={`switch sm${u.permissions?.[key] ? ' on' : ''}`}
-                            role="switch" aria-checked={!!u.permissions?.[key]}
-                            aria-label={`${label} para ${u.full_name || u.username || u.email}`}
-                            onClick={() => onTogglePerm(u, key)}>
-                            <span className="switch-knob" />
-                          </button>
-                          {label}
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  {grantable.some(([key]) => key === 'inventory') && u.permissions?.inventory && (
-                    <div className="perm-row perm-sub">
-                      <span className="muted">Inventario:</span>
-                      {INV_PERM_OPTIONS.map(([key, label]) => (
-                        <label className="perm-item" key={key}>
-                          <button type="button" className={`switch sm${u.permissions?.[key] ? ' on' : ''}`}
-                            role="switch" aria-checked={!!u.permissions?.[key]}
-                            aria-label={`Inventario: ${label} para ${u.full_name || u.username || u.email}`}
-                            onClick={() => onTogglePerm(u, key)}>
-                            <span className="switch-knob" />
-                          </button>
-                          {label}
-                        </label>
-                      ))}
-                      {!INV_PERM_OPTIONS.some(([key]) => u.permissions?.[key]) && (
-                        <span className="muted">· solo puede ver</span>
-                      )}
-                    </div>
-                  )}
                 </div>
               );
             })}
           </div>
         )}
 
-        {error && <div className="form-error">{error}</div>}
+        {permFor && (() => {
+          const u = staff?.find((x) => x.id === permFor);
+          if (!u) return null;
+          const modules = PERM_OPTIONS.filter(([key]) => capabilities?.[key]);
+          return (
+            <div className="modal-backdrop" onClick={() => setPermFor(null)}>
+              <div className="modal card perm-modal" role="dialog" aria-modal="true"
+                onClick={(e) => e.stopPropagation()}>
+                <div className="modal-head">
+                  <h2>Permisos de {u.full_name || u.username || u.email}</h2>
+                  <button type="button" className="btn ghost sm" onClick={() => setPermFor(null)}>Cerrar</button>
+                </div>
+                <p className="hint">
+                  Ventas y Clientes están siempre disponibles para una vendedora; aquí le das
+                  acceso a los módulos de administración.
+                </p>
+                <div className="perm-group">
+                  <div className="oc-label">Módulos</div>
+                  {modules.map(([key, label]) => (
+                    <PermSwitch key={key} label={label} hint={`Acceso al módulo ${label}`}
+                      on={!!u.permissions?.[key]} onToggle={() => onTogglePerm(u, key)} />
+                  ))}
+                </div>
+                {capabilities?.inventory && u.permissions?.inventory && (
+                  <div className="perm-group">
+                    <div className="oc-label">Qué puede hacer en Inventario</div>
+                    <p className="hint">Sin ninguno activo, solo puede ver los productos y sus existencias.</p>
+                    {INV_PERM_OPTIONS.map(([key, label, hint]) => (
+                      <PermSwitch key={key} label={label} hint={hint}
+                        on={!!u.permissions?.[key]} onToggle={() => onTogglePerm(u, key)} />
+                    ))}
+                  </div>
+                )}
+                {error && <div className="form-error">{error}</div>}
+                <div className="inline-form-actions" style={{ marginTop: 18 }}>
+                  <button type="button" className="btn primary" onClick={() => setPermFor(null)}>Listo</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {error && !permFor && <div className="form-error">{error}</div>}
         {ok && <div className="form-ok">{ok}</div>}
 
         {showNew ? (

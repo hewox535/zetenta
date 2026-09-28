@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import Brand from '../components/Brand';
+import { useConfirm } from '../components/Confirm';
 
 // Selector global de sucursal (solo si el usuario tiene acceso a más de una).
 function BranchSwitch({ className }) {
@@ -32,6 +33,15 @@ const Icon = {
 
 export default function Shell() {
   const { profile, business, capabilities, permissions, isAdmin, isBusinessAdmin, signOut } = useAuth();
+  const ask = useConfirm();
+
+  async function onSignOut() {
+    if (!await ask({
+      title: '¿Cerrar sesión?', message: 'Tendrás que iniciar sesión otra vez para volver a entrar.',
+      confirmLabel: 'Cerrar sesión', tone: 'default',
+    })) return;
+    await signOut();
+  }
   const [menuOpen, setMenuOpen] = useState(false);
   // Menú lateral contraído a solo íconos (preferencia por dispositivo; el
   // default es abierto). En móvil no aplica: ahí es un cajón deslizante.
@@ -118,7 +128,7 @@ export default function Shell() {
               {Icon.gear}
             </NavLink>
           </div>
-          <button className="btn ghost sm sidebar-logout" onClick={signOut} title="Cerrar sesión">
+          <button className="btn ghost sm sidebar-logout" onClick={onSignOut} title="Cerrar sesión">
             <span className="logout-icon">{Icon.logout}</span>
             <span className="nav-label">Cerrar sesión</span>
           </button>
