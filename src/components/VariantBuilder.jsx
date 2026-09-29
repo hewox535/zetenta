@@ -1,39 +1,21 @@
-// Constructor de variaciones: se eligen los valores de cada eje (Talla: S, M;
-// Color: Negro, Blanco) y las combinaciones salen solas (S·Negro, S·Blanco…).
-// Cada combinación es una tarjeta con su foto, cantidad, SKU, precio y costo.
+// Variaciones de un producto: una lista de tarjetas (foto, cantidad, precio,
+// costo, SKU) y un botón que abre un submodal para armar la siguiente.
 //
-// El estado vive en el padre como un solo objeto:
-//   { values: { Talla: ['S','M'] }, data: { 'S|Negro': {stock, sku, price, cost, file} },
-//     removed: ['M|Negro'] }
-// Las combinaciones no se guardan una por una: se calculan de `values` y se
-// cruzan con `data` (lo escrito) y `removed` (las que el usuario quitó), así
-// marcar un valor nuevo nunca borra lo ya escrito en las demás.
-import { useRef, useState } from 'react';
+// El submodal configura UNA variación completa: un valor por eje (Talla: M,
+// Color: Negro), su foto y sus datos. "Guardar y crear otra" deja el submodal
+// abierto para seguir cargando, que es lo común al dar de alta un producto.
+//
+// El estado vive en el padre como un arreglo:
+//   [{ key, attributes: { Talla: 'M', Color: 'Negro' }, stock, price, cost, sku, file }]
+import { useState } from 'react';
 
-export const emptyBuilder = () => ({ values: {}, data: {}, removed: [] });
+export const emptyVariations = () => [];
 
 export const sigOf = (axisNames, attrs) => axisNames.map((a) => attrs[a] ?? '').join('|');
 
-// Producto cartesiano de los valores elegidos, en el orden de los ejes.
-function combosOf(axisNames, values) {
-  let out = [{}];
-  for (const name of axisNames) {
-    const vals = values[name] || [];
-    if (vals.length === 0) return [];
-    out = out.flatMap((combo) => vals.map((v) => ({ ...combo, [name]: v })));
-  }
-  return out;
-}
+export const labelOf = (axisNames, attrs) => axisNames.map((a) => attrs[a]).filter(Boolean).join(' · ');
 
-// Las variaciones que se van a crear: combinaciones vigentes, sin las quitadas
-// ni las que ya existen en el producto, con lo escrito en cada una.
-export function builderVariants(axisNames, state, existingSigs = new Set()) {
-  const removed = new Set(state.removed || []);
-  return combosOf(axisNames, state.values || {})
-    .map((attrs) => ({ sig: sigOf(axisNames, attrs), attributes: attrs }))
-    .filter(({ sig }) => !removed.has(sig) && !existingSigs.has(sig))
-    .map(({ sig, attributes }) => ({ sig, attributes, ...(state.data?.[sig] || {}) }));
-}
+const newKey = () => Math.random().toString(36).slice(2);
 
 const TRASH = (
   <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -42,165 +24,223 @@ const TRASH = (
   </svg>
 );
 
-// Chips de valores de un eje, con campo para escribir uno que no esté en la lista.
-function AxisValues({ axis, selected, onChange }) {
-  const [extra, setExtra] = useState('');
-  const names = axis.terms.map((t) => t.name);
-  const custom = selected.filter((v) => !names.includes(v));
-  const toggle = (v) => onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+// ---------- Submodal: una variación ----------
+function VariationDialog({ axes, taken, onAdd, onClose }) {
+  const axisNames = axes.map((a) => a.name);
+  const [form, setForm] = useState({ values: {}, stock: '', price: '', cost: '', sku: '', file: null });
+  const [extra, setExtra] = useState({});      // eje → valor escrito a mano
+  const [error, setError] = useState(null);
+  const [added, setAdded] = useState(0);
 
-  function addExtra() {
-    const v = extra.trim();
-    if (!v) return;
-    if (!selected.includes(v)) onChange([...selected, v]);
-    setExtra('');
+  const set = (patch) => { setError(null); setForm((f) => ({ ...f, ...patch })); };
+  const setValue = (axis, v) => set({ values: { ...form.values, [axis]: v } });
+
+  function build() {
+    const attributes = {};
+    for (const name of axisNames) {
+      const v = (form.values[name] || '').trim();
+      if (!v) { setError(`Elige ${name.toLowerCase()}.`); return null; }
+      attributes[name] = v;
+    }
+    const sig = sigOf(axisNames, attributes);
+    if (taken.has(sig)) { setError(`${labelOf(axisNames, attributes)} ya está en la lista.`); return null; }
+    return {
+      key: newKey(), attributes, stock: form.stock, price: form.price,
+      cost: form.cost, sku: form.sku.trim(), file: form.file,
+    };
+  }
+
+  function submit(another) {
+    setError(null);
+    const row = build();
+    if (!row) return;
+    onAdd(row);
+    if (another) {
+      // Se conservan precio y costo (suelen repetirse) y se limpia lo demás.
+      setForm((f) => ({ ...f, values: {}, stock: '', sku: '', file: null }));
+      setAdded((n) => n + 1);
+    } else {
+      onClose();
+    }
   }
 
   return (
-    <div className="axis-values">
-      <div className="axis-values-head">
-        <span className="axis-name">{axis.name}</span>
-        {selected.length > 0 && (
-          <button type="button" className="linklike" onClick={() => onChange([])}>Ninguno</button>
-        )}
-      </div>
-      <div className="chip-row">
-        {[...names, ...custom].map((v) => (
-          <button type="button" key={v} className={`chip${selected.includes(v) ? ' on' : ''}`}
-            aria-pressed={selected.includes(v)} onClick={() => toggle(v)}>{v}</button>
-        ))}
-        <span className="chip-add">
-          <input value={extra} placeholder={`Otro ${axis.name.toLowerCase()}…`}
-            onChange={(e) => setExtra(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addExtra(); } }} />
-          <button type="button" className="btn ghost sm" disabled={!extra.trim()} onClick={addExtra}>Agregar</button>
-        </span>
+    <div className="modal-backdrop stacked" onClick={onClose}>
+      <div className="modal card vd-modal" role="dialog" aria-modal="true" aria-labelledby="vd-title"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }}>
+        <div className="modal-head">
+          <h2 id="vd-title">Nueva variación</h2>
+          <button type="button" className="btn ghost sm" onClick={onClose}>Cerrar</button>
+        </div>
+
+        {axes.map((axis) => {
+          const names = axis.terms.map((t) => t.name);
+          const chosen = form.values[axis.name] || '';
+          return (
+            <div className="vd-axis" key={axis.name}>
+              <div className="axis-name">{axis.name}</div>
+              <div className="chip-row">
+                {names.map((v) => (
+                  <button type="button" key={v} className={`chip${chosen === v ? ' on' : ''}`}
+                    aria-pressed={chosen === v} onClick={() => setValue(axis.name, v)}>{v}</button>
+                ))}
+                {chosen && !names.includes(chosen) && (
+                  <button type="button" className="chip on" aria-pressed="true"
+                    onClick={() => setValue(axis.name, '')}>{chosen}</button>
+                )}
+                <span className="chip-add">
+                  <input value={extra[axis.name] || ''} placeholder={`Otro ${axis.name.toLowerCase()}…`}
+                    onChange={(e) => setExtra((x) => ({ ...x, [axis.name]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      const v = (extra[axis.name] || '').trim();
+                      if (v) { setValue(axis.name, v); setExtra((x) => ({ ...x, [axis.name]: '' })); }
+                    }} />
+                  <button type="button" className="btn ghost sm" disabled={!(extra[axis.name] || '').trim()}
+                    onClick={() => {
+                      const v = (extra[axis.name] || '').trim();
+                      setValue(axis.name, v); setExtra((x) => ({ ...x, [axis.name]: '' }));
+                    }}>Usar</button>
+                </span>
+              </div>
+            </div>
+          );
+        })}
+
+        <div className="vd-data">
+          <label className="vd-photo-slot">
+            <span className="vd-photo">
+              {form.file ? <img src={URL.createObjectURL(form.file)} alt="" /> : <span className="thumb-ph">＋</span>}
+            </span>
+            <span className="vd-photo-text">{form.file ? 'Cambiar foto' : 'Foto de esta variación'}</span>
+            <input type="file" accept="image/*" hidden
+              onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) set({ file: f }); }} />
+          </label>
+          <div className="vd-fields">
+            <label className="vb-field">Cantidad
+              <input type="number" min="0" step="1" placeholder="0" autoFocus={axes.length === 0}
+                value={form.stock} onChange={(e) => set({ stock: e.target.value })} />
+            </label>
+            <label className="vb-field">Precio
+              <input type="number" min="0" step="0.01" placeholder="hereda"
+                value={form.price} onChange={(e) => set({ price: e.target.value })} />
+            </label>
+            <label className="vb-field">Costo
+              <input type="number" min="0" step="0.01" placeholder="hereda"
+                value={form.cost} onChange={(e) => set({ cost: e.target.value })} />
+            </label>
+            <label className="vb-field">SKU
+              <input placeholder="opcional" value={form.sku} onChange={(e) => set({ sku: e.target.value })} />
+            </label>
+          </div>
+        </div>
+
+        {error && <div className="form-error">{error}</div>}
+        {added > 0 && <p className="hint">{added} {added === 1 ? 'variación agregada' : 'variaciones agregadas'}.</p>}
+
+        <div className="inline-form-actions vd-actions">
+          <button type="button" className="btn primary" onClick={() => submit(false)}>Agregar</button>
+          <button type="button" className="btn ghost" onClick={() => submit(true)}>Agregar y crear otra</button>
+          <button type="button" className="linklike" onClick={onClose}>Cancelar</button>
+        </div>
       </div>
     </div>
   );
 }
 
+// ---------- Lista de variaciones + botón para agregar ----------
 export default function VariantBuilder({
-  axes, state, onChange, existingSigs = new Set(), allowImages = true, disabled = false,
+  axes, rows, onChange, existingSigs = new Set(), disabled = false, addLabel = '＋ Agregar variación',
 }) {
   const axisNames = axes.map((a) => a.name);
+  const [open, setOpen] = useState(false);
   const [bulk, setBulk] = useState({ stock: '', price: '' });
-  const fileInputs = useRef({});
 
-  const variants = builderVariants(axisNames, state, existingSigs);
-  const removed = (state.removed || []).filter((sig) => {
-    // Solo cuentan las quitadas que siguen siendo combinaciones posibles.
-    const all = combosOf(axisNames, state.values || {}).map((a) => sigOf(axisNames, a));
-    return all.includes(sig);
-  });
-
-  const setValues = (name, vals) => onChange({ ...state, values: { ...state.values, [name]: vals } });
-  const patchRow = (sig, patch) => onChange({
-    ...state, data: { ...state.data, [sig]: { ...(state.data?.[sig] || {}), ...patch } },
-  });
-  const removeRow = (sig) => onChange({ ...state, removed: [...(state.removed || []), sig] });
-  const restoreAll = () => onChange({ ...state, removed: [] });
+  const taken = new Set([...existingSigs, ...rows.map((r) => sigOf(axisNames, r.attributes))]);
+  const patch = (key, p) => onChange(rows.map((r) => (r.key === key ? { ...r, ...p } : r)));
 
   function applyBulk() {
-    const data = { ...state.data };
-    for (const v of variants) {
-      data[v.sig] = { ...(data[v.sig] || {}) };
-      if (bulk.stock !== '') data[v.sig].stock = bulk.stock;
-      if (bulk.price !== '') data[v.sig].price = bulk.price;
-    }
-    onChange({ ...state, data });
+    onChange(rows.map((r) => ({
+      ...r,
+      stock: bulk.stock !== '' ? bulk.stock : r.stock,
+      price: bulk.price !== '' ? bulk.price : r.price,
+    })));
     setBulk({ stock: '', price: '' });
   }
 
-  const pendingAxes = axes.filter((a) => (state.values?.[a.name] || []).length === 0);
-
   return (
     <div className="vb">
-      {axes.map((axis) => (
-        <AxisValues key={axis.id ?? axis.name} axis={axis}
-          selected={state.values?.[axis.name] || []}
-          onChange={(vals) => setValues(axis.name, vals)} />
-      ))}
-
-      {pendingAxes.length > 0 ? (
-        <p className="hint">
-          Elige {pendingAxes.length === 1 ? 'los valores de' : 'los valores de'}{' '}
-          <strong>{pendingAxes.map((a) => a.name).join(' y ')}</strong> para armar las variaciones.
-        </p>
-      ) : variants.length === 0 ? (
-        <p className="hint">
-          Todas las combinaciones están quitadas o ya existen en el producto.
-          {removed.length > 0 && <> <button type="button" className="linklike" onClick={restoreAll}>Restaurar las quitadas</button></>}
-        </p>
+      {rows.length === 0 ? (
+        <p className="hint">Aún no has agregado variaciones. Usa <strong>{addLabel}</strong> para armar la primera.</p>
       ) : (
         <>
-          <div className="vb-bar">
-            <strong>{variants.length} {variants.length === 1 ? 'variación' : 'variaciones'}</strong>
-            <span className="vb-bar-gap" />
-            <span className="muted">Para todas:</span>
-            <input type="number" min="0" step="1" placeholder="cantidad" className="vb-bulk"
-              value={bulk.stock} onChange={(e) => setBulk((b) => ({ ...b, stock: e.target.value }))} />
-            <input type="number" min="0" step="0.01" placeholder="precio" className="vb-bulk"
-              value={bulk.price} onChange={(e) => setBulk((b) => ({ ...b, price: e.target.value }))} />
-            <button type="button" className="btn ghost sm" disabled={disabled || (bulk.stock === '' && bulk.price === '')}
-              onClick={applyBulk}>Aplicar</button>
-            {removed.length > 0 && (
-              <button type="button" className="linklike" onClick={restoreAll}>
-                Restaurar {removed.length} quitada{removed.length === 1 ? '' : 's'}
-              </button>
-            )}
-          </div>
+          {rows.length > 1 && (
+            <div className="vb-bar">
+              <strong>{rows.length} {rows.length === 1 ? 'variación' : 'variaciones'}</strong>
+              <span className="vb-bar-gap" />
+              <span className="muted">Para todas:</span>
+              <input type="number" min="0" step="1" placeholder="cantidad" className="vb-bulk"
+                value={bulk.stock} onChange={(e) => setBulk((b) => ({ ...b, stock: e.target.value }))} />
+              <input type="number" min="0" step="0.01" placeholder="precio" className="vb-bulk"
+                value={bulk.price} onChange={(e) => setBulk((b) => ({ ...b, price: e.target.value }))} />
+              <button type="button" className="btn ghost sm"
+                disabled={disabled || (bulk.stock === '' && bulk.price === '')}
+                onClick={applyBulk}>Aplicar</button>
+            </div>
+          )}
 
           <div className="vb-list">
-            {variants.map((v) => {
-              const label = axisNames.map((a) => v.attributes[a]).join(' · ');
-              return (
-                <div className="vb-card" key={v.sig}>
-                  {allowImages && (
-                    <label className="vb-photo" title={`Foto de ${label}`}>
-                      {v.file
-                        ? <img src={URL.createObjectURL(v.file)} alt="" />
-                        : <span className="thumb-ph">＋</span>}
-                      <input type="file" accept="image/*" hidden disabled={disabled}
-                        ref={(el) => { fileInputs.current[v.sig] = el; }}
-                        onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) patchRow(v.sig, { file: f }); }} />
+            {rows.map((r) => (
+              <div className="vb-card" key={r.key}>
+                <label className="vb-photo" title={`Foto de ${labelOf(axisNames, r.attributes)}`}>
+                  {r.file ? <img src={URL.createObjectURL(r.file)} alt="" /> : <span className="thumb-ph">＋</span>}
+                  <input type="file" accept="image/*" hidden disabled={disabled}
+                    onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) patch(r.key, { file: f }); }} />
+                </label>
+                <div className="vb-card-body">
+                  <div className="vb-card-head">
+                    <span className="vb-label">{labelOf(axisNames, r.attributes)}</span>
+                    {r.file && (
+                      <button type="button" className="linklike" onClick={() => patch(r.key, { file: null })}>quitar foto</button>
+                    )}
+                    <button type="button" className="vb-del" title="Quitar esta variación"
+                      aria-label={`Quitar ${labelOf(axisNames, r.attributes)}`}
+                      onClick={() => onChange(rows.filter((x) => x.key !== r.key))}>{TRASH}</button>
+                  </div>
+                  <div className="vb-fields">
+                    <label className="vb-field">Cantidad
+                      <input type="number" min="0" step="1" placeholder="0" disabled={disabled}
+                        value={r.stock} onChange={(e) => patch(r.key, { stock: e.target.value })} />
                     </label>
-                  )}
-                  <div className="vb-card-body">
-                    <div className="vb-card-head">
-                      <span className="vb-label">{label}</span>
-                      {v.file && (
-                        <button type="button" className="linklike" onClick={() => patchRow(v.sig, { file: null })}>
-                          quitar foto
-                        </button>
-                      )}
-                      <button type="button" className="vb-del" title="Quitar esta variación"
-                        aria-label={`Quitar ${label}`} onClick={() => removeRow(v.sig)}>{TRASH}</button>
-                    </div>
-                    <div className="vb-fields">
-                      <label className="vb-field">Cantidad
-                        <input type="number" min="0" step="1" placeholder="0" disabled={disabled}
-                          value={v.stock ?? ''} onChange={(e) => patchRow(v.sig, { stock: e.target.value })} />
-                      </label>
-                      <label className="vb-field">Precio
-                        <input type="number" min="0" step="0.01" placeholder="hereda" disabled={disabled}
-                          value={v.price ?? ''} onChange={(e) => patchRow(v.sig, { price: e.target.value })} />
-                      </label>
-                      <label className="vb-field">Costo
-                        <input type="number" min="0" step="0.01" placeholder="hereda" disabled={disabled}
-                          value={v.cost ?? ''} onChange={(e) => patchRow(v.sig, { cost: e.target.value })} />
-                      </label>
-                      <label className="vb-field">SKU
-                        <input placeholder="opcional" disabled={disabled}
-                          value={v.sku ?? ''} onChange={(e) => patchRow(v.sig, { sku: e.target.value })} />
-                      </label>
-                    </div>
+                    <label className="vb-field">Precio
+                      <input type="number" min="0" step="0.01" placeholder="hereda" disabled={disabled}
+                        value={r.price} onChange={(e) => patch(r.key, { price: e.target.value })} />
+                    </label>
+                    <label className="vb-field">Costo
+                      <input type="number" min="0" step="0.01" placeholder="hereda" disabled={disabled}
+                        value={r.cost} onChange={(e) => patch(r.key, { cost: e.target.value })} />
+                    </label>
+                    <label className="vb-field">SKU
+                      <input placeholder="opcional" disabled={disabled}
+                        value={r.sku} onChange={(e) => patch(r.key, { sku: e.target.value })} />
+                    </label>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </>
+      )}
+
+      <button type="button" className="btn ghost vb-add" disabled={disabled || axes.length === 0}
+        onClick={() => setOpen(true)}>{addLabel}</button>
+
+      {open && (
+        <VariationDialog axes={axes} taken={taken}
+          onAdd={(row) => onChange([...rows, row])}
+          onClose={() => setOpen(false)} />
       )}
     </div>
   );
