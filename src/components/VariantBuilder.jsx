@@ -53,12 +53,44 @@ function ValueSelect({ axis, value, onChange }) {
   );
 }
 
+// Desplegable de ejes disponibles, con "＋ Otro…" para uno que el negocio
+// todavía no tiene (Material, Sabor…).
+function AxisSelect({ options, value, onChange }) {
+  const [custom, setCustom] = useState(() => !!value && !options.includes(value));
+  if (custom) {
+    return (
+      <span className="term-select">
+        <input autoFocus value={value} placeholder="Nombre del eje (Material…)"
+          onChange={(e) => onChange(e.target.value)} />
+        <button type="button" className="term-select-back" title="Elegir de la lista"
+          onClick={() => { setCustom(false); onChange(''); }}>▾</button>
+      </span>
+    );
+  }
+  return (
+    <select value={options.includes(value) ? value : ''}
+      onChange={(e) => {
+        if (e.target.value === '__new__') { setCustom(true); onChange(''); }
+        else onChange(e.target.value);
+      }}>
+      <option value="">Elegir eje…</option>
+      {options.map((n) => <option key={n} value={n}>{n}</option>)}
+      <option value="__new__">＋ Otro…</option>
+    </select>
+  );
+}
+
 // ---------- Submodal: una variación ----------
 // `initial` llega al editar una variación que ya existe; entonces el diálogo
 // guarda los cambios en vez de agregar a la lista.
-export function VariationDialog({ axes, taken, onAdd, onClose, initial = null, title }) {
+export function VariationDialog({
+  axes, taken, onAdd, onClose, initial = null, title,
+  availableAxes = [], onAddAxis = null, othersCount = 0, busy = false,
+}) {
   const axisNames = axes.map((a) => a.name);
   const editing = !!initial;
+  // Eje que se está sumando al producto desde aquí: { name, value }
+  const [newAxis, setNewAxis] = useState(null);
   const [form, setForm] = useState({
     values: initial?.values || {}, stock: initial?.stock ?? '', price: initial?.price ?? '',
     cost: initial?.cost ?? '', sku: initial?.sku ?? '', file: null,
@@ -117,6 +149,55 @@ export function VariationDialog({ axes, taken, onAdd, onClose, initial = null, t
           ))}
         </div>
 
+        {axes.length === 0 && !newAxis && (
+          <p className="hint">
+            Este producto todavía no varía por nada. Agrega un eje (talla, color…) para empezar.
+          </p>
+        )}
+
+        {onAddAxis && (newAxis ? (
+          <div className="vd-newaxis">
+            <div className="vd-axes">
+              <label className="vb-field">¿En qué más varía?
+                <AxisSelect options={availableAxes.map((a) => a.name)} value={newAxis.name}
+                  onChange={(name) => setNewAxis({ name, value: '' })} />
+              </label>
+              {newAxis.name && othersCount > 0 && (
+                <label className="vb-field">
+                  {othersCount === 1
+                    ? `¿Qué ${newAxis.name.toLowerCase()} lleva la otra variación?`
+                    : `¿Qué ${newAxis.name.toLowerCase()} llevan las otras ${othersCount}?`}
+                  <ValueSelect
+                    axis={availableAxes.find((a) => a.name === newAxis.name) || { name: newAxis.name, terms: [] }}
+                    value={newAxis.value} onChange={(value) => setNewAxis((a) => ({ ...a, value }))} />
+                </label>
+              )}
+            </div>
+            <div className="vd-newaxis-actions">
+              <button type="button" className="btn ghost sm"
+                disabled={busy || !newAxis.name.trim() || (othersCount > 0 && !newAxis.value.trim())}
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    const axis = newAxis.name.trim();
+                    const val = newAxis.value.trim();
+                    await onAddAxis(axis, val);
+                    // Esta variación arranca con el mismo valor que las demás;
+                    // el usuario lo cambia si esta es la distinta.
+                    if (val) setValue(axis, val);
+                    setNewAxis(null);
+                  } catch (e) { setError(e.message); }
+                }}>Agregar eje</button>
+              <button type="button" className="linklike" onClick={() => setNewAxis(null)}>Cancelar</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="linklike vd-addaxis" disabled={busy}
+            onClick={() => setNewAxis({ name: '', value: '' })}>
+            ＋ {axes.length === 0 ? 'Agregar eje (talla, color…)' : 'Agregar otro eje (color, material…)'}
+          </button>
+        ))}
+
         <div className="vd-data">
           {!editing && (
           <label className="vd-photo-slot">
@@ -167,6 +248,7 @@ export function VariationDialog({ axes, taken, onAdd, onClose, initial = null, t
 // ---------- Lista de variaciones + botón para agregar ----------
 export default function VariantBuilder({
   axes, rows, onChange, existingSigs = new Set(), disabled = false, addLabel = '＋ Agregar variación',
+  availableAxes = [], onAddAxis = null, othersCount = 0,
 }) {
   const axisNames = axes.map((a) => a.name);
   const [open, setOpen] = useState(false);
@@ -248,11 +330,13 @@ export default function VariantBuilder({
         </>
       )}
 
-      <button type="button" className="btn ghost vb-add" disabled={disabled || axes.length === 0}
+      <button type="button" className="btn ghost vb-add" disabled={disabled}
         onClick={() => setOpen(true)}>{addLabel}</button>
 
       {open && (
         <VariationDialog axes={axes} taken={taken}
+          availableAxes={availableAxes} onAddAxis={onAddAxis}
+          othersCount={othersCount + rows.length} busy={disabled}
           onAdd={(row) => onChange([...rows, row])}
           onClose={() => setOpen(false)} />
       )}

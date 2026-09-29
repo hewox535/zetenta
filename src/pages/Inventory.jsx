@@ -153,31 +153,6 @@ function TermSelect({ terms, value, onChange, placeholder, disabled }) {
   );
 }
 
-// Botón "＋ Nuevo eje" con su campito: crea un eje de variación que el negocio
-// todavía no tiene (p. ej. Color) sin salir del modal del producto.
-function NewAxis({ onCreate }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  if (!open) {
-    return (
-      <button type="button" className="pay-pill ghost" onClick={() => setOpen(true)}>＋ Nuevo eje</button>
-    );
-  }
-  const submit = () => { if (!name.trim()) return; onCreate(name); setName(''); setOpen(false); };
-  return (
-    <span className="chip-add">
-      <input autoFocus value={name} placeholder="Color, Material…"
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); submit(); }
-          if (e.key === 'Escape') { setOpen(false); setName(''); }
-        }} />
-      <button type="button" className="btn ghost sm" disabled={!name.trim()} onClick={submit}>Crear</button>
-      <button type="button" className="linklike" onClick={() => { setOpen(false); setName(''); }}>Cancelar</button>
-    </span>
-  );
-}
-
 export default function Inventory() {
   const ask = useConfirm();
   const { business, canInventory } = useAuth();
@@ -208,7 +183,6 @@ export default function Inventory() {
   const [moreOpen, setMoreOpen] = useState(false); // menú ⋯ del header (móvil)
   const [viewer, setViewer] = useState(null); // visor de fotos: { p, i } (índice en mediaOf(p))
   const [editVar, setEditVar] = useState(null);   // variación existente que se está editando
-  const [addAxis, setAddAxis] = useState(null);   // { name, value } eje que se suma al producto
 
   // Ofertas: filtro "En oferta" y modo selección para aplicar/quitar % en lote.
   const [offerOnly, setOfferOnly] = useState(false);
@@ -317,7 +291,8 @@ export default function Inventory() {
       if (pt) categories[t.id] = termName.get(pt.term_id) || '';
     }
     setModal({
-      mode: 'edit', id: p.id, orig: p, axes: p.variant_axes || [], simple: isSimple(p),
+      mode: 'edit', id: p.id, orig: p, axes: p.variant_axes || [], origAxes: p.variant_axes || [],
+      simple: isSimple(p),
       name: p.name, price: String(p.price ?? ''), cost: p.cost != null && Number(p.cost) !== 0 ? String(p.cost) : '',
       sku: p.sku || '', unit: p.unit || 'und', note: p.note || '',
       categories,
@@ -409,6 +384,9 @@ export default function Inventory() {
         // EDIT: solo se envía lo que el usuario puede cambiar; lo demás va
         // con el valor original para que el servidor no lo vea como cambio.
         const o = modal.orig;
+        if (canInfo && modal.axes.join('|') !== modal.origAxes.join('|')) {
+          await updateProduct(modal.id, { variant_axes: modal.axes });
+        }
         if (canInfo || canPrice) {
           await updateProductDetails(modal.id, {
             name: canInfo ? modal.name.trim() : o.name,
@@ -433,6 +411,9 @@ export default function Inventory() {
             patch.cost = v.cost === '' ? null : Number(v.cost);
           }
           if (canStock) patch.target_stock = v.target === '' ? null : Number(v.target);
+          if (patch.attributes) {
+            for (const [ax, val] of Object.entries(patch.attributes)) await seedTerm(ax, val);
+          }
           if (Object.keys(patch).length) await updateVariant(v.id, patch);
           const ns = Number(v.stock) || 0;
           if (canStock && ns !== v.origStock) {
@@ -582,45 +563,43 @@ export default function Inventory() {
 
   const axisTaxOfModal = () => varTax.filter((t) => modal.axisIds.includes(t.id));
 
-  // Sumar un eje (p. ej. Color) a un producto que ya existe: todas sus
-  // variaciones necesitan un valor para ese eje, así que se pide uno y se
-  // aplica a las actuales; después cada una se puede editar por separado.
-  async function onAddAxisToProduct(name, value) {
-    const axis = name.trim();
-    const val = value.trim();
-    if (!axis || !val) return;
-    setError(null); setBusy(true);
-    try {
-      let tax = varTax.find((t) => t.name.toLowerCase() === axis.toLowerCase());
-      if (!tax) tax = await createTaxonomy(business.id, axis, 'variant');
-      await findOrCreateTerm(tax.id, val);
-      await updateProduct(modal.id, { variant_axes: [...modal.axes, tax.name] });
-      for (const v of modal.variants) {
-        await updateVariant(v.id, { attributes: { ...v.attributes, [tax.name]: val } });
-      }
-      const products = await reload();
-      const fresh = (products || []).find((p) => p.id === modal.id);
-      if (fresh) openEdit(fresh);
-      setAddAxis(null);
-    } catch (e) {
-      setError(e.message.includes('duplicate') || e.message.includes('unique')
-        ? 'Ese eje o ese valor ya existe.' : e.message);
-    } finally { setBusy(false); }
+  // Valor que no está en la lista del eje (un color escrito a mano): queda
+  // guardado para que aparezca en los desplegables de ahí en adelante.
+  async function seedTerm(axis, value) {
+    const tax = typeof axis === 'string' ? varTax.find((t) => t.name === axis) : axis;
+    if (!tax || !value) return;
+    if ((tax.taxonomy_terms || []).some((t) => t.name === value)) return;
+    await findOrCreateTerm(tax.id, value);
   }
 
-  // Eje nuevo (Color, Material…) desde el propio modal: se crea en el negocio
-  // y queda marcado para este producto, sin pasar por Configuración.
-  async function onCreateAxis(name) {
-    setError(null); setBusy(true);
-    try {
-      const tax = await createTaxonomy(business.id, name.trim(), 'variant');
-      const [t] = await Promise.all([fetchTaxonomies()]);
-      setTaxonomies(t);
-      setModal((m) => ({ ...m, axisIds: [...m.axisIds, tax.id] }));
-    } catch (e) {
-      setError(e.message.includes('duplicate') || e.message.includes('unique')
-        ? `Ya existe algo llamado "${name.trim()}".` : e.message);
-    } finally { setBusy(false); }
+  // Sumar un eje (Talla, Color, Material…) desde el submodal de la variación.
+  // Solo toca el estado del modal: el eje y los valores de las demás
+  // variaciones se guardan al pulsar "Guardar producto".
+  async function onAddAxisFromDialog(name, defaultValue) {
+    const axisName = name.trim();
+    if (!axisName) return;
+    let tax = varTax.find((t) => t.name.toLowerCase() === axisName.toLowerCase());
+    if (!tax) {
+      // Eje que el negocio todavía no tiene: se crea ya, para que quede
+      // disponible en los desplegables (los valores se siembran al guardar).
+      tax = await createTaxonomy(business.id, axisName, 'variant');
+      setTaxonomies(await fetchTaxonomies());
+    }
+    const axis = tax.name;
+    const val = defaultValue.trim();
+    if (val) await seedTerm(tax, val);
+    const withAxis = (attrs) => ({ ...attrs, [axis]: attrs[axis] ?? val });
+
+    setModal((m) => (m.mode === 'create' ? {
+      ...m,
+      axisIds: m.axisIds.includes(tax.id) ? m.axisIds : [...m.axisIds, tax.id],
+      vb: m.vb.map((r) => ({ ...r, attributes: withAxis(r.attributes) })),
+    } : {
+      ...m,
+      axes: m.axes.includes(axis) ? m.axes : [...m.axes, axis],
+      variants: m.variants.map((v) => ({ ...v, attributes: withAxis(v.attributes) })),
+      vbNew: m.vbNew.map((r) => ({ ...r, attributes: withAxis(r.attributes) })),
+    }));
   }
 
   // Modal en edición: cada grupo de campos depende de su permiso. Al crear
@@ -1075,29 +1054,19 @@ export default function Inventory() {
                 modal.cmode === 'simple' ? null : (
                 <div className="np-block">
                   <div className="np-variants">
-                    <div className="oc-label">¿En qué varía este producto?</div>
-                    <p className="hint">Marca todos los que apliquen: una camisa puede variar por talla <em>y</em> color.</p>
-                    <div className="variant-axis-pills">
-                      {varTax.map((t) => (
-                        <button type="button" key={t.id}
-                          className={`pay-pill${modal.axisIds.includes(t.id) ? ' active' : ''}`}
-                          aria-pressed={modal.axisIds.includes(t.id)}
-                          onClick={() => setM({ axisIds: modal.axisIds.includes(t.id)
-                            ? modal.axisIds.filter((x) => x !== t.id) : [...modal.axisIds, t.id] })}>
-                          {modal.axisIds.includes(t.id) ? '✓ ' : ''}{t.name}
-                        </button>
-                      ))}
-                      <NewAxis onCreate={onCreateAxis} />
-                    </div>
-
-                    {axisTaxOfModal().length > 0 && (
-                      <VariantBuilder
-                        axes={axisTaxOfModal().map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
-                        rows={modal.vb}
-                        onChange={(vb) => setM({ vb })}
-                        disabled={busy}
-                      />
-                    )}
+                    <div className="oc-label">Variaciones</div>
+                    <p className="hint">
+                      En cada variación eliges en qué varía (talla, color…) y cargas su foto y su cantidad.
+                    </p>
+                    <VariantBuilder
+                      axes={axisTaxOfModal().map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
+                      availableAxes={varTax.filter((t) => !modal.axisIds.includes(t.id))
+                        .map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
+                      onAddAxis={onAddAxisFromDialog}
+                      rows={modal.vb}
+                      onChange={(vb) => setM({ vb })}
+                      disabled={busy}
+                    />
                   </div>
                 </div>
                 )
@@ -1155,21 +1124,19 @@ export default function Inventory() {
                       );
                     })}
                   </div>
-                  {canInfo && (
-                    <button type="button" className="btn ghost sm vb-add" disabled={busy}
-                      onClick={() => setAddAxis({ name: '', value: '' })}>
-                      ＋ Agregar un eje (color, material…)
-                    </button>
-                  )}
                   {!lockStock && (
                     <p className="hint">Cambiar la cantidad aquí registra un ajuste. Para dejar constancia de una entrada o salida (con su nota) usa los botones de cada variación.</p>
                   )}
 
-                  {canCreate && modal.axes.length > 0 && (
+                  {canCreate && (
                     <div className="np-subblock">
                       <div className="oc-label">Agregar variaciones</div>
                       <VariantBuilder
                         axes={modal.axes.map((name) => ({ id: name, name, terms: axisTermsByName(name) }))}
+                        availableAxes={varTax.filter((t) => !modal.axes.includes(t.name))
+                          .map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
+                        onAddAxis={canInfo ? onAddAxisFromDialog : null}
+                        othersCount={modal.variants.length}
                         rows={modal.vbNew}
                         onChange={(vbNew) => setM({ vbNew })}
                         existingSigs={new Set(modal.variants.map((v) => v.sig))}
@@ -1244,6 +1211,11 @@ export default function Inventory() {
       {editVar && modal && (
         <VariationDialog
           axes={modal.axes.map((name) => ({ id: name, name, terms: axisTermsByName(name) }))}
+          availableAxes={varTax.filter((t) => !modal.axes.includes(t.name))
+            .map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
+          onAddAxis={canInfo ? onAddAxisFromDialog : null}
+          othersCount={modal.variants.length - 1 + modal.vbNew.length}
+          busy={busy}
           taken={new Set(modal.variants.filter((x) => x.id !== editVar.id)
             .map((x) => sigOf(modal.axes, x.attributes)))}
           initial={{
@@ -1258,44 +1230,6 @@ export default function Inventory() {
           })}
           onClose={() => setEditVar(null)}
         />
-      )}
-
-      {/* ===== Submodal: sumar un eje al producto ===== */}
-      {addAxis && modal && (
-        <div className="modal-backdrop stacked" onClick={() => setAddAxis(null)}>
-          <div className="modal card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h2>Agregar un eje a {modal.name}</h2>
-              <button type="button" className="btn ghost sm" onClick={() => setAddAxis(null)}>Cerrar</button>
-            </div>
-            <p className="hint">
-              Sus {modal.variants.length} {modal.variants.length === 1 ? 'variación' : 'variaciones'} necesitan
-              un valor para el eje nuevo. Después puedes cambiarlo una por una con <strong>editar variación</strong>.
-            </p>
-            <div className="vform">
-              <label>Eje
-                <TermSelect
-                  terms={varTax.filter((t) => !modal.axes.includes(t.name)).map((t) => ({ name: t.name }))}
-                  value={addAxis.name} placeholder="Elegir eje…"
-                  onChange={(name) => setAddAxis((a) => ({ ...a, name, value: '' }))} />
-              </label>
-              {addAxis.name && (
-                <label>¿Qué {addAxis.name.toLowerCase()} tienen las variaciones actuales?
-                  <TermSelect terms={axisTermsByName(addAxis.name)} value={addAxis.value}
-                    placeholder={`Elegir ${addAxis.name.toLowerCase()}…`}
-                    onChange={(value) => setAddAxis((a) => ({ ...a, value }))} />
-                </label>
-              )}
-              <div className="inline-form-actions">
-                <button type="button" className="btn primary" disabled={busy || !addAxis.name || !addAxis.value}
-                  onClick={() => onAddAxisToProduct(addAxis.name, addAxis.value)}>
-                  {busy ? 'Agregando…' : 'Agregar eje'}
-                </button>
-                <button type="button" className="btn ghost" onClick={() => setAddAxis(null)}>Cancelar</button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* ============ Modal movimiento ============ */}

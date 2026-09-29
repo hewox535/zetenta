@@ -601,7 +601,6 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .inv-search { flex: 1 1 220px; min-width: 160px; }
 .seg.sm .seg-btn { padding: 6px 14px; font-size: 12px; }
 .variant-config { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
-.variant-axis-pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 
 /* Selector de variante en el POS */
 .variant-picker { max-width: 560px; }
@@ -699,6 +698,9 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .vd-modal { max-width: 520px; }
 .modal > .hint { margin: 0 0 16px; }
 .vd-axes { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
+.vd-addaxis { display: inline-block; margin-top: 10px; font-size: 13px; }
+.vd-newaxis { margin-top: 12px; padding: 12px; background: var(--accent-soft); border-radius: var(--radius); }
+.vd-newaxis-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .vd-axes .vb-field { flex: 1 1 160px; }
 .vd-axes .term-select { display: flex; gap: 4px; }
 .vd-data { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--border); }
@@ -710,7 +712,6 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .vd-fields { flex: 1 1 260px; display: flex; flex-wrap: wrap; gap: 10px; }
 .vd-actions { margin-top: 18px; align-items: center; }
 .vb-field { flex: 1 1 96px; min-width: 88px; font-size: 12.5px; }
-.pay-pill.ghost { border-style: dashed; color: var(--accent); }
 .np-subblock { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border); }
 
 /* Pills tipo radio: elegir producto simple o con variaciones */
