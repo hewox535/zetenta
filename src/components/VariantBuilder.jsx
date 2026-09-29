@@ -24,11 +24,45 @@ const TRASH = (
   </svg>
 );
 
+// Desplegable con los valores del eje (Talla: S, M, L…) y "＋ Otro…" para
+// escribir uno que no esté en la lista.
+function ValueSelect({ axis, value, onChange }) {
+  const names = axis.terms.map((t) => t.name);
+  const [custom, setCustom] = useState(() => !!value && !names.includes(value));
+
+  if (custom) {
+    return (
+      <span className="term-select">
+        <input autoFocus value={value} placeholder={`Nuevo ${axis.name.toLowerCase()}`}
+          onChange={(e) => onChange(e.target.value)} />
+        <button type="button" className="term-select-back" title="Elegir de la lista"
+          onClick={() => { setCustom(false); onChange(''); }}>▾</button>
+      </span>
+    );
+  }
+  return (
+    <select value={names.includes(value) ? value : ''}
+      onChange={(e) => {
+        if (e.target.value === '__new__') { setCustom(true); onChange(''); }
+        else onChange(e.target.value);
+      }}>
+      <option value="">Elegir {axis.name.toLowerCase()}…</option>
+      {names.map((n) => <option key={n} value={n}>{n}</option>)}
+      <option value="__new__">＋ Otro…</option>
+    </select>
+  );
+}
+
 // ---------- Submodal: una variación ----------
-function VariationDialog({ axes, taken, onAdd, onClose }) {
+// `initial` llega al editar una variación que ya existe; entonces el diálogo
+// guarda los cambios en vez de agregar a la lista.
+export function VariationDialog({ axes, taken, onAdd, onClose, initial = null, title }) {
   const axisNames = axes.map((a) => a.name);
-  const [form, setForm] = useState({ values: {}, stock: '', price: '', cost: '', sku: '', file: null });
-  const [extra, setExtra] = useState({});      // eje → valor escrito a mano
+  const editing = !!initial;
+  const [form, setForm] = useState({
+    values: initial?.values || {}, stock: initial?.stock ?? '', price: initial?.price ?? '',
+    cost: initial?.cost ?? '', sku: initial?.sku ?? '', file: null,
+  });
   const [error, setError] = useState(null);
   const [added, setAdded] = useState(0);
 
@@ -45,7 +79,7 @@ function VariationDialog({ axes, taken, onAdd, onClose }) {
     const sig = sigOf(axisNames, attributes);
     if (taken.has(sig)) { setError(`${labelOf(axisNames, attributes)} ya está en la lista.`); return null; }
     return {
-      key: newKey(), attributes, stock: form.stock, price: form.price,
+      key: initial?.key || newKey(), attributes, stock: form.stock, price: form.price,
       cost: form.cost, sku: form.sku.trim(), file: form.file,
     };
   }
@@ -70,46 +104,21 @@ function VariationDialog({ axes, taken, onAdd, onClose }) {
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }}>
         <div className="modal-head">
-          <h2 id="vd-title">Nueva variación</h2>
+          <h2 id="vd-title">{title || (editing ? 'Editar variación' : 'Nueva variación')}</h2>
           <button type="button" className="btn ghost sm" onClick={onClose}>Cerrar</button>
         </div>
 
-        {axes.map((axis) => {
-          const names = axis.terms.map((t) => t.name);
-          const chosen = form.values[axis.name] || '';
-          return (
-            <div className="vd-axis" key={axis.name}>
-              <div className="axis-name">{axis.name}</div>
-              <div className="chip-row">
-                {names.map((v) => (
-                  <button type="button" key={v} className={`chip${chosen === v ? ' on' : ''}`}
-                    aria-pressed={chosen === v} onClick={() => setValue(axis.name, v)}>{v}</button>
-                ))}
-                {chosen && !names.includes(chosen) && (
-                  <button type="button" className="chip on" aria-pressed="true"
-                    onClick={() => setValue(axis.name, '')}>{chosen}</button>
-                )}
-                <span className="chip-add">
-                  <input value={extra[axis.name] || ''} placeholder={`Otro ${axis.name.toLowerCase()}…`}
-                    onChange={(e) => setExtra((x) => ({ ...x, [axis.name]: e.target.value }))}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return;
-                      e.preventDefault();
-                      const v = (extra[axis.name] || '').trim();
-                      if (v) { setValue(axis.name, v); setExtra((x) => ({ ...x, [axis.name]: '' })); }
-                    }} />
-                  <button type="button" className="btn ghost sm" disabled={!(extra[axis.name] || '').trim()}
-                    onClick={() => {
-                      const v = (extra[axis.name] || '').trim();
-                      setValue(axis.name, v); setExtra((x) => ({ ...x, [axis.name]: '' }));
-                    }}>Usar</button>
-                </span>
-              </div>
-            </div>
-          );
-        })}
+        <div className="vd-axes">
+          {axes.map((axis) => (
+            <label className="vb-field" key={axis.name}>{axis.name}
+              <ValueSelect axis={axis} value={form.values[axis.name] || ''}
+                onChange={(v) => setValue(axis.name, v)} />
+            </label>
+          ))}
+        </div>
 
         <div className="vd-data">
+          {!editing && (
           <label className="vd-photo-slot">
             <span className="vd-photo">
               {form.file ? <img src={URL.createObjectURL(form.file)} alt="" /> : <span className="thumb-ph">＋</span>}
@@ -118,6 +127,7 @@ function VariationDialog({ axes, taken, onAdd, onClose }) {
             <input type="file" accept="image/*" hidden
               onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) set({ file: f }); }} />
           </label>
+          )}
           <div className="vd-fields">
             <label className="vb-field">Cantidad
               <input type="number" min="0" step="1" placeholder="0" autoFocus={axes.length === 0}
@@ -141,8 +151,12 @@ function VariationDialog({ axes, taken, onAdd, onClose }) {
         {added > 0 && <p className="hint">{added} {added === 1 ? 'variación agregada' : 'variaciones agregadas'}.</p>}
 
         <div className="inline-form-actions vd-actions">
-          <button type="button" className="btn primary" onClick={() => submit(false)}>Agregar</button>
-          <button type="button" className="btn ghost" onClick={() => submit(true)}>Agregar y crear otra</button>
+          <button type="button" className="btn primary" onClick={() => submit(false)}>
+            {editing ? 'Guardar cambios' : 'Agregar'}
+          </button>
+          {!editing && (
+            <button type="button" className="btn ghost" onClick={() => submit(true)}>Agregar y crear otra</button>
+          )}
           <button type="button" className="linklike" onClick={onClose}>Cancelar</button>
         </div>
       </div>

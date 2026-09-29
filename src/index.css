@@ -193,7 +193,12 @@ table.list .num, table.list th.num { text-align: right; font-variant-numeric: ta
 table.list .centro, table.list th.centro { text-align: center; }
 .row-link { cursor: pointer; }
 .row-link:hover td { background: rgba(0,0,0,.02); }
-.row-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+/* Celda de acciones: se queda como celda de tabla (un td en display:flex
+   pierde la alineación de la fila y su borde no cuadra con el de las demás
+   columnas); los botones se separan con márgenes. */
+.row-actions { text-align: right; white-space: nowrap; }
+.row-actions > * { vertical-align: middle; }
+.row-actions > * + * { margin-left: 6px; }
 .mono { font-variant-numeric: tabular-nums; letter-spacing: .01em; }
 .muted { color: var(--text-2); }
 
@@ -678,6 +683,7 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .vb-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .vb-label { font-size: 13.5px; font-weight: 700; }
 .vb-card-head .linklike { font-size: 12px; }
+.vb-edit { margin-left: auto; }
 .vb-del {
   margin-left: auto; width: 30px; height: 30px; display: grid; place-items: center;
   border: none; background: transparent; color: var(--danger); cursor: pointer; border-radius: 8px;
@@ -691,8 +697,10 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 /* Submodal: una variación a la vez */
 .modal-backdrop.stacked { z-index: 50; }
 .vd-modal { max-width: 520px; }
-.vd-axis { margin-bottom: 14px; }
-.vd-axis .axis-name { margin-bottom: 6px; }
+.modal > .hint { margin: 0 0 16px; }
+.vd-axes { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
+.vd-axes .vb-field { flex: 1 1 160px; }
+.vd-axes .term-select { display: flex; gap: 4px; }
 .vd-data { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--border); }
 .vd-photo-slot { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; width: 96px; }
 .vd-photo { width: 96px; height: 96px; border-radius: 12px; border: 1px dashed var(--border); display: grid; place-items: center; overflow: hidden; background: var(--accent-soft); }
