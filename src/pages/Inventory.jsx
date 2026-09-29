@@ -10,11 +10,11 @@ import {
   addProductVariant, updateVariant, deleteVariant,
   transferStock, setProductsOffer,
   mediaUrl, uploadProductImage, deleteProductMedia,
-  fetchProductVariants, createTaxonomy,
+  fetchProductVariants, createTaxonomy, findOrCreateTerm, updateProduct,
 } from '../lib/api';
 import { money, variantLabel, offerPrice } from '../lib/calc';
 import { useConfirm } from '../components/Confirm';
-import VariantBuilder, { emptyVariations, sigOf } from '../components/VariantBuilder';
+import VariantBuilder, { VariationDialog, emptyVariations, sigOf, labelOf } from '../components/VariantBuilder';
 
 // Stock de una variante en una sucursal concreta (0 si no tiene fila).
 const branchStock = (v, branchId) => {
@@ -207,6 +207,8 @@ export default function Inventory() {
   const [modal, setModal] = useState(null);   // modal crear/editar producto
   const [moreOpen, setMoreOpen] = useState(false); // menú ⋯ del header (móvil)
   const [viewer, setViewer] = useState(null); // visor de fotos: { p, i } (índice en mediaOf(p))
+  const [editVar, setEditVar] = useState(null);   // variación existente que se está editando
+  const [addAxis, setAddAxis] = useState(null);   // { name, value } eje que se suma al producto
 
   // Ofertas: filtro "En oferta" y modo selección para aplicar/quitar % en lote.
   const [offerOnly, setOfferOnly] = useState(false);
@@ -322,6 +324,7 @@ export default function Inventory() {
       variants: variantsOf(p).map((v) => ({
         id: v.id, label: variantLabel(v.attributes, p.variant_axes),
         sig: sigOf(p.variant_axes || [], v.attributes || {}),
+        attributes: v.attributes || {}, origAttributes: v.attributes || {},
         stock: String(branchStock(v, branchId)), origStock: branchStock(v, branchId),
         sku: v.sku || '', price: v.price != null ? String(v.price) : '',
         cost: v.cost != null ? String(v.cost) : '',
@@ -419,7 +422,12 @@ export default function Inventory() {
         }
         for (const v of modal.variants) {
           const patch = {};
-          if (canInfo) patch.sku = v.sku.trim();
+          if (canInfo) {
+            patch.sku = v.sku.trim();
+            if (JSON.stringify(v.attributes) !== JSON.stringify(v.origAttributes)) {
+              patch.attributes = v.attributes;
+            }
+          }
           if (canPrice) {
             patch.price = v.price === '' ? null : Number(v.price);
             patch.cost = v.cost === '' ? null : Number(v.cost);
@@ -573,6 +581,32 @@ export default function Inventory() {
   );
 
   const axisTaxOfModal = () => varTax.filter((t) => modal.axisIds.includes(t.id));
+
+  // Sumar un eje (p. ej. Color) a un producto que ya existe: todas sus
+  // variaciones necesitan un valor para ese eje, así que se pide uno y se
+  // aplica a las actuales; después cada una se puede editar por separado.
+  async function onAddAxisToProduct(name, value) {
+    const axis = name.trim();
+    const val = value.trim();
+    if (!axis || !val) return;
+    setError(null); setBusy(true);
+    try {
+      let tax = varTax.find((t) => t.name.toLowerCase() === axis.toLowerCase());
+      if (!tax) tax = await createTaxonomy(business.id, axis, 'variant');
+      await findOrCreateTerm(tax.id, val);
+      await updateProduct(modal.id, { variant_axes: [...modal.axes, tax.name] });
+      for (const v of modal.variants) {
+        await updateVariant(v.id, { attributes: { ...v.attributes, [tax.name]: val } });
+      }
+      const products = await reload();
+      const fresh = (products || []).find((p) => p.id === modal.id);
+      if (fresh) openEdit(fresh);
+      setAddAxis(null);
+    } catch (e) {
+      setError(e.message.includes('duplicate') || e.message.includes('unique')
+        ? 'Ese eje o ese valor ya existe.' : e.message);
+    } finally { setBusy(false); }
+  }
 
   // Eje nuevo (Color, Material…) desde el propio modal: se crea en el negocio
   // y queda marcado para este producto, sin pasar por Configuración.
@@ -1084,9 +1118,13 @@ export default function Inventory() {
                           </label>
                           <div className="vb-card-body">
                             <div className="vb-card-head">
-                              <span className="vb-label">{v.label || 'Estándar'}</span>
+                              <span className="vb-label">{labelOf(modal.axes, v.attributes) || v.label || 'Estándar'}</span>
                               {vm && !lockMedia && (
                                 <button type="button" className="linklike" onClick={() => onRemoveImage(vm)}>quitar foto</button>
+                              )}
+                              {canInfo && modal.axes.length > 0 && (
+                                <button type="button" className="linklike vb-edit"
+                                  onClick={() => setEditVar(v)}>editar variación</button>
                               )}
                             </div>
                             <div className="vb-fields">
@@ -1117,6 +1155,12 @@ export default function Inventory() {
                       );
                     })}
                   </div>
+                  {canInfo && (
+                    <button type="button" className="btn ghost sm vb-add" disabled={busy}
+                      onClick={() => setAddAxis({ name: '', value: '' })}>
+                      ＋ Agregar un eje (color, material…)
+                    </button>
+                  )}
                   {!lockStock && (
                     <p className="hint">Cambiar la cantidad aquí registra un ajuste. Para dejar constancia de una entrada o salida (con su nota) usa los botones de cada variación.</p>
                   )}
@@ -1195,6 +1239,64 @@ export default function Inventory() {
           </div>
         );
       })()}
+
+      {/* ===== Submodal: editar una variación existente ===== */}
+      {editVar && modal && (
+        <VariationDialog
+          axes={modal.axes.map((name) => ({ id: name, name, terms: axisTermsByName(name) }))}
+          taken={new Set(modal.variants.filter((x) => x.id !== editVar.id)
+            .map((x) => sigOf(modal.axes, x.attributes)))}
+          initial={{
+            key: editVar.id, values: editVar.attributes, stock: editVar.stock,
+            price: editVar.price, cost: editVar.cost, sku: editVar.sku,
+          }}
+          onAdd={(row) => setM({
+            variants: modal.variants.map((x) => (x.id === editVar.id ? {
+              ...x, attributes: row.attributes, stock: row.stock,
+              price: row.price, cost: row.cost, sku: row.sku,
+            } : x)),
+          })}
+          onClose={() => setEditVar(null)}
+        />
+      )}
+
+      {/* ===== Submodal: sumar un eje al producto ===== */}
+      {addAxis && modal && (
+        <div className="modal-backdrop stacked" onClick={() => setAddAxis(null)}>
+          <div className="modal card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>Agregar un eje a {modal.name}</h2>
+              <button type="button" className="btn ghost sm" onClick={() => setAddAxis(null)}>Cerrar</button>
+            </div>
+            <p className="hint">
+              Sus {modal.variants.length} {modal.variants.length === 1 ? 'variación' : 'variaciones'} necesitan
+              un valor para el eje nuevo. Después puedes cambiarlo una por una con <strong>editar variación</strong>.
+            </p>
+            <div className="vform">
+              <label>Eje
+                <TermSelect
+                  terms={varTax.filter((t) => !modal.axes.includes(t.name)).map((t) => ({ name: t.name }))}
+                  value={addAxis.name} placeholder="Elegir eje…"
+                  onChange={(name) => setAddAxis((a) => ({ ...a, name, value: '' }))} />
+              </label>
+              {addAxis.name && (
+                <label>¿Qué {addAxis.name.toLowerCase()} tienen las variaciones actuales?
+                  <TermSelect terms={axisTermsByName(addAxis.name)} value={addAxis.value}
+                    placeholder={`Elegir ${addAxis.name.toLowerCase()}…`}
+                    onChange={(value) => setAddAxis((a) => ({ ...a, value }))} />
+                </label>
+              )}
+              <div className="inline-form-actions">
+                <button type="button" className="btn primary" disabled={busy || !addAxis.name || !addAxis.value}
+                  onClick={() => onAddAxisToProduct(addAxis.name, addAxis.value)}>
+                  {busy ? 'Agregando…' : 'Agregar eje'}
+                </button>
+                <button type="button" className="btn ghost" onClick={() => setAddAxis(null)}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ============ Modal movimiento ============ */}
       {move && (
