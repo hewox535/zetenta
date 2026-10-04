@@ -77,7 +77,10 @@ export default function OrderReceipt({ business, order }) {
           <div className="receipt-totals">
             {payments.map((p) => (
               <div className="receipt-total-row" key={p.id}>
-                <span>{p.method_name}</span>
+                <span>
+                  {p.method_name || p.account_name || 'Pago'}
+                  {p.kind === 'cashea' && ' (a cuotas)'}
+                </span>
                 <span>{p.currency === 'USD' ? usd(p.amount) : bs(p.amount)}</span>
               </div>
             ))}

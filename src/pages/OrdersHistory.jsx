@@ -55,7 +55,7 @@ export default function OrdersHistory() {
                   <td>{o.customer_name || <span className="muted">—</span>}</td>
                   <td className="muted">{staffName.get(o.created_by) || <span className="muted">—</span>}</td>
                   <td className="muted">
-                    {(o.order_payments || []).map((p) => p.method_name).join(', ') || '—'}
+                    {(o.order_payments || []).map((p) => p.method_name || p.account_name).filter(Boolean).join(', ') || '—'}
                   </td>
                   <td className="num">
                     <div>{usd(o.total_usd)}</div>
@@ -81,7 +81,7 @@ export default function OrdersHistory() {
                 <span className="muted">
                   {formatDate(o.created_at)}{staffName.get(o.created_by) ? ` · ${staffName.get(o.created_by)}` : ''}
                 </span>
-                <span className="muted">{(o.order_payments || []).map((p) => p.method_name).join(', ') || '—'}</span>
+                <span className="muted">{(o.order_payments || []).map((p) => p.method_name || p.account_name).filter(Boolean).join(', ') || '—'}</span>
               </div>
               <div className="mcard-amount">
                 <strong>{usd(o.total_usd)}</strong>

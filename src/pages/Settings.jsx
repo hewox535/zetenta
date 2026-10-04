@@ -612,7 +612,9 @@ function BankAccountsManager({ business }) {
   }
   async function saveMethodEdit(a) {
     const name = (edit.name || '').trim(); if (!name) { setEdit(null); return; }
-    try { const u = await updatePaymentMethod(edit.id, { name, description: (edit.description || '').trim() });
+    try { const u = await updatePaymentMethod(edit.id, {
+        name, description: (edit.description || '').trim(), kind: edit.cashea ? 'cashea' : 'normal',
+      });
       patchAccount(a.id, (x) => ({ ...x, payment_methods: x.payment_methods.map((y) => (y.id === edit.id ? u : y)) }));
     } catch (e) { setError(e.message); } finally { setEdit(null); }
   }
@@ -630,6 +632,11 @@ function BankAccountsManager({ business }) {
         Cada cuenta agrupa sus métodos de pago (transferencia, pago móvil…). Así sabes
         cuánto entra a cada cuenta. Si una cuenta no tiene métodos, la cuenta misma se
         usa como forma de pago al cobrar.
+      </p>
+      <p className="hint">
+        Un método marcado como <strong>compra a cuotas (Cashea)</strong> es el que recibe la parte
+        que financia Cashea: al cobrar eliges el nivel del cliente y el POS deja ahí el resto de
+        la inicial. Esa parte no recibe el descuento por pago en divisa.
       </p>
       <div className="acct-list">
         {accounts.map((a) => (
@@ -665,18 +672,27 @@ function BankAccountsManager({ business }) {
                       onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
                     <input placeholder="Descripción (opcional)" value={edit.description}
                       onChange={(e) => setEdit({ ...edit, description: e.target.value })} />
+                    <label className="acct-method-kind">
+                      <input type="checkbox" checked={!!edit.cashea}
+                        onChange={(e) => setEdit({ ...edit, cashea: e.target.checked })} />
+                      Compra a cuotas (Cashea)
+                    </label>
                     <button type="button" className="btn sm" onClick={() => saveMethodEdit(a)}>Guardar</button>
                     <button type="button" className="btn ghost sm" onClick={() => setEdit(null)}>Cancelar</button>
                   </div>
                 ) : (
                   <div className="acct-method" key={m.id}>
                     <div className="acct-method-info">
-                      <span className="acct-method-name">{m.name}</span>
+                      <span className="acct-method-name">
+                        {m.name}
+                        {m.kind === 'cashea' && <span className="badge adjustment">Cuotas</span>}
+                      </span>
                       {m.description && <span className="muted">{m.description}</span>}
                     </div>
                     <div className="acct-method-actions">
                       <button type="button" className="icon-btn" title="Editar método"
-                        onClick={() => setEdit({ kind: 'method', id: m.id, name: m.name, description: m.description || '' })}>{ICON.edit}</button>
+                        onClick={() => setEdit({ kind: 'method', id: m.id, name: m.name,
+                          description: m.description || '', cashea: m.kind === 'cashea' })}>{ICON.edit}</button>
                       <button type="button" className="icon-btn danger" title="Eliminar método"
                         onClick={() => removeMethod(a, m)}>{ICON.trash}</button>
                     </div>

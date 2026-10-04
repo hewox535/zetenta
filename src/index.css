@@ -995,10 +995,22 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .acct-methods { display: flex; flex-direction: column; padding: 4px 14px 12px; }
 .acct-method { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .acct-method-info { display: flex; flex-direction: column; min-width: 0; }
+/* Método de compra a cuotas (Cashea) y niveles en el POS */
+.acct-method-kind { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.acct-method-kind input { width: 16px; height: 16px; }
+.acct-method-name .badge { margin-left: 8px; }
+.pay-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.pay-levels .muted { font-size: 12px; }
+.pay-levels .chip { padding: 5px 11px; font-size: 12.5px; }
 .acct-method-name { font-size: 14px; font-weight: 600; }
 .acct-method-actions { display: flex; gap: 6px; }
-.acct-method.editing { display: flex; flex-wrap: wrap; gap: 8px; }
-.acct-method.editing input { flex: 1 1 140px; min-width: 0; }
+.acct-method.editing { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Los campos de texto crecen; la casilla de Cashea y los botones, no. */
+.acct-method.editing > input { flex: 1 1 140px; min-width: 0; }
+/* La casilla va en su propia línea, con su texto al lado. */
+.acct-method.editing .acct-method-kind { flex: 1 0 100%; order: 1; }
+.acct-method.editing .acct-method-kind input { flex: 0 0 auto; width: 16px; }
+.acct-method.editing .btn { order: 2; }
 .acct-add-method { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 10px; }
 .acct-add-method input { flex: 1 1 160px; min-width: 0; }
 .acct-add-method .btn { display: inline-flex; align-items: center; gap: 4px; }
