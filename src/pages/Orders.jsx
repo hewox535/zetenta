@@ -92,17 +92,31 @@ function payOptionsFromAccounts(accounts) {
       .filter((m) => m.active !== false)
       .sort((x, y) => (x.sort_order - y.sort_order) || String(x.created_at).localeCompare(String(y.created_at)));
     if (ms.length === 0) {
-      opts.push({ id: `a:${a.id}`, name: a.name, currency: a.currency,
+      opts.push({ id: `a:${a.id}`, name: a.name, currency: a.currency, kind: 'normal',
         account_id: a.id, method_id: null, account_name: a.name, method_name: '' });
     } else {
       for (const m of ms) {
         opts.push({ id: `m:${m.id}`, name: `${a.name} · ${m.name}`, currency: a.currency,
+          kind: m.kind || 'normal',
           account_id: a.id, method_id: m.id, account_name: a.name, method_name: m.name });
       }
     }
   }
   return opts;
 }
+
+// Cashea (compra a cuotas): el cliente paga una inicial en la tienda según su
+// nivel y Cashea financia el resto, que llega después en cuotas. El % es el de
+// la inicial; lo que se registra en el método Cashea es el resto.
+const CASHEA_LEVELS = [
+  ['Nivel 1', 60],
+  ['Nivel 2', 50],
+  ['Nivel 3+', 40],
+];
+const isCashea = (m) => m?.kind === 'cashea';
+// El descuento por pagar en divisa premia el efectivo en dólares; lo que
+// financia Cashea no lo gana, aunque su cuenta sea en USD (igual que el servidor).
+const isForeignCash = (m) => m?.currency === 'USD' && !isCashea(m);
 
 // Helpers de monto (aceptan coma o punto decimal).
 const parseAmt = (s) => Number(String(s ?? '').replace(',', '.')) || 0;
@@ -113,7 +127,7 @@ const fmtAmt = (x) => (x ? String(round2(x)) : '');
 // sincronizados (Bs y su equivalente en $) para capturar cómodo; los métodos en
 // dólares muestran solo el input en $. El monto que se envía a create_order se
 // guarda SIEMPRE en la moneda del método (el input secundario es solo captura).
-function PayAmountRow({ m, rate, amount, onAmount, onExact }) {
+function PayAmountRow({ m, rate, amount, onAmount, onExact, onLevel = null }) {
   const [focus, setFocus] = useState(null); // 'main' | 'alt' | null
   const [draft, setDraft] = useState('');
   const isVes = m.currency !== 'USD';
@@ -158,6 +172,17 @@ function PayAmountRow({ m, rate, amount, onAmount, onExact }) {
         </div>
         <button type="button" className="btn ghost sm" onClick={onExact}>Exacto</button>
       </div>
+      {onLevel && (
+        <div className="pay-levels">
+          <span className="muted">Inicial del cliente:</span>
+          {CASHEA_LEVELS.map(([label, pct]) => (
+            <button type="button" key={label} className="chip" onClick={() => onLevel(pct)}>
+              {label} · {pct}%
+            </button>
+          ))}
+          <span className="muted">Aquí va lo que financia Cashea; la inicial, con el método que use el cliente.</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -242,15 +267,18 @@ export default function Orders() {
   const PAY_EPS = 0.01;
   // Descuento por divisa: el pago en USD "rinde" más (amt / (1-d)); los Bs no.
   const d = Math.min(0.99, Math.max(0, (Number(business?.foreign_discount_percent) || 0) / 100));
+  // vesCredit: lo que vale a precio de lista (Bs y lo financiado por Cashea).
+  // usdPaid: solo el efectivo en divisa, que es lo que gana descuento.
   const vesCredit = selectedMethods.reduce((s, id) => {
     const m = methods.find((x) => x.id === id);
-    if (!m || m.currency === 'USD') return s;
+    if (!m || isForeignCash(m)) return s;
     const amt = parseAmt(payments[id]);
+    if (m.currency === 'USD') return s + amt;
     return s + (rate.value ? round2(amt / rate.value) : 0);
   }, 0);
   const usdPaid = selectedMethods.reduce((s, id) => {
     const m = methods.find((x) => x.id === id);
-    if (!m || m.currency !== 'USD') return s;
+    if (!m || !isForeignCash(m)) return s;
     return s + parseAmt(payments[id]);
   }, 0);
   const paidUsd = vesCredit + (d > 0 ? usdPaid / (1 - d) : usdPaid);
@@ -286,13 +314,23 @@ export default function Orders() {
   const fillExact = (m) => {
     // Restante en USD (lista) sin contar lo ya escrito en este método.
     const cur = parseAmt(payments[m.id]);
-    const creditOfThis = m.currency === 'USD'
+    const creditOfThis = isForeignCash(m)
       ? (d > 0 ? cur / (1 - d) : cur)
-      : (rate.value ? round2(cur / rate.value) : 0);
+      : (m.currency === 'USD' ? cur : (rate.value ? round2(cur / rate.value) : 0));
     const remaining = totalUsd - (paidUsd - creditOfThis);
     if (remaining <= 0) return;
-    // En divisa se cobra el saldo con descuento: remaining*(1-d). En Bs, sin descuento.
-    const amount = m.currency === 'USD' ? remaining * (1 - d) : remaining * rate.value;
+    // En divisa se cobra el saldo con descuento: remaining*(1-d). En Bs y en
+    // Cashea, sin descuento.
+    const amount = isForeignCash(m) ? remaining * (1 - d)
+      : (m.currency === 'USD' ? remaining : remaining * rate.value);
+    setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
+  };
+
+  // Reparte la venta según el nivel del cliente: la inicial la cobra la tienda
+  // con sus métodos y el resto queda financiado por Cashea.
+  const fillCashea = (m, initialPct) => {
+    const financedUsd = totalUsd * (1 - initialPct / 100);
+    const amount = m.currency === 'USD' ? financedUsd : financedUsd * rate.value;
     setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
   };
 
@@ -628,7 +666,8 @@ export default function Orders() {
                               <PayAmountRow key={m.id} m={m} rate={rate.value}
                                 amount={payments[m.id] || ''}
                                 onAmount={(val) => setPayments((prev) => ({ ...prev, [m.id]: val }))}
-                                onExact={() => fillExact(m)} />
+                                onExact={() => fillExact(m)}
+                                onLevel={isCashea(m) ? (pct) => fillCashea(m, pct) : null} />
                             ))}
                         </div>
                       )}
