@@ -667,6 +667,14 @@ export default function Orders() {
                     <>
                       {/* Métodos como pills: se pueden seleccionar varios */}
                       <div className="pay-block">
+                        {/* Con Cashea elegido falta cobrar la inicial: el aviso
+                            manda al cajero a los métodos de aquí abajo. */}
+                        {casheaUsd > PAY_EPS && !isCovered && (
+                          <div className="pay-warn">
+                            Cobra la inicial <strong>{usd(remainingNet)}</strong>
+                            {rate.value ? ` · ${bs(remainingNet * rate.value)}` : ''} — elige el método.
+                          </div>
+                        )}
                         <div className="pay-pills">
                           {methods.map((m) => (
                             <button type="button" key={m.id}
@@ -681,28 +689,6 @@ export default function Orders() {
                           <div className="pay-hint">Selecciona uno o varios métodos de pago.</div>
                         )}
                       </div>
-
-                      {/* Con Cashea elegido, el cajero tiene que cobrar la inicial:
-                          se le ofrecen los métodos de un toque, ya con el monto. */}
-                      {casheaUsd > PAY_EPS && !isCovered && (
-                        <div className="pay-next">
-                          <div className="pay-next-head">
-                            Cobra la inicial <strong>{usd(remainingNet)}</strong>
-                            {rate.value ? <span className="muted"> · {bs(remainingNet * rate.value)}</span> : null}
-                          </div>
-                          <div className="pay-pills">
-                            {methods
-                              .filter((m) => !isCashea(m) && !selectedMethods.includes(m.id))
-                              .map((m) => (
-                                <button type="button" key={m.id} className="pay-pill"
-                                  onClick={() => toggleMethod(m)}>
-                                  {m.name}
-                                  <span className="pay-pill-cur">{m.currency === 'USD' ? '$' : 'Bs'}</span>
-                                </button>
-                              ))}
-                          </div>
-                        </div>
-                      )}
 
                       {/* Un input por cada método seleccionado, con su equivalente en la otra moneda */}
                       {selectedMethods.length > 0 && (
