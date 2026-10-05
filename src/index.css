@@ -999,9 +999,10 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .acct-method-kind { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 .acct-method-kind input { width: 16px; height: 16px; }
 .acct-method-name .badge { margin-left: 8px; }
-.pay-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
-.pay-levels .muted { font-size: 12px; }
-.pay-pct { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.pay-cashea { margin: 8px 0 10px; padding: 10px 12px; background: var(--accent-soft); border-radius: var(--radius); }
+.pay-split { margin-top: 8px; font-size: 12.5px; line-height: 1.5; }
+.pay-split .muted { font-weight: 400; }
+.pay-pct { display: flex; flex-direction: row; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; }
 .pay-pct-field { position: relative; display: inline-flex; align-items: center; }
 .pay-pct-field input { width: 74px; padding-right: 26px; text-align: right; }
 .pay-pct-sign { position: absolute; right: 10px; color: var(--text-2); font-size: 13px; pointer-events: none; }
