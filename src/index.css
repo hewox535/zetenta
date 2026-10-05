@@ -999,12 +999,16 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .acct-method-kind { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 .acct-method-kind input { width: 16px; height: 16px; }
 .acct-method-name .badge { margin-left: 8px; }
-.pay-cashea { margin: 8px 0 10px; padding: 10px 12px; background: var(--accent-soft); border-radius: var(--radius); }
-.pay-split { margin-top: 8px; font-size: 12.5px; line-height: 1.5; }
-.pay-split .muted { font-weight: 400; }
-.pay-pct { display: flex; flex-direction: row; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; }
+/* Cashea: % y reparto en una sola línea */
+.pay-cashea { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 6px 0 8px; }
+.pay-split { font-size: 12.5px; }
+.pay-pct { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+/* Siguiente paso: con qué se cobra la inicial */
+.pay-next { margin: 10px 0 2px; padding: 10px 12px; background: var(--accent-soft); border-radius: var(--radius); }
+.pay-next-head { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.pay-next .pay-pill { background: var(--surface); }
 .pay-pct-field { position: relative; display: inline-flex; align-items: center; }
-.pay-pct-field input { width: 74px; padding-right: 26px; text-align: right; }
+.pay-pct-field input { width: 64px; padding: 6px 24px 6px 10px; text-align: right; }
 .pay-pct-sign { position: absolute; right: 10px; color: var(--text-2); font-size: 13px; pointer-events: none; }
 .acct-method-name { font-size: 14px; font-weight: 600; }
 .acct-method-actions { display: flex; gap: 6px; }

@@ -159,7 +159,7 @@ function PayAmountRow({
       {onInitialPct && (
         <div className="pay-cashea">
           <label className="pay-pct">
-            <span>Inicial del cliente</span>
+            <span>Inicial</span>
             <span className="pay-pct-field">
               <input inputMode="decimal" placeholder="30" value={initialPct}
                 onChange={(e) => onInitialPct(e.target.value)} />
@@ -167,18 +167,11 @@ function PayAmountRow({
             </span>
           </label>
           {splitOk ? (
-            <div className="pay-split">
-              <div>
-                El cliente paga ahora <strong>${initialUsd.toFixed(2)}</strong>
-                {rate ? <span className="muted"> · Bs {(initialUsd * rate).toFixed(2)}</span> : null}
-                <span className="muted"> — cóbralo con pago móvil o efectivo.</span>
-              </div>
-              <div>Cashea financia <strong>${financedUsd.toFixed(2)}</strong>, que es lo que queda aquí abajo.</div>
-            </div>
+            <span className="pay-split">
+              cliente <strong>${initialUsd.toFixed(2)}</strong> · Cashea <strong>${financedUsd.toFixed(2)}</strong>
+            </span>
           ) : (
-            <div className="pay-split muted">
-              Escribe el porcentaje que paga el cliente de inicial y aquí abajo queda lo que financia Cashea.
-            </div>
+            <span className="pay-split muted">% que paga el cliente hoy</span>
           )}
         </div>
       )}
@@ -689,12 +682,35 @@ export default function Orders() {
                         )}
                       </div>
 
+                      {/* Con Cashea elegido, el cajero tiene que cobrar la inicial:
+                          se le ofrecen los métodos de un toque, ya con el monto. */}
+                      {casheaUsd > PAY_EPS && !isCovered && (
+                        <div className="pay-next">
+                          <div className="pay-next-head">
+                            Cobra la inicial <strong>{usd(remainingNet)}</strong>
+                            {rate.value ? <span className="muted"> · {bs(remainingNet * rate.value)}</span> : null}
+                          </div>
+                          <div className="pay-pills">
+                            {methods
+                              .filter((m) => !isCashea(m) && !selectedMethods.includes(m.id))
+                              .map((m) => (
+                                <button type="button" key={m.id} className="pay-pill"
+                                  onClick={() => toggleMethod(m)}>
+                                  {m.name}
+                                  <span className="pay-pill-cur">{m.currency === 'USD' ? '$' : 'Bs'}</span>
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Un input por cada método seleccionado, con su equivalente en la otra moneda */}
                       {selectedMethods.length > 0 && (
                         <div className="pay-inputs">
                           {selectedMethods
                             .map((id) => methods.find((x) => x.id === id))
                             .filter(Boolean)
+                            .sort((a, b) => Number(isCashea(a)) - Number(isCashea(b)))
                             .map((m) => (
                               <PayAmountRow key={m.id} m={m} rate={rate.value}
                                 amount={payments[m.id] || ''}
