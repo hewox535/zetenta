@@ -105,14 +105,10 @@ function payOptionsFromAccounts(accounts) {
   return opts;
 }
 
-// Cashea (compra a cuotas): el cliente paga una inicial en la tienda según su
-// nivel y Cashea financia el resto, que llega después en cuotas. El % es el de
-// la inicial; lo que se registra en el método Cashea es el resto.
-const CASHEA_LEVELS = [
-  ['Nivel 1', 60],
-  ['Nivel 2', 50],
-  ['Nivel 3+', 40],
-];
+// Cashea (compra a cuotas): el cliente paga una inicial en la tienda y Cashea
+// financia el resto, que llega después en cuotas. El % de la inicial lo dice
+// la app de Cashea en cada compra, así que se escribe a mano; lo que se
+// registra en el método Cashea es el resto.
 const isCashea = (m) => m?.kind === 'cashea';
 // El descuento por pagar en divisa premia el efectivo en dólares; lo que
 // financia Cashea no lo gana, aunque su cuenta sea en USD (igual que el servidor).
@@ -127,7 +123,7 @@ const fmtAmt = (x) => (x ? String(round2(x)) : '');
 // sincronizados (Bs y su equivalente en $) para capturar cómodo; los métodos en
 // dólares muestran solo el input en $. El monto que se envía a create_order se
 // guarda SIEMPRE en la moneda del método (el input secundario es solo captura).
-function PayAmountRow({ m, rate, amount, onAmount, onExact, onLevel = null }) {
+function PayAmountRow({ m, rate, amount, onAmount, onExact, initialPct = null, onInitialPct = null }) {
   const [focus, setFocus] = useState(null); // 'main' | 'alt' | null
   const [draft, setDraft] = useState('');
   const isVes = m.currency !== 'USD';
@@ -172,15 +168,20 @@ function PayAmountRow({ m, rate, amount, onAmount, onExact, onLevel = null }) {
         </div>
         <button type="button" className="btn ghost sm" onClick={onExact}>Exacto</button>
       </div>
-      {onLevel && (
+      {onInitialPct && (
         <div className="pay-levels">
-          <span className="muted">Inicial del cliente:</span>
-          {CASHEA_LEVELS.map(([label, pct]) => (
-            <button type="button" key={label} className="chip" onClick={() => onLevel(pct)}>
-              {label} · {pct}%
-            </button>
-          ))}
-          <span className="muted">Aquí va lo que financia Cashea; la inicial, con el método que use el cliente.</span>
+          <label className="pay-pct">
+            <span className="muted">Inicial del cliente</span>
+            <span className="pay-pct-field">
+              <input inputMode="decimal" placeholder="40" value={initialPct}
+                onChange={(e) => onInitialPct(e.target.value)} />
+              <span className="pay-pct-sign">%</span>
+            </span>
+          </label>
+          <span className="muted">
+            Escribe el porcentaje que paga el cliente de inicial y aquí queda lo que financia
+            Cashea; la inicial se cobra con el método que use.
+          </span>
         </div>
       )}
     </div>
@@ -215,6 +216,7 @@ export default function Orders() {
 
   const [selectedMethods, setSelectedMethods] = useState([]); // ids de métodos activos
   const [payments, setPayments] = useState({});        // { methodId: 'monto' }
+  const [initialPct, setInitialPct] = useState({});    // { methodId: '% inicial' } en Cashea
   const [busy, setBusy] = useState(false);
   const [finished, setFinished] = useState(null);      // pedido guardado (con ítems/pagos)
 
@@ -326,10 +328,13 @@ export default function Orders() {
     setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
   };
 
-  // Reparte la venta según el nivel del cliente: la inicial la cobra la tienda
-  // con sus métodos y el resto queda financiado por Cashea.
-  const fillCashea = (m, initialPct) => {
-    const financedUsd = totalUsd * (1 - initialPct / 100);
+  // Reparte la venta con el % de inicial que escribe la vendedora: la inicial
+  // la cobra la tienda con sus métodos y el resto queda financiado por Cashea.
+  const setCasheaPct = (m, value) => {
+    setInitialPct((prev) => ({ ...prev, [m.id]: value }));
+    const pct = parseAmt(value);
+    if (!(pct > 0 && pct < 100)) return;
+    const financedUsd = totalUsd * (1 - pct / 100);
     const amount = m.currency === 'USD' ? financedUsd : financedUsd * rate.value;
     setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
   };
@@ -667,7 +672,8 @@ export default function Orders() {
                                 amount={payments[m.id] || ''}
                                 onAmount={(val) => setPayments((prev) => ({ ...prev, [m.id]: val }))}
                                 onExact={() => fillExact(m)}
-                                onLevel={isCashea(m) ? (pct) => fillCashea(m, pct) : null} />
+                                initialPct={isCashea(m) ? (initialPct[m.id] ?? '') : null}
+                                onInitialPct={isCashea(m) ? (val) => setCasheaPct(m, val) : null} />
                             ))}
                         </div>
                       )}
