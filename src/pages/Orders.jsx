@@ -123,7 +123,9 @@ const fmtAmt = (x) => (x ? String(round2(x)) : '');
 // sincronizados (Bs y su equivalente en $) para capturar cómodo; los métodos en
 // dólares muestran solo el input en $. El monto que se envía a create_order se
 // guarda SIEMPRE en la moneda del método (el input secundario es solo captura).
-function PayAmountRow({ m, rate, amount, onAmount, onExact, initialPct = null, onInitialPct = null }) {
+function PayAmountRow({
+  m, rate, amount, onAmount, onExact, initialPct = null, onInitialPct = null, totalUsd = 0,
+}) {
   const [focus, setFocus] = useState(null); // 'main' | 'alt' | null
   const [draft, setDraft] = useState('');
   const isVes = m.currency !== 'USD';
@@ -141,12 +143,45 @@ function PayAmountRow({ m, rate, amount, onAmount, onExact, initialPct = null, o
   const altCur = isVes ? 'USD' : 'Bs';
   const mainVal = focus === 'main' ? draft : (amount ?? '');
   const altVal = focus === 'alt' ? draft : toAlt(amount);
+  // Cashea: con el % de inicial a la vista, cuánto paga hoy el cliente y
+  // cuánto queda financiado (que es lo que va en el monto de abajo).
+  const pct = parseAmt(initialPct);
+  const splitOk = onInitialPct && pct > 0 && pct < 100 && totalUsd > 0;
+  const initialUsd = splitOk ? round2(totalUsd * (pct / 100)) : 0;
+  const financedUsd = splitOk ? round2(totalUsd - initialUsd) : 0;
+
   return (
     <div className="pay-input-row">
       <div className="pay-input-label">
         <span>{m.name}</span>
         <span className="muted">{mainCur}</span>
       </div>
+      {onInitialPct && (
+        <div className="pay-cashea">
+          <label className="pay-pct">
+            <span>Inicial del cliente</span>
+            <span className="pay-pct-field">
+              <input inputMode="decimal" placeholder="30" value={initialPct}
+                onChange={(e) => onInitialPct(e.target.value)} />
+              <span className="pay-pct-sign">%</span>
+            </span>
+          </label>
+          {splitOk ? (
+            <div className="pay-split">
+              <div>
+                El cliente paga ahora <strong>${initialUsd.toFixed(2)}</strong>
+                {rate ? <span className="muted"> · Bs {(initialUsd * rate).toFixed(2)}</span> : null}
+                <span className="muted"> — cóbralo con pago móvil o efectivo.</span>
+              </div>
+              <div>Cashea financia <strong>${financedUsd.toFixed(2)}</strong>, que es lo que queda aquí abajo.</div>
+            </div>
+          ) : (
+            <div className="pay-split muted">
+              Escribe el porcentaje que paga el cliente de inicial y aquí abajo queda lo que financia Cashea.
+            </div>
+          )}
+        </div>
+      )}
       <div className="pay-input-controls">
         <div className="pay-dual">
           <label className="pay-amt main">
@@ -168,22 +203,6 @@ function PayAmountRow({ m, rate, amount, onAmount, onExact, initialPct = null, o
         </div>
         <button type="button" className="btn ghost sm" onClick={onExact}>Exacto</button>
       </div>
-      {onInitialPct && (
-        <div className="pay-levels">
-          <label className="pay-pct">
-            <span className="muted">Inicial del cliente</span>
-            <span className="pay-pct-field">
-              <input inputMode="decimal" placeholder="40" value={initialPct}
-                onChange={(e) => onInitialPct(e.target.value)} />
-              <span className="pay-pct-sign">%</span>
-            </span>
-          </label>
-          <span className="muted">
-            Escribe el porcentaje que paga el cliente de inicial y aquí queda lo que financia
-            Cashea; la inicial se cobra con el método que use.
-          </span>
-        </div>
-      )}
     </div>
   );
 }
@@ -297,6 +316,15 @@ export default function Orders() {
   // descuento hace que se cobren menos. Cuando está cubierto, recibido == a pagar.
   const netTotalUsd = Math.max(0, totalUsd - discountUsd);
   const receivedUsd = vesCredit + usdPaid;
+  // Lo que financia Cashea cubre la venta, pero no es plata que entre hoy:
+  // en los totales va aparte para no leerlo como "ya pagó".
+  const casheaUsd = selectedMethods.reduce((s, id) => {
+    const m = methods.find((x) => x.id === id);
+    if (!isCashea(m)) return s;
+    const amt = parseAmt(payments[id]);
+    return s + (m.currency === 'USD' ? amt : (rate.value ? round2(amt / rate.value) : 0));
+  }, 0);
+  const cashedUsd = Math.max(0, receivedUsd - casheaUsd);
   const remainingNet = Math.max(0, netTotalUsd - receivedUsd);
   const changeNet = Math.max(0, receivedUsd - netTotalUsd);
 
@@ -673,7 +701,8 @@ export default function Orders() {
                                 onAmount={(val) => setPayments((prev) => ({ ...prev, [m.id]: val }))}
                                 onExact={() => fillExact(m)}
                                 initialPct={isCashea(m) ? (initialPct[m.id] ?? '') : null}
-                                onInitialPct={isCashea(m) ? (val) => setCasheaPct(m, val) : null} />
+                                onInitialPct={isCashea(m) ? (val) => setCasheaPct(m, val) : null}
+                                totalUsd={totalUsd} />
                             ))}
                         </div>
                       )}
@@ -705,9 +734,21 @@ export default function Orders() {
                 )}
                 {stage === 'pay' && (
                   <>
-                    <div className="totals-row"><span>Pagado</span><span>{usd(receivedUsd)}</span></div>
+                    {casheaUsd > PAY_EPS ? (
+                      <>
+                        <div className="totals-row"><span>Cobrado ahora</span><span>{usd(cashedUsd)}</span></div>
+                        <div className="totals-row"><span className="muted">Financia Cashea</span><span className="muted">{usd(casheaUsd)}</span></div>
+                      </>
+                    ) : (
+                      <div className="totals-row"><span>Pagado</span><span>{usd(receivedUsd)}</span></div>
+                    )}
                     {!isCovered
-                      ? <div className="totals-row warn"><span>Restante</span><span>{usd(remainingNet)}</span></div>
+                      ? (
+                        <div className="totals-row warn">
+                          <span>{casheaUsd > PAY_EPS ? 'Falta cobrar la inicial' : 'Restante'}</span>
+                          <span>{usd(remainingNet)}</span>
+                        </div>
+                      )
                       : changeNet > PAY_EPS && <div className="totals-row ok"><span>Vuelto</span><span>{usd(changeNet)}</span></div>}
                   </>
                 )}
