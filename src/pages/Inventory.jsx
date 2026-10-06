@@ -385,6 +385,15 @@ export default function Inventory() {
         // EDIT: solo se envía lo que el usuario puede cambiar; lo demás va
         // con el valor original para que el servidor no lo vea como cambio.
         const o = modal.orig;
+        // Si se sumó un eje, las variaciones de antes necesitan su valor.
+        const sinValor = modal.variants.filter((v) => modal.axes.some((ax) => !v.attributes?.[ax]));
+        if (sinValor.length > 0) {
+          const faltan = modal.axes.filter((ax) => sinValor.some((v) => !v.attributes?.[ax]));
+          throw new Error(
+            `Falta ${faltan.join(' y ').toLowerCase()} en ${sinValor.length === 1 ? 'una variación' : `${sinValor.length} variaciones`}`
+            + `: usa “editar variación” para ${sinValor.length === 1 ? 'completarla' : 'completarlas'}.`,
+          );
+        }
         if (canInfo && modal.axes.join('|') !== modal.origAxes.join('|')) {
           await updateProduct(modal.id, { variant_axes: modal.axes });
         }
@@ -594,34 +603,40 @@ export default function Inventory() {
     }
   }
 
-  // Sumar un eje (Talla, Color, Material…) desde el submodal de la variación.
-  // Solo toca el estado del modal: el eje y los valores de las demás
-  // variaciones se guardan al pulsar "Guardar producto".
-  async function onAddAxisFromDialog(name, defaultValue) {
+  // Marcar o desmarcar un eje desde el submodal: manda la casilla, sin pasos
+  // intermedios. Solo cambia el estado del modal; se persiste al guardar.
+  async function onToggleAxis(name, on) {
     const axisName = name.trim();
     if (!axisName) return;
     let tax = varTax.find((t) => t.name.toLowerCase() === axisName.toLowerCase());
-    if (!tax) {
-      // Eje que el negocio todavía no tiene: se crea ya, para que quede
-      // disponible en los desplegables (los valores se siembran al guardar).
+    if (on && !tax) {
       tax = await createTaxonomy(business.id, axisName, 'variant');
       setTaxonomies(await fetchTaxonomies());
     }
-    const axis = tax.name;
-    const val = defaultValue.trim();
-    if (val) await seedTerm(tax, val);
-    const withAxis = (attrs) => ({ ...attrs, [axis]: attrs[axis] ?? val });
+    const axis = tax ? tax.name : axisName;
+    const without = (attrs) => {
+      const rest = { ...(attrs || {}) };
+      delete rest[axis];
+      return rest;
+    };
 
-    setModal((m) => (m.mode === 'create' ? {
-      ...m,
-      axisIds: m.axisIds.includes(tax.id) ? m.axisIds : [...m.axisIds, tax.id],
-      vb: m.vb.map((r) => ({ ...r, attributes: withAxis(r.attributes) })),
-    } : {
-      ...m,
-      axes: m.axes.includes(axis) ? m.axes : [...m.axes, axis],
-      variants: m.variants.map((v) => ({ ...v, attributes: withAxis(v.attributes) })),
-      vbNew: m.vbNew.map((r) => ({ ...r, attributes: withAxis(r.attributes) })),
-    }));
+    setModal((m) => {
+      if (m.mode === 'create') {
+        return {
+          ...m,
+          axisIds: on
+            ? (m.axisIds.includes(tax.id) ? m.axisIds : [...m.axisIds, tax.id])
+            : m.axisIds.filter((x) => x !== tax?.id),
+          vb: on ? m.vb : m.vb.map((r) => ({ ...r, attributes: without(r.attributes) })),
+        };
+      }
+      return {
+        ...m,
+        axes: on ? (m.axes.includes(axis) ? m.axes : [...m.axes, axis]) : m.axes.filter((x) => x !== axis),
+        vbNew: on ? m.vbNew : m.vbNew.map((r) => ({ ...r, attributes: without(r.attributes) })),
+        variants: on ? m.variants : m.variants.map((v) => ({ ...v, attributes: without(v.attributes) })),
+      };
+    });
   }
 
   // Modal en edición: cada grupo de campos depende de su permiso. Al crear
@@ -1086,7 +1101,7 @@ export default function Inventory() {
                       axes={axisTaxOfModal().map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
                       availableAxes={varTax.filter((t) => !modal.axisIds.includes(t.id))
                         .map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
-                      onAddAxis={onAddAxisFromDialog}
+                      onToggleAxis={onToggleAxis}
                       rows={modal.vb}
                       onChange={(vb) => setM({ vb })}
                       disabled={busy}
@@ -1096,7 +1111,7 @@ export default function Inventory() {
                 )
               ) : (
                 /* -------- Editar: variantes existentes + agregar -------- */
-                modal.simple && modal.axes.length === 0 && !modal.addVariants ? (
+                modal.simple && modal.axes.length === 0 ? (
                   <div className="np-block">
                     <div className="oc-label">Cantidad</div>
                     {modal.variants.map((v, i) => {
@@ -1107,10 +1122,6 @@ export default function Inventory() {
                             <label className="vb-field">Cantidad
                               <input type="number" min="0" step="1" value={v.stock} disabled={lockStock}
                                 onChange={(e) => patch({ stock: e.target.value })} />
-                            </label>
-                            <label className="vb-field">Stock objetivo
-                              <input type="number" min="0" step="1" value={v.target} placeholder="—" disabled={lockStock}
-                                onChange={(e) => patch({ target: e.target.value })} />
                             </label>
                           </div>
                           {stockButtons(v)}
@@ -1124,8 +1135,9 @@ export default function Inventory() {
                       </p>
                     )}
                     {canCreate && (
-                      <button type="button" className="linklike" onClick={() => setM({ addVariants: true })}>
-                        Este producto varía por talla, color…
+                      <button type="button" className="btn ghost sm vb-add" disabled={busy}
+                        onClick={() => setEditVar({ ...modal.variants[0], asNew: true })}>
+                        ＋ Nueva variación
                       </button>
                     )}
                   </div>
@@ -1195,13 +1207,13 @@ export default function Inventory() {
 
                   {canCreate && (
                     <div className="np-subblock">
-                      <div className="oc-label">Agregar variaciones</div>
                       <VariantBuilder
                         axes={modal.axes.map((name) => ({ id: name, name, terms: axisTermsByName(name) }))}
                         availableAxes={varTax.filter((t) => !modal.axes.includes(t.name))
                           .map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
-                        onAddAxis={canInfo ? onAddAxisFromDialog : null}
-                        othersCount={modal.variants.length}
+                        onToggleAxis={canInfo ? onToggleAxis : null}
+                        lockedAxes={modal.origAxes}
+                        showEmptyHint={false}
                         rows={modal.vbNew}
                         onChange={(vbNew) => setM({ vbNew })}
                         existingSigs={new Set(modal.variants.map((v) => v.sig))}
@@ -1312,11 +1324,12 @@ export default function Inventory() {
           axes={modal.axes.map((name) => ({ id: name, name, terms: axisTermsByName(name) }))}
           availableAxes={varTax.filter((t) => !modal.axes.includes(t.name))
             .map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
-          onAddAxis={canInfo ? onAddAxisFromDialog : null}
-          othersCount={modal.variants.length - 1 + modal.vbNew.length}
+          onToggleAxis={canInfo ? onToggleAxis : null}
+          lockedAxes={modal.origAxes}
           busy={busy}
           taken={new Set(modal.variants.filter((x) => x.id !== editVar.id)
             .map((x) => sigOf(modal.axes, x.attributes)))}
+          title={editVar.asNew ? 'Nueva variación' : undefined}
           initial={{
             key: editVar.id, values: editVar.attributes, stock: editVar.stock,
             price: editVar.price, cost: editVar.cost, sku: editVar.sku,
