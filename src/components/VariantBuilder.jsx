@@ -53,50 +53,26 @@ function ValueSelect({ axis, value, onChange }) {
   );
 }
 
-// Desplegable de ejes disponibles, con "＋ Otro…" para uno que el negocio
-// todavía no tiene (Material, Sabor…).
-function AxisSelect({ options, value, onChange }) {
-  const [custom, setCustom] = useState(() => !!value && !options.includes(value));
-  if (custom) {
-    return (
-      <span className="term-select">
-        <input autoFocus value={value} placeholder="Nombre del eje (Material…)"
-          onChange={(e) => onChange(e.target.value)} />
-        <button type="button" className="term-select-back" title="Elegir de la lista"
-          onClick={() => { setCustom(false); onChange(''); }}>▾</button>
-      </span>
-    );
-  }
-  return (
-    <select value={options.includes(value) ? value : ''}
-      onChange={(e) => {
-        if (e.target.value === '__new__') { setCustom(true); onChange(''); }
-        else onChange(e.target.value);
-      }}>
-      <option value="">Elegir eje…</option>
-      {options.map((n) => <option key={n} value={n}>{n}</option>)}
-      <option value="__new__">＋ Otro…</option>
-    </select>
-  );
-}
-
 // ---------- Submodal: una variación ----------
 // `initial` llega al editar una variación que ya existe; entonces el diálogo
 // guarda los cambios en vez de agregar a la lista.
 export function VariationDialog({
   axes, taken, onAdd, onClose, initial = null, title,
-  availableAxes = [], onAddAxis = null, othersCount = 0, busy = false,
+  availableAxes = [], onAddAxis = null, othersCount = 0, busy = false, onReplace = null,
 }) {
   const axisNames = axes.map((a) => a.name);
   const editing = !!initial;
-  // Eje que se está sumando al producto desde aquí: { name, value }
-  const [newAxis, setNewAxis] = useState(null);
+  // Eje recién marcado que todavía no se aplica al producto: { name, value }
+  const [pending, setPending] = useState(null);
+  // Todos los ejes del negocio: los del producto salen marcados.
+  const allAxes = [...axes, ...availableAxes.filter((a) => !axisNames.includes(a.name))];
   const [form, setForm] = useState({
     values: initial?.values || {}, stock: initial?.stock ?? '', price: initial?.price ?? '',
     cost: initial?.cost ?? '', sku: initial?.sku ?? '', file: null,
   });
   const [error, setError] = useState(null);
   const [added, setAdded] = useState(0);
+  const [dupe, setDupe] = useState(null);   // { row, another } variación repetida
 
   const set = (patch) => { setError(null); setForm((f) => ({ ...f, ...patch })); };
   const setValue = (axis, v) => set({ values: { ...form.values, [axis]: v } });
@@ -108,8 +84,6 @@ export function VariationDialog({
       if (!v) { setError(`Elige ${name.toLowerCase()}.`); return null; }
       attributes[name] = v;
     }
-    const sig = sigOf(axisNames, attributes);
-    if (taken.has(sig)) { setError(`${labelOf(axisNames, attributes)} ya está en la lista.`); return null; }
     return {
       key: initial?.key || newKey(), attributes, stock: form.stock, price: form.price,
       cost: form.cost, sku: form.sku.trim(), file: form.file,
@@ -120,7 +94,17 @@ export function VariationDialog({
     setError(null);
     const row = build();
     if (!row) return;
+    // Repetida: se avisa con sus características y se deja elegir.
+    if (taken.has(sigOf(axisNames, row.attributes))) { setDupe({ row, another }); return; }
+    addRow(row, another);
+  }
+
+  function addRow(row, another) {
     onAdd(row);
+    finish(another);
+  }
+
+  function finish(another) {
     if (another) {
       // Se conservan precio y costo (suelen repetirse) y se limpia lo demás.
       setForm((f) => ({ ...f, values: {}, stock: '', sku: '', file: null }));
@@ -140,6 +124,56 @@ export function VariationDialog({
           <button type="button" className="btn ghost sm" onClick={onClose}>Cerrar</button>
         </div>
 
+        {allAxes.length > 0 && (
+          <div className="vd-axis-picks">
+            <span className="muted">Varía por:</span>
+            {allAxes.map((axis) => {
+              const on = axisNames.includes(axis.name);
+              const locked = on && othersCount > 0;   // ya lo usan otras variaciones
+              return (
+                <label className={`vd-axis-pick${locked ? ' locked' : ''}`} key={axis.name}
+                  title={locked ? 'Ya lo usan las demás variaciones de este producto' : undefined}>
+                  <input type="checkbox" checked={on} disabled={busy || locked || !onAddAxis}
+                    onChange={() => (on ? null : setPending({ name: axis.name, value: '' }))} />
+                  {axis.name}
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Eje recién marcado: las demás variaciones necesitan un valor */}
+        {pending && (
+          <div className="vd-newaxis">
+            {othersCount > 0 ? (
+              <label className="vb-field">
+                {othersCount === 1
+                  ? `¿Qué ${pending.name.toLowerCase()} lleva la otra variación?`
+                  : `¿Qué ${pending.name.toLowerCase()} llevan las otras ${othersCount}?`}
+                <ValueSelect
+                  axis={allAxes.find((a) => a.name === pending.name) || { name: pending.name, terms: [] }}
+                  value={pending.value} onChange={(value) => setPending((p) => ({ ...p, value }))} />
+              </label>
+            ) : (
+              <p className="hint">Se agrega {pending.name.toLowerCase()} a este producto.</p>
+            )}
+            <div className="vd-newaxis-actions">
+              <button type="button" className="btn ghost sm"
+                disabled={busy || (othersCount > 0 && !pending.value.trim())}
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    const val = pending.value.trim();
+                    await onAddAxis(pending.name, val);
+                    if (val) setValue(pending.name, val);
+                    setPending(null);
+                  } catch (e) { setError(e.message); }
+                }}>Listo</button>
+              <button type="button" className="linklike" onClick={() => setPending(null)}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
         <div className="vd-axes">
           {axes.map((axis) => (
             <label className="vb-field" key={axis.name}>{axis.name}
@@ -149,54 +183,13 @@ export function VariationDialog({
           ))}
         </div>
 
-        {axes.length === 0 && !newAxis && (
+        {axes.length === 0 && !pending && (
           <p className="hint">
-            Este producto todavía no varía por nada. Agrega un eje (talla, color…) para empezar.
+            {allAxes.length > 0
+              ? 'Marca arriba en qué varía este producto (talla, color…).'
+              : 'Este negocio todavía no tiene ejes de variación. Créalos en Negocio → Inventario → Variaciones.'}
           </p>
         )}
-
-        {onAddAxis && (newAxis ? (
-          <div className="vd-newaxis">
-            <div className="vd-axes">
-              <label className="vb-field">¿En qué más varía?
-                <AxisSelect options={availableAxes.map((a) => a.name)} value={newAxis.name}
-                  onChange={(name) => setNewAxis({ name, value: '' })} />
-              </label>
-              {newAxis.name && othersCount > 0 && (
-                <label className="vb-field">
-                  {othersCount === 1
-                    ? `¿Qué ${newAxis.name.toLowerCase()} lleva la otra variación?`
-                    : `¿Qué ${newAxis.name.toLowerCase()} llevan las otras ${othersCount}?`}
-                  <ValueSelect
-                    axis={availableAxes.find((a) => a.name === newAxis.name) || { name: newAxis.name, terms: [] }}
-                    value={newAxis.value} onChange={(value) => setNewAxis((a) => ({ ...a, value }))} />
-                </label>
-              )}
-            </div>
-            <div className="vd-newaxis-actions">
-              <button type="button" className="btn ghost sm"
-                disabled={busy || !newAxis.name.trim() || (othersCount > 0 && !newAxis.value.trim())}
-                onClick={async () => {
-                  setError(null);
-                  try {
-                    const axis = newAxis.name.trim();
-                    const val = newAxis.value.trim();
-                    await onAddAxis(axis, val);
-                    // Esta variación arranca con el mismo valor que las demás;
-                    // el usuario lo cambia si esta es la distinta.
-                    if (val) setValue(axis, val);
-                    setNewAxis(null);
-                  } catch (e) { setError(e.message); }
-                }}>Agregar eje</button>
-              <button type="button" className="linklike" onClick={() => setNewAxis(null)}>Cancelar</button>
-            </div>
-          </div>
-        ) : (
-          <button type="button" className="linklike vd-addaxis" disabled={busy}
-            onClick={() => setNewAxis({ name: '', value: '' })}>
-            ＋ {axes.length === 0 ? 'Agregar eje (talla, color…)' : 'Agregar otro eje (color, material…)'}
-          </button>
-        ))}
 
         <div className="vd-data">
           {!editing && (
@@ -231,6 +224,27 @@ export function VariationDialog({
         {error && <div className="form-error">{error}</div>}
         {added > 0 && <p className="hint">{added} {added === 1 ? 'variación agregada' : 'variaciones agregadas'}.</p>}
 
+        {dupe && (
+          <div className="modal-backdrop stacked" onClick={() => setDupe(null)}>
+            <div className="modal card confirm-modal" role="alertdialog" aria-modal="true"
+              onClick={(e) => e.stopPropagation()}>
+              <h2>Esa variación ya existe</h2>
+              <p className="confirm-text">
+                Ya hay una variación <strong>{labelOf(axisNames, dupe.row.attributes)}</strong> en
+                este producto. Puedes dejar la que está o reemplazarla con lo que acabas de escribir
+                (cantidad, precio, costo, SKU y foto).
+              </p>
+              <div className="inline-form-actions confirm-actions">
+                <button type="button" className="btn primary" disabled={!onReplace}
+                  onClick={() => { onReplace(dupe.row); const a = dupe.another; setDupe(null); finish(a); }}>
+                  Reemplazar
+                </button>
+                <button type="button" className="btn ghost" onClick={() => setDupe(null)}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="inline-form-actions vd-actions">
           <button type="button" className="btn primary" onClick={() => submit(false)}>
             {editing ? 'Guardar cambios' : 'Agregar'}
@@ -248,7 +262,7 @@ export function VariationDialog({
 // ---------- Lista de variaciones + botón para agregar ----------
 export default function VariantBuilder({
   axes, rows, onChange, existingSigs = new Set(), disabled = false, addLabel = '＋ Agregar variación',
-  availableAxes = [], onAddAxis = null, othersCount = 0,
+  availableAxes = [], onAddAxis = null, othersCount = 0, onReplaceExisting = null,
 }) {
   const axisNames = axes.map((a) => a.name);
   const [open, setOpen] = useState(false);
@@ -338,6 +352,14 @@ export default function VariantBuilder({
           availableAxes={availableAxes} onAddAxis={onAddAxis}
           othersCount={othersCount + rows.length} busy={disabled}
           onAdd={(row) => onChange([...rows, row])}
+          onReplace={(row) => {
+            const sig = sigOf(axisNames, row.attributes);
+            const i = rows.findIndex((r) => sigOf(axisNames, r.attributes) === sig);
+            // En la lista de nuevas se pisa la fila; si la repetida ya es una
+            // variación del producto, se actualiza esa (lo hace el padre).
+            if (i >= 0) onChange(rows.map((r, j) => (j === i ? { ...row, key: r.key } : r)));
+            else if (onReplaceExisting) onReplaceExisting(sig, row);
+          }}
           onClose={() => setOpen(false)} />
       )}
     </div>

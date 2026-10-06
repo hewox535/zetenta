@@ -183,6 +183,7 @@ export default function Inventory() {
   const [moreOpen, setMoreOpen] = useState(false); // menú ⋯ del header (móvil)
   const [viewer, setViewer] = useState(null); // visor de fotos: { p, i } (índice en mediaOf(p))
   const [editVar, setEditVar] = useState(null);   // variación existente que se está editando
+  const [photo, setPhoto] = useState(null);       // foto del modal abierta en grande
 
   // Ofertas: filtro "En oferta" y modo selección para aplicar/quitar % en lote.
   const [offerOnly, setOfferOnly] = useState(false);
@@ -570,6 +571,27 @@ export default function Inventory() {
     if (!tax || !value) return;
     if ((tax.taxonomy_terms || []).some((t) => t.name === value)) return;
     await findOrCreateTerm(tax.id, value);
+  }
+
+  // "Reemplazar" sobre una variación que YA existe en el producto: se le
+  // aplican los datos escritos (y su foto, si cargó una) en vez de agregar
+  // otra fila con la misma combinación, que la base rechazaría.
+  async function onReplaceExistingVariant(sig, row) {
+    setM({
+      variants: modal.variants.map((v) => (v.sig === sig ? {
+        ...v,
+        stock: row.stock !== '' && row.stock != null ? String(row.stock) : v.stock,
+        price: row.price ?? v.price,
+        cost: row.cost ?? v.cost,
+        sku: row.sku || v.sku,
+      } : v)),
+    });
+    const target = modal.variants.find((v) => v.sig === sig);
+    if (row.file && target) {
+      const old = (modal.media || []).find((m) => m.variant_id === target.id);
+      await onUploadImage(row.file, target.id);
+      if (old) await onRemoveImage(old);
+    }
   }
 
   // Sumar un eje (Talla, Color, Material…) desde el submodal de la variación.
@@ -1023,13 +1045,15 @@ export default function Inventory() {
                   {modal.mode === 'create'
                     ? (modal.stagedFiles || []).map((f, i) => (
                         <div className="img-thumb" key={i}>
-                          <img src={URL.createObjectURL(f)} alt="" />
+                          <img src={URL.createObjectURL(f)} alt="" title="Ver en grande"
+                            onClick={() => setPhoto({ src: URL.createObjectURL(f), staged: i })} />
                           <button type="button" className="img-del" onClick={() => setM({ stagedFiles: modal.stagedFiles.filter((_, j) => j !== i) })}>×</button>
                         </div>
                       ))
                     : (modal.media || []).filter((m) => !m.variant_id).map((m) => (
                         <div className="img-thumb" key={m.id}>
-                          <img src={mediaUrl(m)} alt="" />
+                          <img src={mediaUrl(m)} alt="" title="Ver en grande"
+                            onClick={() => setPhoto({ src: mediaUrl(m), media: m })} />
                           {!lockMedia && <button type="button" className="img-del" onClick={() => onRemoveImage(m)}>×</button>}
                         </div>
                       ))}
@@ -1072,6 +1096,40 @@ export default function Inventory() {
                 )
               ) : (
                 /* -------- Editar: variantes existentes + agregar -------- */
+                modal.simple && modal.axes.length === 0 && !modal.addVariants ? (
+                  <div className="np-block">
+                    <div className="oc-label">Cantidad</div>
+                    {modal.variants.map((v, i) => {
+                      const patch = (p) => setM({ variants: modal.variants.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+                      return (
+                        <div key={v.id}>
+                          <div className="vb-fields">
+                            <label className="vb-field">Cantidad
+                              <input type="number" min="0" step="1" value={v.stock} disabled={lockStock}
+                                onChange={(e) => patch({ stock: e.target.value })} />
+                            </label>
+                            <label className="vb-field">Stock objetivo
+                              <input type="number" min="0" step="1" value={v.target} placeholder="—" disabled={lockStock}
+                                onChange={(e) => patch({ target: e.target.value })} />
+                            </label>
+                          </div>
+                          {stockButtons(v)}
+                        </div>
+                      );
+                    })}
+                    {!lockStock && (
+                      <p className="hint">
+                        Cambiar la cantidad aquí registra un ajuste. Para dejar constancia de una entrada
+                        o salida (con su nota) usa los botones de arriba.
+                      </p>
+                    )}
+                    {canCreate && (
+                      <button type="button" className="linklike" onClick={() => setM({ addVariants: true })}>
+                        Este producto varía por talla, color…
+                      </button>
+                    )}
+                  </div>
+                ) : (
                 <div className="np-block">
                   <div className="oc-label">Variaciones de este producto</div>
                   <div className="vb-list">
@@ -1080,11 +1138,18 @@ export default function Inventory() {
                       const patch = (p) => setM({ variants: modal.variants.map((x, j) => (j === i ? { ...x, ...p } : x)) });
                       return (
                         <div className="vb-card" key={v.id}>
-                          <label className="vb-photo" title={`Foto de ${v.label || 'la variación'}`}>
-                            {vm ? <img src={mediaUrl(vm)} alt="" /> : <span className="thumb-ph">{lockMedia ? '' : '＋'}</span>}
-                            <input type="file" accept="image/*" hidden disabled={busy || lockMedia}
-                              onChange={async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (vm) await onRemoveImage(vm); await onUploadImage(f, v.id); }} />
-                          </label>
+                          {vm ? (
+                            <button type="button" className="vb-photo" title="Ver en grande"
+                              onClick={() => setPhoto({ src: mediaUrl(vm), media: vm })}>
+                              <img src={mediaUrl(vm)} alt="" />
+                            </button>
+                          ) : (
+                            <label className="vb-photo" title={`Foto de ${v.label || 'la variación'}`}>
+                              <span className="thumb-ph">{lockMedia ? '' : '＋'}</span>
+                              <input type="file" accept="image/*" hidden disabled={busy || lockMedia}
+                                onChange={async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; await onUploadImage(f, v.id); }} />
+                            </label>
+                          )}
                           <div className="vb-card-body">
                             <div className="vb-card-head">
                               <span className="vb-label">{labelOf(modal.axes, v.attributes) || v.label || 'Estándar'}</span>
@@ -1140,12 +1205,14 @@ export default function Inventory() {
                         rows={modal.vbNew}
                         onChange={(vbNew) => setM({ vbNew })}
                         existingSigs={new Set(modal.variants.map((v) => v.sig))}
+                        onReplaceExisting={onReplaceExistingVariant}
                         disabled={busy}
                         addLabel="＋ Nueva variación"
                       />
                     </div>
                   )}
                 </div>
+                )
               )}
 
               {error && <div className="form-error">{error}</div>}
@@ -1206,6 +1273,38 @@ export default function Inventory() {
           </div>
         );
       })()}
+
+      {/* ===== Foto del producto en grande, con opción de reemplazarla ===== */}
+      {photo && modal && (
+        <div className="modal-backdrop stacked" onClick={() => setPhoto(null)}>
+          <div className="modal card photo-edit" role="dialog" aria-modal="true"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="pe-img"><img src={photo.src} alt="" /></div>
+            <div className="inline-form-actions pe-actions">
+              {!lockMedia && (
+                <label className="btn primary">
+                  Reemplazar foto
+                  <input type="file" accept="image/*" hidden disabled={busy}
+                    onChange={async (e) => {
+                      const f = e.target.files[0];
+                      e.target.value = '';
+                      if (!f) return;
+                      if (photo.media) {
+                        // Entra la nueva y sale la vieja, para no dejar huecos.
+                        await onUploadImage(f, photo.media.variant_id || null);
+                        await onRemoveImage(photo.media);
+                      } else {
+                        setM({ stagedFiles: modal.stagedFiles.map((x, j) => (j === photo.staged ? f : x)) });
+                      }
+                      setPhoto(null);
+                    }} />
+                </label>
+              )}
+              <button type="button" className="btn ghost" onClick={() => setPhoto(null)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== Submodal: editar una variación existente ===== */}
       {editVar && modal && (
