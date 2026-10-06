@@ -550,10 +550,28 @@ export async function fetchOrder(id) {
     .select('*, order_items(*), order_payments(*)').eq('id', id).single());
 }
 
-// Pedidos con ítems y pagos en un rango de fechas, para estadísticas.
+// Cancelar una venta hecha por error: pide el PIN del dueño, devuelve el
+// stock y deja la venta marcada (ver 20261006120000_cancel_order_pin.sql).
+export async function cancelOrder(orderId, pin, reason) {
+  return unwrap(await supabase.rpc('cancel_order', {
+    p_order_id: orderId, p_pin: pin, p_reason: reason || '',
+  }));
+}
+
+export async function setCancelPin(pin) {
+  return unwrap(await supabase.rpc('set_cancel_pin', { p_pin: pin }));
+}
+
+export async function hasCancelPin() {
+  return unwrap(await supabase.rpc('has_cancel_pin'));
+}
+
+// Pedidos con ítems y pagos en un rango de fechas, para estadísticas. Las
+// canceladas no cuentan: no son ventas.
 export async function fetchOrdersForStats(fromISO, toISO) {
   let q = supabase.from('orders')
     .select('*, order_items(*), order_payments(*)')
+    .is('cancelled_at', null)
     .order('created_at', { ascending: false });
   if (fromISO) q = q.gte('created_at', fromISO);
   if (toISO) q = q.lte('created_at', toISO);

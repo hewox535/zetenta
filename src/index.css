@@ -196,6 +196,8 @@ table.list .centro, table.list th.centro { text-align: center; }
 /* Celda de acciones: se queda como celda de tabla (un td en display:flex
    pierde la alineación de la fila y su borde no cuadra con el de las demás
    columnas); los botones se separan con márgenes. */
+/* Venta cancelada: se ve apagada pero sigue en el historial */
+.row-cancelled td { opacity: .6; }
 .row-actions { text-align: right; white-space: nowrap; }
 .row-actions > * { vertical-align: middle; }
 .row-actions > * + * { margin-left: 6px; }
@@ -1152,6 +1154,16 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   }
   .mcard-link { text-decoration: none; }
   .mcard-link:active { background: var(--accent-soft); }
+  /* Tarjeta con acción: la caja la pone el contenedor y el botón va dentro */
+  .mcard-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+  }
+  .mcard-wrap .mcard { border: 0; border-radius: 0; box-shadow: none; }
+  .mcard-cancel {
+    width: 100%; border-radius: 0; border-top: 1px solid var(--border);
+    padding: 11px 14px; justify-content: center;
+  }
   .mcard-check { flex: 0 0 auto; width: 20px; height: 20px; }
   .mcard-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .mcard-title { font-weight: 600; font-size: 14.5px; }
