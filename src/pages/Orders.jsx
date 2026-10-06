@@ -126,6 +126,7 @@ const fmtAmt = (x) => (x ? String(round2(x)) : '');
 function PayAmountRow({
   m, rate, amount, onAmount, onExact, initialPct = null, onInitialPct = null, totalUsd = 0,
 }) {
+  const cashea = !!onInitialPct;
   const [focus, setFocus] = useState(null); // 'main' | 'alt' | null
   const [draft, setDraft] = useState('');
   const isVes = m.currency !== 'USD';
@@ -151,7 +152,7 @@ function PayAmountRow({
   const financedUsd = splitOk ? round2(totalUsd - initialUsd) : 0;
 
   return (
-    <div className="pay-input-row">
+    <div className={`pay-input-row${cashea ? ' pay-row-cashea' : ''}`}>
       <div className="pay-input-label">
         <span>{m.name}</span>
         <span className="muted">{mainCur}</span>
@@ -330,11 +331,20 @@ export default function Orders() {
     // Al agregar un método adicional (ya hay al menos uno seleccionado),
     // autocompleta su input con el saldo exacto pendiente en la moneda del
     // método —con o sin descuento por divisa— sin tener que pulsar "Exacto".
-    if (selectedMethods.length >= 1) fillExact(m);
+    // Cashea se rellena con su % de inicial aunque sea el primero, para que al
+    // volver a seleccionarlo no quede el % puesto y el monto vacío.
+    const pct = parseAmt(initialPct[m.id]);
+    if (isCashea(m) && pct > 0 && pct < 100) setCasheaPct(m, initialPct[m.id]);
+    else if (selectedMethods.length >= 1) fillExact(m);
     setSelectedMethods((prev) => [...prev, m.id]);
   };
 
   const fillExact = (m) => {
+    // En Cashea, "exacto" es lo que financia según el % de inicial escrito.
+    if (isCashea(m)) {
+      const pct = parseAmt(initialPct[m.id]);
+      if (pct > 0 && pct < 100) { setCasheaPct(m, initialPct[m.id]); return; }
+    }
     // Restante en USD (lista) sin contar lo ya escrito en este método.
     const cur = parseAmt(payments[m.id]);
     const creditOfThis = isForeignCash(m)
@@ -696,7 +706,7 @@ export default function Orders() {
                           {selectedMethods
                             .map((id) => methods.find((x) => x.id === id))
                             .filter(Boolean)
-                            .sort((a, b) => Number(isCashea(a)) - Number(isCashea(b)))
+                            .sort((a, b) => Number(isCashea(b)) - Number(isCashea(a)))
                             .map((m) => (
                               <PayAmountRow key={m.id} m={m} rate={rate.value}
                                 amount={payments[m.id] || ''}

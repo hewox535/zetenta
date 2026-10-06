@@ -196,6 +196,8 @@ table.list .centro, table.list th.centro { text-align: center; }
 /* Celda de acciones: se queda como celda de tabla (un td en display:flex
    pierde la alineación de la fila y su borde no cuadra con el de las demás
    columnas); los botones se separan con márgenes. */
+/* Venta cancelada: se ve apagada pero sigue en el historial */
+.row-cancelled td { opacity: .6; }
 .row-actions { text-align: right; white-space: nowrap; }
 .row-actions > * { vertical-align: middle; }
 .row-actions > * + * { margin-left: 6px; }
@@ -842,6 +844,12 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 /* Un input por método seleccionado, debajo de la lista de pills */
 .pay-inputs { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 4px; }
 .pay-input-row { display: flex; flex-direction: column; gap: 6px; }
+/* Cashea: el %, el reparto y el monto se leen como un solo método */
+.pay-row-cashea {
+  gap: 8px; padding: 10px 12px; border: 1px solid var(--accent-line);
+  border-radius: var(--radius); background: var(--accent-soft);
+}
+.pay-row-cashea .pay-amt, .pay-row-cashea .pay-pct-field input { background: var(--surface); }
 .pay-input-label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
 .pay-input-controls { display: flex; gap: 8px; align-items: center; }
 .pay-input-controls input { font-variant-numeric: tabular-nums; }
@@ -1011,7 +1019,7 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .acct-method-kind input { width: 16px; height: 16px; }
 .acct-method-name .badge { margin-left: 8px; }
 /* Cashea: % y reparto en una sola línea */
-.pay-cashea { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 6px 0 8px; }
+.pay-cashea { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .pay-split { font-size: 12.5px; }
 .pay-pct { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
 /* Falta cobrar la inicial de Cashea: aviso sobre los métodos */
@@ -1146,6 +1154,16 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   }
   .mcard-link { text-decoration: none; }
   .mcard-link:active { background: var(--accent-soft); }
+  /* Tarjeta con acción: la caja la pone el contenedor y el botón va dentro */
+  .mcard-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+  }
+  .mcard-wrap .mcard { border: 0; border-radius: 0; box-shadow: none; }
+  .mcard-cancel {
+    width: 100%; border-radius: 0; border-top: 1px solid var(--border);
+    padding: 11px 14px; justify-content: center;
+  }
   .mcard-check { flex: 0 0 auto; width: 20px; height: 20px; }
   .mcard-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .mcard-title { font-weight: 600; font-size: 14.5px; }

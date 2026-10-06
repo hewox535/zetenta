@@ -6,6 +6,7 @@ import {
   fetchTaxonomies, createTaxonomy, deleteTaxonomy, createTerm, updateTerm, deleteTerm,
   fetchBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
   createPaymentMethod, updatePaymentMethod, deletePaymentMethod,
+  setCancelPin, hasCancelPin,
   updateOrderSettings, updateBusinessSettings, updateCustomerConfig,
   fetchBranches, createBranch, updateBranch, deleteBranch,
   fetchUserBranches, setUserBranches,
@@ -528,6 +529,8 @@ function OrdersSection({ business, refreshBusiness }) {
         </button>
       </section>
 
+      <CancelPinSection />
+
       <section className="card vsection">
         <h2>Cliente en la venta</h2>
         <p className="hint">
@@ -557,6 +560,55 @@ function OrdersSection({ business, refreshBusiness }) {
 
       <BankAccountsManager business={business} />
     </div>
+  );
+}
+
+// ---------- PIN para cancelar ventas: lo usa quien cobra, lo define el dueño ----------
+function CancelPinSection() {
+  const [has, setHas] = useState(null);
+  const [pin, setPin] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => { hasCancelPin().then(setHas).catch(() => setHas(false)); }, []);
+
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true); setError(null); setSaved(false);
+    try {
+      await setCancelPin(pin.trim());
+      setHas(!!pin.trim());
+      setPin('');
+      setSaved(true);
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <section className="card vsection">
+      <h2>PIN para cancelar ventas</h2>
+      <p className="hint">
+        Una venta hecha por error se cancela desde el historial: los productos vuelven al
+        inventario y queda registrado quién la canceló. Para hacerlo hace falta este PIN, que
+        solo debería saber el dueño. Se guarda cifrado: ni aquí se puede volver a ver, solo
+        cambiarlo.
+      </p>
+      <form onSubmit={save} className="vform">
+        <label>
+          {has ? 'Nuevo PIN' : 'PIN'}
+          <input type="password" inputMode="numeric" autoComplete="new-password"
+            value={pin} onChange={(e) => setPin(e.target.value)} placeholder="4 a 8 dígitos" />
+          <span className="field-hint">
+            {has === null ? '' : has
+              ? 'Ya hay un PIN configurado. Escribe uno nuevo para reemplazarlo, o guarda vacío para quitarlo (nadie podrá cancelar ventas).'
+              : 'Sin PIN no se pueden cancelar ventas.'}
+          </span>
+        </label>
+        {error && <div className="form-error">{error}</div>}
+        {saved && <div className="form-ok">PIN guardado.</div>}
+        <button className="btn primary" disabled={busy}>{busy ? 'Guardando…' : 'Guardar PIN'}</button>
+      </form>
+    </section>
   );
 }
 

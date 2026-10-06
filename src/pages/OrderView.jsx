@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { fetchOrder, fetchStaff } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import OrderReceipt from '../components/OrderReceipt';
+import { formatDate } from '../lib/calc';
 
 export default function OrderView() {
   const { id } = useParams();
@@ -42,6 +43,12 @@ export default function OrderView() {
           <button className="btn primary" onClick={() => window.print()}>Imprimir</button>
         </div>
       </header>
+      {order.cancelled_at && (
+        <div className="form-error no-print">
+          Venta cancelada el {formatDate(order.cancelled_at)}
+          {order.cancel_reason ? ` · ${order.cancel_reason}` : ''}. Los productos volvieron al inventario.
+        </div>
+      )}
       <div className="receipt-wrap">
         <OrderReceipt business={business} order={order} />
       </div>
