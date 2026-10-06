@@ -132,10 +132,10 @@ export default function OrdersHistory() {
             </div>
             <p className="hint">
               Los productos vuelven al inventario y la venta queda marcada como cancelada: no se
-              borra, para que el historial siga cuadrando. Hace falta el PIN del dueño.
+              borra, para que el historial siga cuadrando. Hace falta el PIN de seguridad.
             </p>
             <form onSubmit={onCancel} className="vform">
-              <label>PIN del dueño
+              <label>PIN de seguridad
                 <input type="password" inputMode="numeric" autoComplete="off" autoFocus required
                   value={cancel.pin} onChange={(e) => setCancel((c) => ({ ...c, pin: e.target.value }))} />
               </label>

@@ -550,7 +550,7 @@ export async function fetchOrder(id) {
     .select('*, order_items(*), order_payments(*)').eq('id', id).single());
 }
 
-// Cancelar una venta hecha por error: pide el PIN del dueño, devuelve el
+// Cancelar una venta hecha por error: pide el PIN de seguridad, devuelve el
 // stock y deja la venta marcada (ver 20261006120000_cancel_order_pin.sql).
 export async function cancelOrder(orderId, pin, reason) {
   return unwrap(await supabase.rpc('cancel_order', {
