@@ -563,7 +563,7 @@ function OrdersSection({ business, refreshBusiness }) {
   );
 }
 
-// ---------- PIN para cancelar ventas: lo usa quien cobra, lo define el dueño ----------
+// ---------- PIN de seguridad: autoriza cancelar una venta ----------
 function CancelPinSection() {
   const [has, setHas] = useState(null);
   const [pin, setPin] = useState('');
@@ -586,12 +586,11 @@ function CancelPinSection() {
 
   return (
     <section className="card vsection">
-      <h2>PIN para cancelar ventas</h2>
+      <h2>PIN de seguridad</h2>
       <p className="hint">
         Una venta hecha por error se cancela desde el historial: los productos vuelven al
-        inventario y queda registrado quién la canceló. Para hacerlo hace falta este PIN, que
-        solo debería saber el dueño. Se guarda cifrado: ni aquí se puede volver a ver, solo
-        cambiarlo.
+        inventario y queda registrado quién la canceló. Para hacerlo hace falta este PIN.
+        Se guarda cifrado: ni aquí se puede volver a ver, solo cambiarlo.
       </p>
       <form onSubmit={save} className="vform">
         <label>
