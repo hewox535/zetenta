@@ -507,6 +507,16 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .product-card:active { transform: translateY(0); }
 .product-card.in-cart { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
 .product-card-name { font-size: 14px; font-weight: 600; line-height: 1.3; flex: 1; }
+/* Tallas y colores del producto en su tarjeta del POS */
+.product-card-head { flex: 1; }
+.product-card-axis { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; margin-top: 5px; }
+.product-card-axis.out { opacity: .5; }
+.pca-name { font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-2); margin-right: 2px; }
+.pca-value {
+  font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent);
+}
+.pca-more { font-size: 11.5px; font-weight: 600; color: var(--text-2); }
 .product-card-meta { display: flex; }
 .product-card-prices { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .product-card-prices strong { font-size: 17px; font-variant-numeric: tabular-nums; }

@@ -69,6 +69,22 @@ const branchStock = (v, branchId) => {
 };
 const totalStock = (p, branchId) => variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0);
 const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).length === 0;
+// Qué tallas y colores tiene el producto a la vista: los de las variantes con
+// stock en esta sucursal (es lo vendible). Si no queda ninguna, se muestran
+// todos en gris, para saber de qué es el producto aunque esté agotado.
+const AXIS_MAX = 5;
+const axisValues = (p, branchId) => {
+  const axes = p.variant_axes || [];
+  if (axes.length === 0) return [];
+  const withStock = variantsOf(p).filter((v) => branchStock(v, branchId) > 0);
+  const source = withStock.length > 0 ? withStock : variantsOf(p);
+  return axes.map((axis) => {
+    const all = [...new Set(source.map((v) => v.attributes?.[axis]).filter(Boolean))];
+    // Un producto con muchos colores no debe estirar la tarjeta: se muestran los
+    // primeros y el resto se cuenta ("+3"); al tocarlo salen todos igual.
+    return { axis, values: all.slice(0, AXIS_MAX), rest: Math.max(0, all.length - AXIS_MAX), soldOut: withStock.length === 0 };
+  }).filter((x) => x.values.length > 0);
+};
 const defaultVariant = (p) =>
   variantsOf(p).find((v) => Object.keys(v.attributes || {}).length === 0) || variantsOf(p)[0];
 const variantPrice = (p, v) => (v.price != null ? Number(v.price) : Number(p.price));
@@ -562,7 +578,16 @@ export default function Orders() {
                         <div className="product-card-thumb">
                           {img ? <img src={img} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
                         </div>
-                        <div className="product-card-name">{p.name}</div>
+                        <div className="product-card-head">
+                          <div className="product-card-name">{p.name}</div>
+                          {axisValues(p, branchId).map(({ axis, values, rest, soldOut }) => (
+                            <div className={`product-card-axis${soldOut ? ' out' : ''}`} key={axis}>
+                              <span className="pca-name">{axis}</span>
+                              {values.map((v) => <span className="pca-value" key={v}>{v}</span>)}
+                              {rest > 0 && <span className="pca-more">+{rest}</span>}
+                            </div>
+                          ))}
+                        </div>
                         <div className="product-card-meta">
                           <span className={`stock-badge${stock <= 0 ? ' out' : ''}`}>{stock} {p.unit}</span>
                           {!simple && <span className="variant-count">{variantsOf(p).length} variantes</span>}
