@@ -698,8 +698,13 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .vd-modal { max-width: 520px; }
 .modal > .hint { margin: 0 0 16px; }
 .vd-axes { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
-.vd-addaxis { display: inline-block; margin-top: 10px; font-size: 13px; }
-.vd-newaxis { margin-top: 12px; padding: 12px; background: var(--accent-soft); border-radius: var(--radius); }
+/* Ejes del producto como casillas */
+.vd-axis-picks { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 14px; }
+.vd-axis-picks .muted { font-size: 12.5px; }
+.vd-axis-pick { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.vd-axis-pick input { width: 16px; height: 16px; }
+.vd-axis-pick.locked { cursor: default; color: var(--text-2); }
+.vd-newaxis { margin-bottom: 12px; padding: 12px; background: var(--accent-soft); border-radius: var(--radius); }
 .vd-newaxis-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .vd-axes .vb-field { flex: 1 1 160px; }
 .vd-axes .term-select { display: flex; gap: 4px; }
@@ -774,6 +779,12 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .img-thumb { position: relative; width: 76px; height: 76px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
 .img-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .img-del { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border: none; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 13px; line-height: 1; }
+/* Foto del modal en grande, con reemplazo */
+.photo-edit { max-width: 520px; padding: 16px; }
+.pe-img { background: var(--accent-soft); border-radius: var(--radius); overflow: hidden; display: grid; place-items: center; }
+.pe-img img { max-width: 100%; max-height: 60vh; display: block; }
+.pe-actions { margin-top: 14px; }
+.img-thumb img { cursor: zoom-in; }
 .img-add { width: 76px; height: 76px; border: 1px dashed var(--border); border-radius: 10px; display: grid; place-items: center; cursor: pointer; color: var(--text-2); font-size: 13px; font-weight: 600; }
 .img-add:hover { border-color: var(--accent-line); color: var(--accent); }
 @media (max-width: 640px) {
