@@ -73,17 +73,41 @@ const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).leng
 // stock en esta sucursal (es lo vendible). Si no queda ninguna, se muestran
 // todos en gris, para saber de qué es el producto aunque esté agotado.
 const AXIS_MAX = 5;
+// Un producto con muchos colores no debe estirar la tarjeta: se muestran los
+// primeros y el resto se cuenta ("+3"); al tocarlo salen todos igual.
+const axisRow = (axis, values, soldOut) => ({
+  axis, values: values.slice(0, AXIS_MAX), rest: Math.max(0, values.length - AXIS_MAX), soldOut,
+});
 const axisValues = (p, branchId) => {
   const axes = p.variant_axes || [];
   if (axes.length === 0) return [];
   const withStock = variantsOf(p).filter((v) => branchStock(v, branchId) > 0);
   const source = withStock.length > 0 ? withStock : variantsOf(p);
-  return axes.map((axis) => {
-    const all = [...new Set(source.map((v) => v.attributes?.[axis]).filter(Boolean))];
-    // Un producto con muchos colores no debe estirar la tarjeta: se muestran los
-    // primeros y el resto se cuenta ("+3"); al tocarlo salen todos igual.
-    return { axis, values: all.slice(0, AXIS_MAX), rest: Math.max(0, all.length - AXIS_MAX), soldOut: withStock.length === 0 };
-  }).filter((x) => x.values.length > 0);
+  return axes.map((axis) =>
+    axisRow(axis, [...new Set(source.map((v) => v.attributes?.[axis]).filter(Boolean))], withStock.length === 0),
+  ).filter((x) => x.values.length > 0);
+};
+// Lo que se ve en la tarjeta: las variaciones del producto y, además, las
+// etiquetas de las taxonomías de variación (Talla, Color…). Un producto sin
+// variaciones puede tener su talla puesta como etiqueta —así la carga Roma— y
+// esa talla también tiene que verse. La categoría no: es para organizar, no
+// para identificar la prenda.
+const cardAttrs = (p, branchId, varTax) => {
+  const rows = axisValues(p, branchId);
+  const yaEstan = new Set(rows.map((r) => r.axis.toLowerCase()));
+  const soldOut = totalStock(p, branchId) <= 0;
+  const porTax = new Map();
+  (p.product_terms || []).forEach((pt) => {
+    const t = varTax.get(pt.term_id);
+    if (!t || yaEstan.has(t.taxonomy.toLowerCase())) return;
+    if (!porTax.has(t.taxonomy)) porTax.set(t.taxonomy, { order: t.order, values: [] });
+    porTax.get(t.taxonomy).values.push(t.name);
+  });
+  return rows.concat(
+    [...porTax.entries()]
+      .sort((a, b) => a[1].order - b[1].order)
+      .map(([taxonomy, x]) => axisRow(taxonomy, x.values, soldOut)),
+  );
 };
 const defaultVariant = (p) =>
   variantsOf(p).find((v) => Object.keys(v.attributes || {}).length === 0) || variantsOf(p)[0];
@@ -416,6 +440,16 @@ export default function Orders() {
   // ------- categorías / filtros -------
   const filterables = taxonomies.filter((t) => t.taxonomy_terms.length > 0);
 
+  // term_id → a qué taxonomía de variación pertenece, para pintar la talla y el
+  // color en la tarjeta de los productos que los llevan como etiqueta.
+  const varTax = useMemo(() => {
+    const m = new Map();
+    taxonomies.filter((t) => t.kind === 'variant').forEach((t, order) => {
+      (t.taxonomy_terms || []).forEach((term) => m.set(term.id, { taxonomy: t.name, name: term.name, order }));
+    });
+    return m;
+  }, [taxonomies]);
+
   const visible = (products || []).filter((p) => {
     if (offerOnly && !p.offer_percent) return false;
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())
@@ -580,7 +614,7 @@ export default function Orders() {
                         </div>
                         <div className="product-card-head">
                           <div className="product-card-name">{p.name}</div>
-                          {axisValues(p, branchId).map(({ axis, values, rest, soldOut }) => (
+                          {cardAttrs(p, branchId, varTax).map(({ axis, values, rest, soldOut }) => (
                             <div className={`product-card-axis${soldOut ? ' out' : ''}`} key={axis}>
                               <span className="pca-name">{axis}</span>
                               {values.map((v) => <span className="pca-value" key={v}>{v}</span>)}
