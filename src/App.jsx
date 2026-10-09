@@ -20,6 +20,7 @@ import Orders from './pages/Orders';
 import OrdersHistory from './pages/OrdersHistory';
 import OrderView from './pages/OrderView';
 import Stats from './pages/Stats';
+import Cash from './pages/Cash';
 import Settings from './pages/Settings';
 import Account from './pages/Account';
 import Admin from './pages/Admin';
@@ -117,6 +118,7 @@ export default function App() {
             <Route path="orders" element={<RequireCapability name="orders"><Orders /></RequireCapability>} />
             <Route path="orders/history" element={<RequireCapability name="orders"><OrdersHistory /></RequireCapability>} />
             <Route path="orders/:id" element={<RequireCapability name="orders"><OrderView /></RequireCapability>} />
+            <Route path="cash" element={<RequirePermission name="cash"><RequireCapability name="cash"><Cash /></RequireCapability></RequirePermission>} />
             <Route path="stats" element={<RequirePermission name="stats"><RequireCapability name="stats"><Stats /></RequireCapability></RequirePermission>} />
             <Route path="settings" element={<RequireBusinessAdmin><Settings /></RequireBusinessAdmin>} />
             <Route path="account" element={<Account />} />
