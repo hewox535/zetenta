@@ -625,3 +625,70 @@ export async function updateBusinessBranding(id, { slug, customDomain, branding,
     .update(patch)
     .eq('id', id).select().single());
 }
+
+// ---------- Caja: apertura, movimientos y cierre ----------
+
+// La caja abierta de una sucursal, si hay alguna. Sin sucursal (negocio de un
+// solo local) se busca la que no tiene branch_id o la única abierta.
+export async function fetchOpenCashSession(branchId) {
+  let q = supabase.from('cash_sessions')
+    .select('*, cash_session_lines(*), cash_movements(*)')
+    .is('closed_at', null);
+  q = branchId ? q.eq('branch_id', branchId) : q.is('branch_id', null);
+  const rows = unwrap(await q.limit(1));
+  return rows[0] || null;
+}
+
+// Cierres anteriores, para el historial.
+export async function fetchCashSessions(branchId, limit = 30) {
+  let q = supabase.from('cash_sessions')
+    .select('*, cash_session_lines(*)')
+    .not('closed_at', 'is', null)
+    .order('closed_at', { ascending: false }).limit(limit);
+  if (branchId) q = q.eq('branch_id', branchId);
+  return unwrap(await q);
+}
+
+// Lo que lleva la caja hasta ahora, calculado en el servidor (la misma cuenta
+// que congela el cierre).
+export async function fetchCashReport(sessionId) {
+  return unwrap(await supabase.rpc('cash_session_report', { p_session_id: sessionId }));
+}
+
+// opening: [{ account_id, amount }] con el fondo inicial de cada cuenta.
+export async function openCashSession(branchId, opening, note) {
+  return unwrap(await supabase.rpc('open_cash_session', {
+    p_branch_id: branchId || null, p_opening: opening || [], p_note: note || '',
+  }));
+}
+
+export async function addCashMovement(sessionId, accountId, direction, amount, reason) {
+  return unwrap(await supabase.rpc('add_cash_movement', {
+    p_session_id: sessionId, p_account_id: accountId,
+    p_direction: direction, p_amount: Number(amount), p_reason: reason || '',
+  }));
+}
+
+export async function deleteCashMovement(id) {
+  unwrap(await supabase.rpc('delete_cash_movement', { p_id: id }));
+}
+
+// counted: [{ account_id, amount }] con lo que se contó de verdad.
+export async function closeCashSession(sessionId, counted, rate, note) {
+  return unwrap(await supabase.rpc('close_cash_session', {
+    p_session_id: sessionId, p_counted: counted || [],
+    p_rate: Number(rate) || 0, p_note: note || '',
+  }));
+}
+
+// Cuántas ventas de la sucursal quedaron fuera de toda caja (se vendió con la
+// caja cerrada). Sirve para avisar, no para cuadrar.
+export async function countOrphanOrders(branchId, sinceISO) {
+  let q = supabase.from('orders').select('id', { count: 'exact', head: true })
+    .is('cash_session_id', null).is('cancelled_at', null);
+  if (branchId) q = q.eq('branch_id', branchId);
+  if (sinceISO) q = q.gte('created_at', sinceISO);
+  const { count, error } = await q;
+  if (error) throw new Error(error.message);
+  return count || 0;
+}
