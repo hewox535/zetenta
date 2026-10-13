@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   fetchSuppliers, createSupplier, createWithholding, updateWithholding,
-  fetchWithholding, extractInvoice,
+  fetchWithholding, extractInvoice, setWithholdingStamped,
 } from '../lib/api';
 import { calcLine, calcTotals, money, todayISO } from '../lib/calc';
 import { useAuth } from '../context/AuthContext';
@@ -49,6 +49,7 @@ export default function RetentionNew() {
   const [lines, setLines] = useState([{ ...EMPTY_LINE, operation_date: todayISO() }]);
   const [number, setNumber] = useState(null); // Nº del comprobante en edición
   const [seq, setSeq] = useState(''); // correlativo editable (solo edición)
+  const [stamped, setStamped] = useState(false); // si este comprobante lleva el sello
   const [loaded, setLoaded] = useState(!isEdit);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -70,6 +71,7 @@ export default function RetentionNew() {
       setIssueDate(w.issue_date || todayISO());
       setNumber(w.number);
       setSeq(String(Number(w.number.slice(-8))));
+      setStamped(!!w.stamped);
       const rows = (w.withholding_lines || []).slice().sort((a, b) => a.line_number - b.line_number);
       setLines(rows.length ? rows.map(lineToForm) : [{ ...EMPTY_LINE, operation_date: w.issue_date }]);
       setLoaded(true);
@@ -168,9 +170,12 @@ export default function RetentionNew() {
     try {
       if (isEdit) {
         await updateWithholding({ id, supplierId, issueDate, lines: payloadLines, seq: seqNum });
+        await setWithholdingStamped(id, stamped);
         navigate(`/retentions/${id}`, { replace: true });
       } else {
         const w = await createWithholding({ supplierId, issueDate, lines: payloadLines });
+        // El sello va por su propia función: es presentación, no contenido fiscal.
+        if (stamped) await setWithholdingStamped(w.id, true);
         // Mantiene el correlativo de Ajustes al día tras consumir un número.
         refreshBusiness().catch(() => {});
         navigate(`/retentions/${w.id}`, { replace: true });
@@ -242,6 +247,21 @@ export default function RetentionNew() {
             Fecha de emisión
             <input type="date" value={issueDate} onChange={(e) => onIssueDateChange(e.target.value)} required />
           </label>
+          {business?.stamp_url ? (
+            <label className="sello-check">
+              <input type="checkbox" checked={stamped} onChange={(e) => setStamped(e.target.checked)} />
+              <span className="sello-check-text">
+                Imprimir con el sello de la empresa
+                <span className="hint">Aparece en la esquina inferior derecha del comprobante.</span>
+              </span>
+              <img className="sello-mini" src={business.stamp_url} alt="" />
+            </label>
+          ) : (
+            <p className="hint">
+              Para sellar un comprobante, carga primero el sello de la empresa en{' '}
+              <Link to="/settings">Negocio → Retenciones</Link>.
+            </p>
+          )}
           {isEdit && (
             <label>
               Correlativo (Nº de comprobante)

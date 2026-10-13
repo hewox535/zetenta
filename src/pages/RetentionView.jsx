@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { fetchWithholding } from '../lib/api';
+import { fetchWithholding, setWithholdingStamped } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import WithholdingPrint from '../components/WithholdingPrint';
 
@@ -9,6 +9,16 @@ export default function RetentionView() {
   const { business } = useAuth();
   const [withholding, setWithholding] = useState(null);
   const [error, setError] = useState(null);
+  const [stamping, setStamping] = useState(false);
+
+  // Poner o quitar el sello sin pasar por el formulario: es lo que uno quiere
+  // hacer justo cuando está viendo el comprobante y nota que le falta.
+  async function onToggleStamp(on) {
+    setStamping(true);
+    try { setWithholding(await setWithholdingStamped(id, on)); }
+    catch (e) { setError(e.message); }
+    finally { setStamping(false); }
+  }
 
   useEffect(() => {
     fetchWithholding(id).then(setWithholding).catch((e) => setError(e.message));
@@ -36,6 +46,13 @@ export default function RetentionView() {
           <p className="page-sub">Vista previa idéntica al formato oficial. Imprime o guarda como PDF.</p>
         </div>
         <div className="page-actions">
+          {business.stamp_url && (
+            <label className="sello-toggle">
+              <input type="checkbox" checked={!!withholding.stamped} disabled={stamping}
+                onChange={(e) => onToggleStamp(e.target.checked)} />
+              Con sello
+            </label>
+          )}
           <Link to="/retentions" className="btn ghost">Volver</Link>
           <Link to={`/retentions/${withholding.id}/edit`} className="btn ghost">Editar</Link>
           <button className="btn primary" onClick={() => window.print()}>Imprimir</button>

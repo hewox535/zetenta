@@ -8,6 +8,9 @@ import { calcLine, calcTotals, money, formatDate } from '../lib/calc';
 const WIDTHS = [5.77, 6.64, 5.85, 6.25, 6.32, 5.22, 6.32, 6.32, 8.06, 6.32, 10.35, 4.66, 7.43, 6.4, 8.06];
 
 export default function WithholdingPrint({ business, withholding }) {
+  // El sello solo aparece si este comprobante se marcó para llevarlo y el
+  // negocio tiene uno cargado. Va encima del formato, sin tocar la tabla.
+  const sello = withholding.stamped ? (business.stamp_url || '') : '';
   const lines = [...(withholding.withholding_lines || [])].sort((a, b) => a.line_number - b.line_number);
   const totals = calcTotals(lines);
   const rows = [...lines];
@@ -17,6 +20,7 @@ export default function WithholdingPrint({ business, withholding }) {
 
   return (
     <div className="comprobante">
+      <div className="hoja">
       <table className="sheet">
         <colgroup>
           {WIDTHS.map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
@@ -169,6 +173,8 @@ export default function WithholdingPrint({ business, withholding }) {
           </tr>
         </tbody>
       </table>
+      {sello && <img className="sello" src={sello} alt="Sello de la empresa" />}
+      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import {
   updateBusinessProfile, setWithholdingSeq,
   fetchTaxonomies, createTaxonomy, deleteTaxonomy, createTerm, updateTerm, deleteTerm,
   fetchBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
+  uploadStamp, setStampUrl,
   createPaymentMethod, updatePaymentMethod, deletePaymentMethod,
   setCancelPin, hasCancelPin,
   updateOrderSettings, updateBusinessSettings, updateCustomerConfig,
@@ -181,10 +182,35 @@ function FiscalSection({ business, refreshBusiness }) {
 
 // ---------- Retenciones ----------
 function RetentionSection({ business, refreshBusiness }) {
+  const ask = useConfirm();
   const [lastSeq, setLastSeq] = useState(String(business.withholding_seq - 1));
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  // El sello se guarda al momento, no con el botón de abajo: es una imagen, no
+  // un campo del formulario.
+  async function onPickStamp(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(null); setUploading(true);
+    try {
+      await setStampUrl(await uploadStamp(business.id, file));
+      await refreshBusiness();
+    } catch (err) { setError(err.message); } finally { setUploading(false); }
+  }
+  async function onClearStamp() {
+    if (!await ask({
+      title: '¿Quitar el sello?',
+      message: 'Los comprobantes marcados con sello dejarán de mostrarlo hasta que cargues otro.',
+      confirmLabel: 'Quitar sello',
+    })) return;
+    setError(null);
+    try { await setStampUrl(''); await refreshBusiness(); }
+    catch (err) { setError(err.message); }
+  }
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -214,6 +240,31 @@ function RetentionSection({ business, refreshBusiness }) {
             : String(business.withholding_seq).padStart(8, '0')}.
           Si ya emitiste retenciones fuera del sistema (por ejemplo, van 137), colócalo aquí y la siguiente será la 138.
         </p>
+      </section>
+      <section className="card vsection">
+        <h2>Sello de la empresa</h2>
+        <p className="hint">
+          Al emitir o editar un comprobante eliges si lleva el sello; cuando lo lleva, se
+          imprime en la esquina inferior derecha. Usa un PNG con el fondo transparente para
+          que se vea como un sello puesto sobre el papel y no como un recuadro blanco.
+        </p>
+        <div className="asset-field">
+          <div className="asset-row">
+            <span className="asset-preview sello-preview">
+              {business.stamp_url
+                ? <img src={business.stamp_url} alt="Sello de la empresa" />
+                : <span className="asset-empty">Sin sello</span>}
+            </span>
+            <label className={`btn ghost sm${uploading ? ' disabled' : ''}`}>
+              {uploading ? 'Subiendo…' : (business.stamp_url ? 'Cambiar' : 'Subir sello')}
+              <input type="file" accept="image/png,image/webp" hidden
+                disabled={uploading} onChange={onPickStamp} />
+            </label>
+            {business.stamp_url && !uploading && (
+              <button type="button" className="btn ghost sm" onClick={onClearStamp}>Quitar</button>
+            )}
+          </div>
+        </div>
       </section>
       {error && <div className="form-error">{error}</div>}
       {saved && <div className="form-ok">Datos guardados.</div>}
