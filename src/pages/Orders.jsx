@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import {
   fetchProducts, fetchTaxonomies, fetchBankAccounts, fetchCustomers,
-  createCustomer, createOrder, fetchOrder, mediaUrl,
+  createCustomer, createOrder, fetchOrder, mediaUrl, fetchOpenCashSession,
 } from '../lib/api';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { notifySale } from '../lib/push';
@@ -242,10 +242,12 @@ function PayAmountRow({
 }
 
 export default function Orders() {
-  const { business } = useAuth();
+  const { business, capabilities, permissions, isBusinessAdmin } = useAuth();
   const { branchId, currentBranch, branches } = useBranch();
   const [products, setProducts] = useState(null);
   const [taxonomies, setTaxonomies] = useState([]);
+  // Si la caja está cerrada, lo que se venda no entra en el cierre del día.
+  const [cajaCerrada, setCajaCerrada] = useState(false);
   const [methods, setMethods] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [rates, setRates] = useState(null);
@@ -272,6 +274,12 @@ export default function Orders() {
   const [initialPct, setInitialPct] = useState({});    // { methodId: '% inicial' } en Cashea
   const [busy, setBusy] = useState(false);
   const [finished, setFinished] = useState(null);      // pedido guardado (con ítems/pagos)
+
+  const puedeCaja = capabilities.cash && (isBusinessAdmin || !!permissions?.cash);
+  useEffect(() => {
+    if (!puedeCaja || !branchId) return;
+    fetchOpenCashSession(branchId).then((s) => setCajaCerrada(!s)).catch(() => {});
+  }, [puedeCaja, branchId]);
 
   useEffect(() => {
     Promise.all([fetchProducts(), fetchTaxonomies(), fetchBankAccounts(), fetchCustomers()])
@@ -559,6 +567,13 @@ export default function Orders() {
       </header>
 
       {error && <div className="form-error no-print">{error}</div>}
+
+      {cajaCerrada && (
+        <div className="pos-cash-warn no-print">
+          La caja está cerrada: lo que vendas ahora no va a entrar en el cierre del día.{' '}
+          <Link to="/cash">Abrir caja</Link>
+        </div>
+      )}
 
       <div className="pos">
         {/* -------- Área principal: catálogo o resumen -------- */}

@@ -641,6 +641,13 @@ function BankAccountsManager({ business }) {
       patchAccount(a.id, (x) => ({ ...u, payment_methods: x.payment_methods }));
     } catch (e) { setError(e.message); }
   }
+  // Las cuentas de efectivo son las que se cuentan en el arqueo del cierre de
+  // caja; las demás solo quedan como referencia de lo que entró por ahí.
+  async function toggleCash(a) {
+    try { const u = await updateBankAccount(a.id, { is_cash: !a.is_cash });
+      patchAccount(a.id, (x) => ({ ...u, payment_methods: x.payment_methods }));
+    } catch (e) { setError(e.message); }
+  }
   async function saveAccountEdit() {
     const name = (edit.name || '').trim(); if (!name) { setEdit(null); return; }
     try { const u = await updateBankAccount(edit.id, { name });
@@ -685,6 +692,11 @@ function BankAccountsManager({ business }) {
         usa como forma de pago al cobrar.
       </p>
       <p className="hint">
+        Marca como <strong>efectivo</strong> las cuentas que son dinero en mano: son las que se
+        cuentan al cerrar la caja. Las demás quedan en el cierre como referencia de lo que
+        entró por ese medio.
+      </p>
+      <p className="hint">
         Un método marcado como <strong>compra a cuotas (Cashea)</strong> es el que recibe la parte
         que financia Cashea: al cobrar eliges el nivel del cliente y el POS deja ahí el resto de
         la inicial. Esa parte no recibe el descuento por pago en divisa.
@@ -702,6 +714,10 @@ function BankAccountsManager({ business }) {
                 <div className="acct-title">
                   <strong>{a.name}</strong>
                   <span className="badge adjustment">{a.currency === 'USD' ? 'Dólares' : 'Bolívares'}</span>
+                  <label className="acct-cash" title="Se cuenta al cerrar la caja">
+                    <input type="checkbox" checked={!!a.is_cash} onChange={() => toggleCash(a)} />
+                    Efectivo
+                  </label>
                 </div>
               )}
               <div className="acct-actions">
@@ -938,6 +954,7 @@ const ROLE_LABEL = { admin: 'Administrador', seller: 'Vendedora' };
 // Módulos de administración que el admin puede delegar a una vendedora.
 const PERM_OPTIONS = [
   ['inventory', 'Inventario'],
+  ['cash', 'Caja'],
   ['stats', 'Estadísticas'],
   ['retentions', 'Retenciones'],
 ];

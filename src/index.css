@@ -799,7 +799,59 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .img-thumb img { cursor: zoom-in; }
 .img-add { width: 76px; height: 76px; border: 1px dashed var(--border); border-radius: 10px; display: grid; place-items: center; cursor: pointer; color: var(--text-2); font-size: 13px; font-weight: 600; }
 .img-add:hover { border-color: var(--accent-line); color: var(--accent); }
+
+/* ---------- Caja: apertura, retiros y cierre ---------- */
+.pos-cash-warn {
+  background: var(--danger-bg); color: var(--danger); border-radius: var(--radius-sm);
+  padding: 10px 14px; font-size: 13.5px; font-weight: 600; margin-bottom: 14px;
+}
+.pos-cash-warn a { color: inherit; }
+.cash-closed { padding: 28px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.cash-closed h2 { margin: 0; }
+.cash-closed .hint { margin: 0; max-width: 56ch; }
+.cash-bar {
+  padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; flex-wrap: wrap;
+}
+.cash-since { margin-left: 8px; }
+/* Lo que debería haber en cada caja de efectivo, con su desglose debajo. */
+.cash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.cash-cell {
+  background: var(--bg); border-radius: var(--radius-sm); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.cash-cell-name { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.cash-cell-amount { font-size: 22px; font-variant-numeric: tabular-nums; }
+.cash-cell-detail { font-size: 12.5px; }
+.cash-move { align-items: baseline; gap: 12px; }
+.cash-move-right { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.cash-hist {
+  background: none; border: 0; padding: 8px 0; width: 100%; cursor: pointer;
+  text-align: left; font: inherit; color: var(--text-2); border-bottom: 1px solid var(--border);
+}
+.cash-hist:last-child { border-bottom: 0; }
+.cash-hist:hover { color: var(--text); }
+/* Una fila del arqueo: cuánto debería haber, cuánto se contó y la diferencia. */
+.arqueo-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.arqueo-name { display: flex; flex-direction: column; flex: 1 1 160px; }
+.arqueo-name .muted { font-size: 12.5px; }
+.arqueo-row input { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+.arqueo-dif { flex: 0 0 auto; font-size: 13px; font-weight: 600; color: var(--text-2); min-width: 100px; }
+.arqueo-dif.ok { color: var(--ok); }
+.arqueo-dif.bad { color: var(--danger); }
+.acct-cash {
+  display: inline-flex; flex-direction: row; align-items: center; gap: 5px; flex: none;
+  white-space: nowrap; font-size: 12.5px; color: var(--text-2); cursor: pointer;
+}
+.acct-cash input { flex: 0 0 auto; width: 15px; height: 15px; margin: 0; }
+
 @media (max-width: 640px) {
+  .cash-bar { flex-direction: column; align-items: stretch; }
+  .arqueo-row { gap: 8px; }
+  .arqueo-row input { flex: 1 1 auto; width: auto; }
+  .arqueo-dif { flex: 1 0 100%; min-width: 0; }
+  .cash-move { flex-direction: column; align-items: stretch; gap: 4px; }
+  .cash-move-right { justify-content: space-between; }
   .vb-card { flex-direction: column; }
   .vb-photo { flex: 0 0 72px; width: 72px; height: 72px; }
   .chip-add input { width: 120px; }
