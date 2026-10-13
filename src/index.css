@@ -425,6 +425,32 @@ a.icon-btn { text-decoration: none; }
   overflow-x: auto;
 }
 
+/* Elegir el sello: casilla en el formulario y en la vista del comprobante */
+.sello-check {
+  display: flex; flex-direction: row; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--bg); border-radius: var(--radius-sm);
+}
+.sello-check input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; }
+.sello-check-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.sello-check-text .hint { font-weight: 400; }
+.sello-mini { flex: 0 0 auto; width: 84px; height: auto; }
+.sello-toggle {
+  display: inline-flex; flex-direction: row; align-items: center; gap: 6px;
+  font-size: 13.5px; font-weight: 600; color: var(--text-2); cursor: pointer; white-space: nowrap;
+}
+.sello-toggle input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; }
+/* El sello es apaisado: su vista previa necesita ancho, no un cuadrado. */
+.sello-preview { width: 190px; height: 62px; flex: 0 0 190px; background: #fff; }
+.sello-preview img { width: auto; height: auto; max-width: 92%; max-height: 82%; }
+
+/* La hoja envuelve la tabla y mide exactamente lo mismo, para poder colgar el
+   sello de su esquina sin tocar ni una celda del formato. */
+.hoja { position: relative; width: 100%; min-width: 900px; }
+.sello {
+  position: absolute; right: 0; bottom: 7mm; width: 48mm; max-width: 32%;
+  height: auto; opacity: .92; pointer-events: none;
+}
+
 /* Tamaños = los del sheet escalados a ~72% para llenar carta horizontal
    (11pt→10.5px, 18pt→17px, 9pt→8.5px, 12pt→12px) */
 table.sheet { width: 100%; min-width: 900px; border-collapse: collapse; table-layout: fixed; }
@@ -1285,7 +1311,7 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   /* Margen de página 0: elimina el encabezado/pie del navegador (fecha,
      título y URL). Los márgenes del documento pasan a ser padding propio. */
   .comprobante { border: none; border-radius: 0; padding: 16mm 22mm; overflow: visible; }
-  table.sheet { min-width: 0; }
+  table.sheet, .hoja { min-width: 0; }
   @page { size: legal landscape; margin: 0; }
 
   /* Recibo de pedido: página con nombre propio (no afecta el @page del comprobante) */

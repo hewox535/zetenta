@@ -692,3 +692,29 @@ export async function countOrphanOrders(branchId, sinceISO) {
   if (error) throw new Error(error.message);
   return count || 0;
 }
+
+// ---------- Sello del negocio en los comprobantes de retención ----------
+
+// Sube la imagen del sello a la carpeta del negocio. Se guarda como PNG para
+// conservar el fondo transparente: así se ve como un sello puesto sobre el
+// papel y no como un recuadro blanco encima del formato.
+export async function uploadStamp(businessId, file) {
+  const blob = await toPngBlob(file, 1000);
+  const path = `${businessId}/sello-${crypto.randomUUID()}.png`;
+  const { error } = await supabase.storage.from('stamps')
+    .upload(path, blob, { contentType: 'image/png', upsert: false });
+  if (error) throw new Error(error.message);
+  return supabase.storage.from('stamps').getPublicUrl(path).data.publicUrl;
+}
+
+// Guarda el sello del negocio; con '' se quita.
+export async function setStampUrl(url) {
+  return unwrap(await supabase.rpc('set_stamp_url', { p_url: url || '' }));
+}
+
+// Si ESE comprobante se imprime con el sello. Va aparte de update_withholding
+// porque es presentación, no contenido fiscal: ponerle el sello a uno viejo no
+// reescribe sus líneas ni toca el correlativo.
+export async function setWithholdingStamped(id, stamped) {
+  return unwrap(await supabase.rpc('set_withholding_stamped', { p_id: id, p_stamped: !!stamped }));
+}
