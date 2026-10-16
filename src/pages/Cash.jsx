@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import { useConfirm } from '../components/Confirm';
+import OpenCashModal from '../components/OpenCashModal';
 import {
   fetchOpenCashSession, fetchCashSessions, fetchCashReport, fetchBankAccounts,
-  openCashSession, closeCashSession, addCashMovement, deleteCashMovement,
+  closeCashSession, addCashMovement, deleteCashMovement,
   countOrphanOrders, fetchStaff,
 } from '../lib/api';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
@@ -30,7 +31,7 @@ export default function Cash() {
   const [orphans, setOrphans] = useState(0);
   const [error, setError] = useState(null);
 
-  const [opening, setOpening] = useState(null);        // { amounts:{id:val}, note, busy, error }
+  const [opening, setOpening] = useState(null);        // abierto = modal de apertura
   const [move, setMove] = useState(null);              // { direction, accountId, amount, reason, busy, error }
   const [closing, setClosing] = useState(null);        // { counted:{id:val}, note, busy, error }
   const [detail, setDetail] = useState(null);          // cierre del historial que se está viendo
@@ -70,18 +71,6 @@ export default function Cash() {
   );
 
   // ---------- acciones ----------
-  async function onOpen(e) {
-    e.preventDefault();
-    setOpening((o) => ({ ...o, busy: true, error: null }));
-    try {
-      await openCashSession(branchId,
-        cashAccounts.map((a) => ({ account_id: a.id, amount: num(opening.amounts[a.id]) || 0 })),
-        opening.note);
-      setOpening(null);
-      await load();
-    } catch (err) { setOpening((o) => ({ ...o, busy: false, error: err.message })); }
-  }
-
   async function onMove(e) {
     e.preventDefault();
     setMove((m) => ({ ...m, busy: true, error: null }));
@@ -284,45 +273,8 @@ export default function Cash() {
 
       {/* -------- Abrir caja -------- */}
       {opening && (
-        <div className="modal-backdrop" onClick={() => !opening.busy && setOpening(null)}>
-          <div className="modal card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h2>Abrir caja</h2>
-              <button type="button" className="btn ghost sm" disabled={opening.busy}
-                onClick={() => setOpening(null)}>Cerrar</button>
-            </div>
-            <p className="hint">
-              Cuenta lo que hay ahora mismo en la caja: es el fondo con el que arranca el día.
-              Déjalo en cero si empiezas sin efectivo.
-            </p>
-            <form onSubmit={onOpen} className="vform">
-              {cashAccounts.length === 0 ? (
-                <p className="hint">
-                  Ninguna cuenta está marcada como efectivo; la caja se abre sin fondo.
-                  Puedes marcarlas en <Link to="/settings">Negocio → Cuentas</Link>.
-                </p>
-              ) : cashAccounts.map((a) => (
-                <label key={a.id}>
-                  <span>{a.name} <span className="muted">en {a.currency === 'USD' ? 'dólares' : 'bolívares'}</span></span>
-                  <input inputMode="decimal" placeholder="0" value={opening.amounts[a.id] ?? ''}
-                    onChange={(e) => setOpening((o) => ({ ...o, amounts: { ...o.amounts, [a.id]: e.target.value } }))} />
-                </label>
-              ))}
-              <label>Nota (opcional)
-                <input value={opening.note} placeholder="Turno de la mañana…"
-                  onChange={(e) => setOpening((o) => ({ ...o, note: e.target.value }))} />
-              </label>
-              {opening.error && <div className="form-error">{opening.error}</div>}
-              <div className="inline-form-actions">
-                <button className="btn primary" disabled={opening.busy}>
-                  {opening.busy ? 'Abriendo…' : 'Abrir caja'}
-                </button>
-                <button type="button" className="btn ghost" disabled={opening.busy}
-                  onClick={() => setOpening(null)}>Volver</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <OpenCashModal branchId={branchId} onClose={() => setOpening(null)}
+          onOpened={async () => { setOpening(null); await load(); }} />
       )}
 
       {/* -------- Retiro / aporte -------- */}

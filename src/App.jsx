@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BranchProvider } from './context/BranchContext';
 import { BrandingProvider, useBranding } from './context/BrandingContext';
@@ -46,6 +46,18 @@ function BrandGate({ children }) {
 function RequirePublicSignup({ children }) {
   const { businessId } = useBranding();
   if (businessId) return <Navigate to="/login" replace />;
+  return children;
+}
+
+// En el dominio de un negocio, la entrada (/) es su catálogo público; el panel
+// queda detrás de /login. Quien ya tiene sesión sigue entrando directo al panel.
+function RootGate({ children }) {
+  const { loading, session } = useAuth();
+  const { businessId } = useBranding();
+  const { pathname } = useLocation();
+  if (pathname !== '/') return children;
+  if (loading) return <Splash />;
+  if (!session && businessId) return <Navigate to="/catalogo" replace />;
   return children;
 }
 
@@ -113,7 +125,7 @@ export default function App() {
           <Route path="/register" element={<RequirePublicSignup><Register /></RequirePublicSignup>} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/" element={<RequireAuth><Shell /></RequireAuth>}>
+          <Route path="/" element={<RootGate><RequireAuth><Shell /></RequireAuth></RootGate>}>
             <Route index element={<Home />} />
             <Route path="retentions" element={<RequirePermission name="retentions"><RequireCapability name="retentions"><Retentions /></RequireCapability></RequirePermission>} />
             <Route path="retentions/new" element={<RequirePermission name="retentions"><RequireCapability name="retentions"><RetentionNew /></RequireCapability></RequirePermission>} />

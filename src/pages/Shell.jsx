@@ -61,17 +61,17 @@ export default function Shell() {
   if (capabilities.orders) {
     items.push({ to: '/orders', label: 'Ventas', icon: Icon.cart });
   }
-  if (capabilities.customers) {
-    items.push({ to: '/customers', label: 'Clientes', icon: Icon.user });
-  }
   // Módulos de administración del negocio: para el admin, o para la vendedora
   // con el permiso otorgado en Negocio → Personal.
   const canModule = (name) => capabilities[name] && (isBusinessAdmin || !!permissions?.[name]);
-  if (canModule('inventory')) {
-    items.push({ to: '/inventory', label: 'Inventario', icon: Icon.box });
-  }
   if (canModule('cash')) {
     items.push({ to: '/cash', label: 'Caja', icon: Icon.cash });
+  }
+  if (capabilities.customers) {
+    items.push({ to: '/customers', label: 'Clientes', icon: Icon.user });
+  }
+  if (canModule('inventory')) {
+    items.push({ to: '/inventory', label: 'Inventario', icon: Icon.box });
   }
   if (canModule('stats')) {
     items.push({ to: '/stats', label: 'Estadísticas', icon: Icon.chart });

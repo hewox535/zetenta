@@ -129,7 +129,9 @@ export default function Catalog() {
       ? <Notice title="Tienda no encontrada" text="Esta dirección no corresponde a ningún catálogo." />
       : <Skeleton />;
   } else if (status === 'loading') body = <Skeleton />;
-  else if (status === 'off') body = <Notice title="Catálogo no disponible" text={`${store.name} aún no ha publicado su catálogo. Vuelve pronto.`} />;
+  else if (status === 'off') body = <Notice title="Catálogo no disponible" text={`${store.name} aún no ha publicado su catálogo. Vuelve pronto.`}>
+      <Link className="cat-btn" to="/login">Acceso del negocio</Link>
+    </Notice>;
   else if (status === 'error') {
     body = (
       <Notice title="No pudimos cargar el catálogo" text="Revisa tu conexión e inténtalo de nuevo.">
@@ -173,7 +175,7 @@ export default function Catalog() {
               <a href={whatsappLink(catalog.whatsapp, `Hola ${store.name}, vi su catálogo y quisiera más información.`)}
                 target="_blank" rel="noreferrer">Escríbenos por WhatsApp</a>
             )}
-            <small>© {new Date().getFullYear()} {store.name}</small>
+            <small>© {new Date().getFullYear()} {store.name} · <Link to="/login">Acceso del negocio</Link></small>
           </div>
         </footer>
       )}
