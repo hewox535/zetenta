@@ -718,3 +718,30 @@ export async function setStampUrl(url) {
 export async function setWithholdingStamped(id, stamped) {
   return unwrap(await supabase.rpc('set_withholding_stamped', { p_id: id, p_stamped: !!stamped }));
 }
+
+// ---------- Catálogo público ----------
+
+// Ajustes del catálogo del negocio (solo administrador): publicado o no,
+// WhatsApp de contacto y frase bajo el título.
+export async function setCatalogSettings({ enabled, whatsapp, tagline }) {
+  return unwrap(await supabase.rpc('set_catalog_settings', {
+    p_enabled: !!enabled, p_whatsapp: whatsapp || '', p_tagline: tagline || '',
+  }));
+}
+
+// Catálogo público de un negocio (sin sesión). Devuelve null si el negocio no
+// lo ha publicado. Nunca trae stock: solo disponible/agotado por variante.
+export async function fetchPublicCatalog(businessId) {
+  const { data, error } = await supabase.rpc('get_public_catalog', { p_business: businessId });
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
+// Resuelve la marca de un negocio por slug (para ver su catálogo desde el
+// dominio de la plataforma con ?tienda=slug, cuando no hay dominio propio).
+export async function fetchBrandBySlug(slug) {
+  const { data, error } = await supabase.rpc('get_branding', { p_host: `${slug}.x` });
+  if (error) throw new Error(error.message);
+  const b = Array.isArray(data) ? data[0] : data;
+  return b || null;
+}

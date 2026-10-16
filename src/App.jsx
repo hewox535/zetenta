@@ -24,6 +24,9 @@ import Cash from './pages/Cash';
 import Settings from './pages/Settings';
 import Account from './pages/Account';
 import Admin from './pages/Admin';
+import Catalog from './pages/catalog/Catalog';
+import CatalogHome from './pages/catalog/CatalogHome';
+import CatalogProduct from './pages/catalog/CatalogProduct';
 
 function Splash() {
   return <div className="splash"><Brand className="splash-brand" /></div>;
@@ -101,6 +104,11 @@ export default function App() {
       <ConfirmProvider>
       <BrowserRouter>
         <Routes>
+          {/* Catálogo público: sin sesión, con la marca del dominio */}
+          <Route path="/catalogo" element={<Catalog />}>
+            <Route index element={<CatalogHome />} />
+            <Route path=":id" element={<CatalogProduct />} />
+          </Route>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<RequirePublicSignup><Register /></RequirePublicSignup>} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

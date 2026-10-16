@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
+import { useBranding } from '../context/BrandingContext';
 import {
   updateBusinessProfile, setWithholdingSeq,
   fetchTaxonomies, createTaxonomy, deleteTaxonomy, createTerm, updateTerm, deleteTerm,
@@ -12,7 +13,7 @@ import {
   fetchBranches, createBranch, updateBranch, deleteBranch,
   fetchUserBranches, setUserBranches,
   fetchStaff, createStaff, deleteStaff, setStaffRole, setStaffPermissions,
-  updateNotificationPrefs,
+  updateNotificationPrefs, setCatalogSettings,
 } from '../lib/api';
 import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/push';
 import { fetchBcvRates } from '../lib/rates';
@@ -38,6 +39,7 @@ export default function Settings() {
     { key: 'fiscal', label: 'Datos fiscales' },
     capabilities?.retentions && { key: 'retentions', label: 'Retenciones' },
     capabilities?.inventory && { key: 'inventory', label: 'Inventario' },
+    capabilities?.inventory && { key: 'catalog', label: 'Catálogo' },
     { key: 'branches', label: 'Sucursales' },
     capabilities?.orders && { key: 'orders', label: 'Ventas' },
     { key: 'staff', label: 'Personal' },
@@ -63,6 +65,7 @@ export default function Settings() {
       {section === 'fiscal' && <FiscalSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'retentions' && <RetentionSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'inventory' && <InventorySection business={business} refreshBusiness={refreshBusiness} />}
+      {section === 'catalog' && <CatalogSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'branches' && <BranchesSection business={business} />}
       {section === 'orders' && <OrdersSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'staff' && <StaffSection profile={profile} />}
@@ -268,6 +271,95 @@ function RetentionSection({ business, refreshBusiness }) {
       </section>
       {error && <div className="form-error">{error}</div>}
       {saved && <div className="form-ok">Datos guardados.</div>}
+      <button className="btn primary lg block" disabled={busy}>{busy ? 'Guardando…' : 'Guardar cambios'}</button>
+    </form>
+  );
+}
+
+// ---------- Catálogo público ----------
+// El catálogo vive en /catalogo del dominio del negocio. Aquí se publica o se
+// oculta, se pone el WhatsApp al que escriben los clientes y se copia el enlace.
+function CatalogSection({ business, refreshBusiness }) {
+  const { businessId } = useBranding();
+  const [enabled, setEnabled] = useState(!!business.catalog_enabled);
+  const [whatsapp, setWhatsapp] = useState(business.catalog_whatsapp || '');
+  const [tagline, setTagline] = useState(business.catalog_tagline || '');
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // En el dominio del negocio el enlace es /catalogo; en el de la plataforma
+  // se apoya en el slug. Sin ninguno de los dos no hay a dónde apuntar.
+  const path = businessId === business.id ? '/catalogo'
+    : business.slug ? `/catalogo?tienda=${encodeURIComponent(business.slug)}` : null;
+  const link = path ? `${window.location.origin}${path}` : null;
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    setError(null); setSaved(false); setBusy(true);
+    try {
+      await setCatalogSettings({ enabled, whatsapp, tagline });
+      await refreshBusiness();
+      setSaved(true);
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+  async function copy() {
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    catch { /* sin portapapeles */ }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="vform">
+      <section className="card vsection">
+        <h2>Catálogo público</h2>
+        <p className="hint">
+          Una vitrina con la marca de tu negocio para compartir con tus clientes: ven tus productos,
+          sus variantes y si están <strong>disponibles o agotados</strong>. Nunca se muestran
+          cantidades de stock, costos ni notas internas.
+        </p>
+        <PermSwitch label="Publicar el catálogo" hint="Apagado, el enlace muestra que el catálogo no está disponible."
+          on={enabled} onToggle={() => { setEnabled((v) => !v); setSaved(false); }} />
+      </section>
+
+      <section className="card vsection">
+        <h2>Contacto y portada</h2>
+        <label>
+          WhatsApp de ventas
+          <input type="tel" inputMode="tel" placeholder="584141234567" value={whatsapp}
+            onChange={(e) => { setWhatsapp(e.target.value); setSaved(false); }} />
+        </label>
+        <p className="hint">
+          Con código de país y sin signos (Venezuela: 58 + número sin el 0). Con él, cada producto muestra
+          el botón “Pedir por WhatsApp” con el producto y la variante ya escritos.
+        </p>
+        <label>
+          Frase bajo el título
+          <input type="text" maxLength={140} placeholder="Ropa para cada momento" value={tagline}
+            onChange={(e) => { setTagline(e.target.value); setSaved(false); }} />
+        </label>
+      </section>
+
+      <section className="card vsection">
+        <h2>Enlace para compartir</h2>
+        {link ? (
+          <>
+            <div className="asset-row">
+              <input readOnly value={link} onFocus={(e) => e.target.select()} aria-label="Enlace del catálogo" />
+              <button type="button" className="btn ghost sm" onClick={copy}>{copied ? 'Copiado' : 'Copiar'}</button>
+              <a className="btn ghost sm" href={link} target="_blank" rel="noreferrer">Abrir</a>
+            </div>
+            <p className="hint">
+              {enabled && business.catalog_enabled ? 'Listo para compartir.' : 'Guarda con el catálogo publicado para que el enlace funcione.'}
+            </p>
+          </>
+        ) : (
+          <p className="hint">Este negocio aún no tiene dominio ni subdominio configurado; pídele al administrador de la plataforma que lo asigne para generar el enlace.</p>
+        )}
+      </section>
+
+      {error && <div className="form-error">{error}</div>}
+      {saved && <div className="form-ok">Catálogo actualizado.</div>}
       <button className="btn primary lg block" disabled={busy}>{busy ? 'Guardando…' : 'Guardar cambios'}</button>
     </form>
   );
