@@ -81,15 +81,21 @@ export function BrandingProvider({ children }) {
       root.style.setProperty('--accent-line', `color-mix(in srgb, ${branding.accent} 40%, transparent)`);
     }
 
+    // El catálogo público es de cara al cliente: su título, descripción y la
+    // app instalada son la tienda, no el panel "Admin".
+    const store = window.location.pathname.startsWith('/catalogo');
+
     // Identidad dinámica: título, favicon y meta de SEO reflejan el negocio del dominio
-    document.title = `${title} Admin`;
-    const description = branded
+    document.title = store ? `${title} · Catálogo` : `${title} Admin`;
+    const description = store
+      ? `Catálogo de ${title}: conoce los productos y su disponibilidad.`
+      : branded
       ? `${branding.name} — pedidos, inventario y gestión de tu negocio.`
       : 'Zetenta — gestión de negocio: pedidos, inventario, retenciones y estadísticas en un solo lugar.';
 
     // Nombre al agregar a pantalla de inicio: "Marca Admin" (la app instalada
     // es el panel del negocio, no su tienda).
-    const appName = `${title} Admin`;
+    const appName = store ? title : `${title} Admin`;
 
     setMeta('name', 'description', description);
     setMeta('name', 'theme-color', accent);
@@ -120,7 +126,7 @@ export function BrandingProvider({ children }) {
       const manifest = {
         name: appName,
         short_name: appName,
-        start_url: `${window.location.origin}/`,
+        start_url: `${window.location.origin}/${store ? 'catalogo' : ''}`,
         scope: `${window.location.origin}/`,
         display: 'standalone',
         background_color: '#ffffff',
