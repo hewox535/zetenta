@@ -112,12 +112,12 @@ function Home() {
 
 export default function App() {
   return (
+    <BrowserRouter>
     <BrandingProvider>
     <BrandGate>
     <AuthProvider>
       <BranchProvider>
       <ConfirmProvider>
-      <BrowserRouter>
         <Routes>
           {/* Catálogo público: sin sesión, con la marca del dominio */}
           <Route path="/catalogo" element={<Catalog />}>
@@ -149,11 +149,11 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
-      </BrowserRouter>
       </ConfirmProvider>
       </BranchProvider>
     </AuthProvider>
     </BrandGate>
     </BrandingProvider>
+    </BrowserRouter>
   );
 }
