@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useOutletContext, useParams } from 'react-router-dom';
+import { Link, Navigate, useOutletContext, useParams } from 'react-router-dom';
 import { Icon } from './Catalog';
 import { ProductCard, Swatch } from './CatalogHome';
 import {
@@ -88,9 +88,13 @@ function Option({ axis, value, selected, available, onPick }) {
 }
 
 export default function CatalogProduct() {
-  const { id } = useParams();
+  const { id: param } = useParams();
   const { store, catalog, href, goBack } = useOutletContext();
-  const product = useMemo(() => catalog.products.find((p) => p.id === id), [catalog, id]);
+  // La URL lleva el slug del nombre; los enlaces viejos con id siguen sirviendo.
+  const product = useMemo(
+    () => catalog.products.find((p) => p.slug === param) || catalog.products.find((p) => p.id === param),
+    [catalog, param],
+  );
 
   if (!product) {
     return (
@@ -104,6 +108,7 @@ export default function CatalogProduct() {
       </div>
     );
   }
+  if (product.slug && param !== product.slug) return <Navigate to={href(`/catalogo/${product.slug}`)} replace />;
   return <ProductView key={product.id} product={product} store={store} catalog={catalog} href={href} goBack={goBack} />;
 }
 

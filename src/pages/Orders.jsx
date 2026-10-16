@@ -10,6 +10,7 @@ import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { notifySale } from '../lib/push';
 import { usd, bs, money, variantLabel, offerPrice } from '../lib/calc';
 import OrderReceipt from '../components/OrderReceipt';
+import OpenCashModal from '../components/OpenCashModal';
 
 const EMPTY_CUST = { name: '', document: '', phone: '', email: '' };
 
@@ -248,6 +249,7 @@ export default function Orders() {
   const [taxonomies, setTaxonomies] = useState([]);
   // Si la caja está cerrada, lo que se venda no entra en el cierre del día.
   const [cajaCerrada, setCajaCerrada] = useState(false);
+  const [openingCash, setOpeningCash] = useState(false);
   const [methods, setMethods] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [rates, setRates] = useState(null);
@@ -571,8 +573,12 @@ export default function Orders() {
       {cajaCerrada && (
         <div className="pos-cash-warn no-print">
           La caja está cerrada: lo que vendas ahora no va a entrar en el cierre del día.{' '}
-          <Link to="/cash">Abrir caja</Link>
+          <button type="button" className="link-btn" onClick={() => setOpeningCash(true)}>Abrir caja</button>
         </div>
+      )}
+      {openingCash && (
+        <OpenCashModal branchId={branchId} onClose={() => setOpeningCash(false)}
+          onOpened={() => { setOpeningCash(false); setCajaCerrada(false); }} />
       )}
 
       <div className="pos">
