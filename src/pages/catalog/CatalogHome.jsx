@@ -28,7 +28,7 @@ export function ProductCard({ product, href, index = 0, onOpen }) {
   const sizes = sizeAxis ? axisOptions(product, sizeAxis) : [];
 
   return (
-    <Link to={href(`/catalogo/${product.id}`)} onClick={onOpen} className={`cat-card${sold ? ' sold' : ''}`}
+    <Link to={href(`/catalogo/${product.slug || product.id}`)} onClick={onOpen} className={`cat-card${sold ? ' sold' : ''}`}
       style={{ '--i': Math.min(index, 12) }}>
       <div className="cat-card-media">
         {img

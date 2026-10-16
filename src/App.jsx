@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BranchProvider } from './context/BranchContext';
 import { BrandingProvider, useBranding } from './context/BrandingContext';
+import { isStandalone } from './lib/pwa';
 import Brand from './components/Brand';
 import { ConfirmProvider } from './components/Confirm';
 import Login from './pages/Login';
@@ -57,7 +58,9 @@ function RootGate({ children }) {
   const { pathname } = useLocation();
   if (pathname !== '/') return children;
   if (loading) return <Splash />;
-  if (!session && businessId) return <Navigate to="/catalogo" replace />;
+  // App instalada en el celular (modo standalone): se comporta como panel, no
+  // como vitrina, así que sin sesión va siempre al login.
+  if (!session && businessId && !isStandalone()) return <Navigate to="/catalogo" replace />;
   return children;
 }
 
