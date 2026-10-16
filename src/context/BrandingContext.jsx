@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 
 // White label por dominio: al arrancar resolvemos window.location.hostname → marca
@@ -39,6 +40,9 @@ function setMeta(attr, key, value) {
 }
 
 export function BrandingProvider({ children }) {
+  // Vuelve a pintar título/manifest al navegar: tras la redirección / → /catalogo
+  // la identidad pasa de "Panel" a "Tienda".
+  const { pathname } = useLocation();
   const cached = readCache();
   const [branding, setBranding] = useState(
     cached ? { ...DEFAULT, ...cached, ready: false, fromCache: true }
@@ -83,7 +87,7 @@ export function BrandingProvider({ children }) {
 
     // El catálogo público es de cara al cliente: su título, descripción y la
     // app instalada son la tienda, no el panel "Admin".
-    const store = window.location.pathname.startsWith('/catalogo');
+    const store = pathname.startsWith('/catalogo');
 
     // Identidad dinámica: título, favicon y meta de SEO reflejan el negocio del dominio
     document.title = store ? `${title} · Catálogo` : `${title} Admin`;
@@ -143,7 +147,7 @@ export function BrandingProvider({ children }) {
       if (mlink.href.startsWith('blob:')) URL.revokeObjectURL(mlink.href);
       mlink.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
     }
-  }, [branding]);
+  }, [branding, pathname]);
 
   return <BrandingContext.Provider value={branding}>{children}</BrandingContext.Provider>;
 }
