@@ -7,6 +7,8 @@ import {
 import { calcLine, calcTotals, money, todayISO } from '../lib/calc';
 import { useAuth } from '../context/AuthContext';
 
+const MAX_LINES = 5;
+
 const EMPTY_LINE = {
   operation_date: '',
   invoice_number: '',
@@ -107,40 +109,91 @@ export default function RetentionNew() {
 
   const normalizeRif = (r) => String(r || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+  // Una factura "vacía" es la que aún no tiene ni número ni monto: ahí cae el
+  // siguiente escaneo; si todas tienen datos, se agrega una nueva.
+  const isBlank = (l) => !l.invoice_number && !(Number(l.total_with_vat) > 0);
+
+  // Datos leídos de la factura sobre una línea del formulario.
+  function applyExtract(l, x) {
+    return {
+      ...l,
+      invoice_number: x.invoice_number || l.invoice_number,
+      control_number: controlFormat(x.control_number || x.invoice_number) || l.control_number,
+      operation_date: /^\d{4}-\d{2}-\d{2}$/.test(x.invoice_date || '') ? x.invoice_date : l.operation_date,
+      total_with_vat: Number(x.total_with_vat) > 0 ? String(x.total_with_vat) : l.total_with_vat,
+      exempt_amount: Number(x.exempt_amount) > 0 ? String(x.exempt_amount) : l.exempt_amount,
+      vat_rate: ['8', '16', '31'].includes(String(Math.round(Number(x.vat_rate)))) ? String(Math.round(Number(x.vat_rate))) : l.vat_rate,
+    };
+  }
+
+  // Escanea una o varias fotos: cada factura leída se suma a la misma
+  // retención (en la primera línea libre, o en una nueva hasta el máximo).
   async function onScan(e) {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
-    if (!file) return;
+    if (!files.length) return;
     setScanning(true);
     setError(null);
     setScanNote(null);
     setPendingSupplier(null);
-    try {
-      const x = await extractInvoice(file);
-      setLines((prev) => prev.map((l, i) => (i === 0 ? {
-        ...l,
-        invoice_number: x.invoice_number || l.invoice_number,
-        control_number: controlFormat(x.control_number || x.invoice_number) || l.control_number,
-        operation_date: /^\d{4}-\d{2}-\d{2}$/.test(x.invoice_date || '') ? x.invoice_date : l.operation_date,
-        total_with_vat: Number(x.total_with_vat) > 0 ? String(x.total_with_vat) : l.total_with_vat,
-        exempt_amount: Number(x.exempt_amount) > 0 ? String(x.exempt_amount) : l.exempt_amount,
-        vat_rate: ['8', '16', '31'].includes(String(Math.round(Number(x.vat_rate)))) ? String(Math.round(Number(x.vat_rate))) : l.vat_rate,
-      } : l)));
-      const rif = normalizeRif(x.supplier_rif);
-      const match = rif && suppliers.find((s) => normalizeRif(s.rif) === rif);
-      if (match) {
-        setSupplierId(match.id);
-        setScanNote(`Factura leída. Proveedor: ${match.name}. Revisa los datos antes de emitir.`);
-      } else if (x.supplier_name && x.supplier_rif) {
-        setPendingSupplier({ name: x.supplier_name, rif: x.supplier_rif.toUpperCase() });
-      } else {
-        setScanNote('Factura leída, pero no se pudo identificar el proveedor; selecciónalo manualmente.');
+
+    const notes = [];
+    const problems = [];
+    let current = lines;        // espejo local para decidir sin esperar al render
+    let currentSupplier = supplierId;
+    let pending = null;
+    let added = 0;
+
+    for (const [n, file] of files.entries()) {
+      const label = files.length > 1 ? `Foto ${n + 1}: ` : '';
+      setScanNote(files.length > 1 ? `Leyendo factura ${n + 1} de ${files.length}…` : null);
+      try {
+        const x = await extractInvoice(file);
+        const invoice = String(x.invoice_number || '').trim();
+        if (invoice && current.some((l) => l.invoice_number.trim() === invoice)) {
+          problems.push(`${label}la factura Nº ${invoice} ya estaba en este comprobante.`);
+          continue;
+        }
+        let idx = current.findIndex(isBlank);
+        if (idx === -1) {
+          if (current.length >= MAX_LINES) {
+            problems.push(`${label}un comprobante admite máximo ${MAX_LINES} facturas; esta no se agregó.`);
+            continue;
+          }
+          current = [...current, { ...EMPTY_LINE, operation_date: issueDate }];
+          idx = current.length - 1;
+        }
+        current = current.map((l, i) => (i === idx ? applyExtract(l, x) : l));
+        setLines(current);
+        added += 1;
+
+        // Proveedor: el de la primera factura lo fija; las siguientes deben coincidir.
+        const rif = normalizeRif(x.supplier_rif);
+        const match = rif && suppliers.find((sp) => normalizeRif(sp.rif) === rif);
+        if (match && !currentSupplier) {
+          currentSupplier = match.id;
+          setSupplierId(match.id);
+          notes.push(`Proveedor: ${match.name}.`);
+        } else if (match && match.id !== currentSupplier) {
+          problems.push(`${label}la factura Nº ${invoice || 's/n'} es de ${match.name}, distinto al proveedor del comprobante. Revísala.`);
+        } else if (!match && x.supplier_name && x.supplier_rif && !currentSupplier && !pending) {
+          pending = { name: x.supplier_name, rif: x.supplier_rif.toUpperCase() };
+        }
+      } catch (err) {
+        problems.push(`${label}no se pudo leer la factura: ${err.message}`);
       }
-    } catch (err) {
-      setError(`No se pudo leer la factura: ${err.message}`);
-    } finally {
-      setScanning(false);
     }
+
+    if (pending) setPendingSupplier(pending);
+    if (added) {
+      const base = added > 1 ? `${added} facturas leídas.` : 'Factura leída.';
+      const noSupplier = !currentSupplier && !pending ? ' No se pudo identificar el proveedor; selecciónalo manualmente.' : '';
+      setScanNote(`${base} ${notes.join(' ')}${noSupplier} Revisa los datos antes de emitir.`.replace(/\s+/g, ' '));
+    } else {
+      setScanNote(null);
+    }
+    if (problems.length) setError(problems.join(' '));
+    setScanning(false);
   }
 
   async function onCreatePendingSupplier() {
@@ -202,12 +255,12 @@ export default function RetentionNew() {
           </p>
         </div>
         <div className="page-actions">
-          {!isEdit && (
-            <label className="btn primary">
-              {scanning ? 'Leyendo factura…' : '📷 Escanear factura'}
-              <input type="file" accept="image/*" hidden onChange={onScan} disabled={scanning} />
+          {lines.length < MAX_LINES || lines.some(isBlank) ? (
+            <label className="btn primary" title="Puedes elegir varias fotos a la vez; cada factura se suma al comprobante">
+              {scanning ? 'Leyendo factura…' : (lines.some((l) => !isBlank(l)) ? '📷 Escanear otra factura' : '📷 Escanear factura')}
+              <input type="file" accept="image/*" multiple hidden onChange={onScan} disabled={scanning} />
             </label>
-          )}
+          ) : null}
           <Link to={isEdit ? `/retentions/${id}` : '/retentions'} className="btn ghost">Cancelar</Link>
         </div>
       </header>
@@ -363,7 +416,7 @@ export default function RetentionNew() {
           );
         })}
 
-        {lines.length < 5 && (
+        {lines.length < MAX_LINES && (
           <button type="button" className="btn ghost add-line" onClick={() => setLines((prev) => [...prev, { ...EMPTY_LINE, operation_date: issueDate }])}>
             + Agregar otra factura
           </button>
