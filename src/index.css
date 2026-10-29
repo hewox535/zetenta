@@ -280,6 +280,7 @@ a.icon-btn { text-decoration: none; }
 .vsection h2 { margin-bottom: 2px; }
 .vsection-head { display: flex; justify-content: space-between; align-items: center; }
 .vsection-head h2 { margin: 0; }
+.line-actions { display: flex; gap: 6px; }
 .vgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
 /* Campo de imagen de marca (logo / favicon) en el panel admin */
