@@ -23,9 +23,14 @@ const EMPTY_LINE = {
   retention_rate: '75',
 };
 
+// Clave estable por factura para que React no mezcle su estado al reordenarlas.
+let nextKey = 0;
+const withKey = (l) => ({ ...l, key: `l${nextKey++}` });
+const blankLine = (date) => withKey({ ...EMPTY_LINE, operation_date: date });
+
 // Convierte una línea guardada (números y decimales) al formato del formulario.
 function lineToForm(l) {
-  return {
+  return withKey({
     operation_date: l.operation_date || '',
     invoice_number: l.invoice_number || '',
     control_number: l.control_number || '',
@@ -37,7 +42,7 @@ function lineToForm(l) {
     exempt_amount: Number(l.exempt_amount) ? String(Number(l.exempt_amount)) : '',
     vat_rate: String(Number(l.vat_rate) || 16),
     retention_rate: String(Number(l.retention_rate) || 75),
-  };
+  });
 }
 
 export default function RetentionNew() {
@@ -48,7 +53,7 @@ export default function RetentionNew() {
   const [suppliers, setSuppliers] = useState([]);
   const [supplierId, setSupplierId] = useState('');
   const [issueDate, setIssueDate] = useState(todayISO());
-  const [lines, setLines] = useState([{ ...EMPTY_LINE, operation_date: todayISO() }]);
+  const [lines, setLines] = useState(() => [blankLine(todayISO())]);
   const [number, setNumber] = useState(null); // Nº del comprobante en edición
   const [seq, setSeq] = useState(''); // correlativo editable (solo edición)
   const [stamped, setStamped] = useState(false); // si este comprobante lleva el sello
@@ -75,13 +80,25 @@ export default function RetentionNew() {
       setSeq(String(Number(w.number.slice(-8))));
       setStamped(!!w.stamped);
       const rows = (w.withholding_lines || []).slice().sort((a, b) => a.line_number - b.line_number);
-      setLines(rows.length ? rows.map(lineToForm) : [{ ...EMPTY_LINE, operation_date: w.issue_date }]);
+      setLines(rows.length ? rows.map(lineToForm) : [blankLine(w.issue_date)]);
       setLoaded(true);
     }).catch((e) => { setError(e.message); setLoaded(true); });
   }, [id, isEdit]);
 
   function setLine(i, field, value) {
     setLines((prev) => prev.map((l, j) => (j === i ? { ...l, [field]: value } : l)));
+  }
+
+  // Mueve una factura una posición arriba (-1) o abajo (+1); el orden de la
+  // lista es el orden en que salen en el comprobante.
+  function moveLine(i, dir) {
+    setLines((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
   }
 
   // La fecha de emisión es el default de la fecha de cada factura: al cambiarla
@@ -160,7 +177,7 @@ export default function RetentionNew() {
             problems.push(`${label}un comprobante admite máximo ${MAX_LINES} facturas; esta no se agregó.`);
             continue;
           }
-          current = [...current, { ...EMPTY_LINE, operation_date: issueDate }];
+          current = [...current, blankLine(issueDate)];
           idx = current.length - 1;
         }
         current = current.map((l, i) => (i === idx ? applyExtract(l, x) : l));
@@ -219,7 +236,7 @@ export default function RetentionNew() {
       setError('El correlativo debe ser un número entero mayor que cero.'); return;
     }
     setBusy(true);
-    const payloadLines = valid.map((l) => ({ ...l, operation_date: l.operation_date || issueDate }));
+    const payloadLines = valid.map(({ key, ...l }) => ({ ...l, operation_date: l.operation_date || issueDate }));
     try {
       if (isEdit) {
         await updateWithholding({ id, supplierId, issueDate, lines: payloadLines, seq: seqNum });
@@ -331,13 +348,19 @@ export default function RetentionNew() {
         {lines.map((l, i) => {
           const c = calcLine(l);
           return (
-            <section className="card vsection" key={i}>
+            <section className="card vsection" key={l.key}>
               <div className="vsection-head">
                 <h2>Factura {lines.length > 1 ? i + 1 : ''}</h2>
                 {lines.length > 1 && (
-                  <button type="button" className="btn ghost sm" onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))}>
-                    Quitar
-                  </button>
+                  <div className="line-actions">
+                    <button type="button" className="btn ghost sm" onClick={() => moveLine(i, -1)}
+                      disabled={i === 0} title="Mover antes" aria-label="Mover factura antes">↑</button>
+                    <button type="button" className="btn ghost sm" onClick={() => moveLine(i, 1)}
+                      disabled={i === lines.length - 1} title="Mover después" aria-label="Mover factura después">↓</button>
+                    <button type="button" className="btn ghost sm" onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))}>
+                      Quitar
+                    </button>
+                  </div>
                 )}
               </div>
               <div className="vgrid">
@@ -417,7 +440,7 @@ export default function RetentionNew() {
         })}
 
         {lines.length < MAX_LINES && (
-          <button type="button" className="btn ghost add-line" onClick={() => setLines((prev) => [...prev, { ...EMPTY_LINE, operation_date: issueDate }])}>
+          <button type="button" className="btn ghost add-line" onClick={() => setLines((prev) => [...prev, blankLine(issueDate)])}>
             + Agregar otra factura
           </button>
         )}
