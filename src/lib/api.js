@@ -267,10 +267,11 @@ export async function deleteProduct(id) {
   unwrap(await supabase.from('products').delete().eq('id', id));
 }
 
-// Aplica (percent 1–99) o quita (percent null) la oferta a varios productos.
-export async function setProductsOffer(ids, percent) {
+// Aplica la oferta a varios productos: un % (1–99) o un precio fijo en USD.
+// Sin ninguno de los dos, se les quita la oferta.
+export async function setProductsOffer(ids, { percent = null, price = null } = {}) {
   return unwrap(await supabase.rpc('set_products_offer', {
-    p_ids: ids, p_percent: percent ?? null,
+    p_ids: ids, p_percent: percent, p_price: price,
   }));
 }
 
