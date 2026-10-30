@@ -299,7 +299,6 @@ export default function Inventory() {
       categories,
       variants: variantsOf(p).map((v) => ({
         id: v.id, label: variantLabel(v.attributes, p.variant_axes),
-        sig: sigOf(p.variant_axes || [], v.attributes || {}),
         attributes: v.attributes || {}, origAttributes: v.attributes || {},
         stock: String(branchStock(v, branchId)), origStock: branchStock(v, branchId),
         sku: v.sku || '', price: v.price != null ? String(v.price) : '',
@@ -334,6 +333,7 @@ export default function Inventory() {
   async function onSubmit(e) {
     e.preventDefault();
     setError(null); setBusy(true);
+    const createdKeys = new Set(); // variaciones nuevas que ya quedaron guardadas
     try {
       // Producto simple: además de categorías, lleva propiedades de variación
       // (Talla, Color…) como dato del producto. Con variaciones, esos valores
@@ -431,6 +431,16 @@ export default function Inventory() {
           }
         }
         if (canCreate) {
+          // Antes de tocar la base: una variación nueva no puede repetir la
+          // combinación de otra (ni de las que ya tiene el producto).
+          const seen = new Set(modal.variants.map((v) => sigOf(modal.axes, v.attributes)));
+          for (const r of modal.vbNew) {
+            const sig = sigOf(modal.axes, r.attributes);
+            if (seen.has(sig)) {
+              throw new Error(`La variación ${labelOf(modal.axes, r.attributes) || 'estándar'} está repetida: ya hay otra con esa misma combinación.`);
+            }
+            seen.add(sig);
+          }
           for (const r of modal.vbNew) {
             const created = await addProductVariant(modal.id, {
               attributes: r.attributes, sku: (r.sku || '').trim(),
@@ -438,6 +448,7 @@ export default function Inventory() {
               cost: r.cost === '' || r.cost == null ? null : Number(r.cost),
               stock: Number(r.stock) || 0, branchId,
             });
+            createdKeys.add(r.key);
             if (r.file && created?.id) {
               await uploadProductImage(business.id, modal.id, r.file, { variantId: created.id });
             }
@@ -447,7 +458,17 @@ export default function Inventory() {
       await reload();
       setModal(null);
     } catch (err) {
-      setError(err.message.includes('duplicate') || err.message.includes('unique')
+      // Si alguna variación nueva alcanzó a guardarse antes del error, el modal
+      // se recarga con ella ya como existente y deja en "nuevas" solo las que
+      // faltan; si no, reintentar la crearía otra vez y la base la rechazaría.
+      if (modal.mode === 'edit' && createdKeys.size) {
+        const fresh = (await reload().catch(() => [])).find((x) => x.id === modal.id);
+        if (fresh) {
+          openEdit(fresh);
+          setModal((m) => ({ ...m, vbNew: modal.vbNew.filter((r) => !createdKeys.has(r.key)) }));
+        }
+      }
+      setError(err.message.includes('product_variants_product_id_attributes_key')
         ? 'Hay una variación repetida (misma combinación).' : err.message);
     } finally { setBusy(false); }
   }
@@ -587,7 +608,7 @@ export default function Inventory() {
   // otra fila con la misma combinación, que la base rechazaría.
   async function onReplaceExistingVariant(sig, row) {
     setM({
-      variants: modal.variants.map((v) => (v.sig === sig ? {
+      variants: modal.variants.map((v) => (sigOf(modal.axes, v.attributes) === sig ? {
         ...v,
         stock: row.stock !== '' && row.stock != null ? String(row.stock) : v.stock,
         price: row.price ?? v.price,
@@ -595,7 +616,7 @@ export default function Inventory() {
         sku: row.sku || v.sku,
       } : v)),
     });
-    const target = modal.variants.find((v) => v.sig === sig);
+    const target = modal.variants.find((v) => sigOf(modal.axes, v.attributes) === sig);
     if (row.file && target) {
       const old = (modal.media || []).find((m) => m.variant_id === target.id);
       await onUploadImage(row.file, target.id);
@@ -1216,7 +1237,7 @@ export default function Inventory() {
                         showEmptyHint={false}
                         rows={modal.vbNew}
                         onChange={(vbNew) => setM({ vbNew })}
-                        existingSigs={new Set(modal.variants.map((v) => v.sig))}
+                        existingSigs={new Set(modal.variants.map((v) => sigOf(modal.axes, v.attributes)))}
                         onReplaceExisting={onReplaceExistingVariant}
                         disabled={busy}
                         addLabel="＋ Nueva variación"
