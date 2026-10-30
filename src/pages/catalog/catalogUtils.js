@@ -29,7 +29,15 @@ export function fmtPrice(n) {
 // Precio final de una variante (propio o heredado) con la oferta aplicada.
 export function variantPrice(product, variant) {
   const base = variant?.price ?? product.price;
-  return offerPrice(base, product.offer_percent);
+  return offerPrice(base, product);
+}
+
+// % de descuento que se muestra en la vitrina. Con precio fijo se calcula
+// contra el precio normal; si no queda por debajo, no se anuncia rebaja.
+export function offerPercentOf(product, base) {
+  const fixed = Number(product.offer_price) || 0;
+  if (fixed > 0) return base > fixed ? (1 - fixed / base) * 100 : 0;
+  return Number(product.offer_percent) > 0 ? Number(product.offer_percent) : 0;
 }
 export function variantBase(product, variant) {
   return Number(variant?.price ?? product.price) || 0;
@@ -42,12 +50,8 @@ export function priceInfo(product) {
   const bases = vs.map((v) => variantBase(product, v));
   const min = Math.min(...finals);
   const max = Math.max(...finals);
-  return {
-    price: min,
-    from: max > min,
-    base: Math.min(...bases),
-    offer: Number(product.offer_percent) > 0 ? Number(product.offer_percent) : 0,
-  };
+  const base = Math.min(...bases);
+  return { price: min, from: max > min, base, offer: offerPercentOf(product, base) };
 }
 
 // ---------- Variantes ----------

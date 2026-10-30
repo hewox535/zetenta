@@ -12,7 +12,7 @@ import {
   mediaUrl, uploadProductImage, deleteProductMedia,
   fetchProductVariants, createTaxonomy, findOrCreateTerm, updateProduct,
 } from '../lib/api';
-import { money, variantLabel, offerPrice } from '../lib/calc';
+import { money, variantLabel, offerPrice, hasOffer, offerTag } from '../lib/calc';
 import { useConfirm } from '../components/Confirm';
 import VariantBuilder, { VariationDialog, emptyVariations, sigOf, labelOf } from '../components/VariantBuilder';
 
@@ -185,22 +185,24 @@ export default function Inventory() {
   const [editVar, setEditVar] = useState(null);   // variación existente que se está editando
   const [photo, setPhoto] = useState(null);       // foto del modal abierta en grande
 
-  // Ofertas: filtro "En oferta" y modo selección para aplicar/quitar % en lote.
+  // Ofertas: filtro "En oferta" y modo selección para aplicar/quitar en lote
+  // un % de descuento o un precio fijo.
   const [offerOnly, setOfferOnly] = useState(false);
   const [offerMode, setOfferMode] = useState(false);
   const [offerSel, setOfferSel] = useState(new Set());
   const [offerPct, setOfferPct] = useState('');
+  const [offerKind, setOfferKind] = useState('percent'); // 'percent' | 'price'
 
   const toggleOfferSel = (id) => setOfferSel((s) => {
     const n = new Set(s);
     if (n.has(id)) n.delete(id); else n.add(id);
     return n;
   });
-  function exitOfferMode() { setOfferMode(false); setOfferSel(new Set()); setOfferPct(''); }
-  async function applyOffer(percent) {
+  function exitOfferMode() { setOfferMode(false); setOfferSel(new Set()); setOfferPct(''); setOfferKind('percent'); }
+  async function applyOffer(offer) {
     setBusy(true); setError(null);
     try {
-      await setProductsOffer([...offerSel], percent);
+      await setProductsOffer([...offerSel], offer);
       await reload();
       exitOfferMode();
     } catch (e) { setError(e.message); } finally { setBusy(false); }
@@ -266,7 +268,7 @@ export default function Inventory() {
   const visibleProducts = (products || []).filter((p) => {
     if (ptype === 'variants' && isSimple(p)) return false;
     if (ptype === 'simple' && !isSimple(p)) return false;
-    if (offerOnly && !p.offer_percent) return false;
+    if (offerOnly && !hasOffer(p)) return false;
     if (!matchesSearch(p)) return false;
     return Object.entries(filters).every(([, termId]) =>
       !termId || (p.product_terms || []).some((pt) => pt.term_id === termId));
@@ -776,7 +778,7 @@ export default function Inventory() {
           )}
         </div>
 
-        {/* -------- Barra del modo ofertas: aplicar/quitar % a la selección -------- */}
+        {/* -------- Barra del modo ofertas: aplicar/quitar % o precio fijo a la selección -------- */}
         {offerMode && (
           <div className="offer-bar card">
             <strong>{offerSel.size} seleccionado{offerSel.size === 1 ? '' : 's'}</strong>
@@ -787,15 +789,34 @@ export default function Inventory() {
               {offerSel.size === visibleProducts.length ? 'Ninguno' : 'Todos los visibles'}
             </button>
             <span className="offer-bar-gap" />
-            <label className="offer-pct-label">
-              <input type="number" min="1" max="99" step="1" placeholder="%" value={offerPct}
-                onChange={(e) => setOfferPct(e.target.value)} className="offer-pct" />
-              %
-            </label>
-            <button type="button" className="btn primary sm" disabled={busy || offerSel.size === 0 || !(Number(offerPct) > 0 && Number(offerPct) < 100)}
-              onClick={() => applyOffer(Number(offerPct))}>Aplicar</button>
+            <div className="seg sm offer-kind" role="group" aria-label="Tipo de oferta">
+              <button type="button" className={`seg-btn${offerKind === 'percent' ? ' active' : ''}`}
+                onClick={() => { setOfferKind('percent'); setOfferPct(''); }}>% descuento</button>
+              <button type="button" className={`seg-btn${offerKind === 'price' ? ' active' : ''}`}
+                onClick={() => { setOfferKind('price'); setOfferPct(''); }}>Precio fijo</button>
+            </div>
+            {offerKind === 'percent' ? (
+              <label className="offer-pct-label">
+                <input type="number" min="1" max="99" step="1" placeholder="%" value={offerPct}
+                  onChange={(e) => setOfferPct(e.target.value)} className="offer-pct" />
+                %
+              </label>
+            ) : (
+              <label className="offer-pct-label" title="Todas las variaciones de los productos seleccionados quedan a este precio">
+                $
+                <input type="number" min="0.01" step="0.01" placeholder="5,00" value={offerPct}
+                  onChange={(e) => setOfferPct(e.target.value)} className="offer-pct" />
+              </label>
+            )}
+            <button type="button" className="btn primary sm"
+              disabled={busy || offerSel.size === 0 || !(offerKind === 'percent'
+                ? Number(offerPct) > 0 && Number(offerPct) < 100
+                : Number(offerPct) > 0)}
+              onClick={() => applyOffer(offerKind === 'percent' ? { percent: Number(offerPct) } : { price: Number(offerPct) })}>
+              Aplicar
+            </button>
             <button type="button" className="btn ghost sm" disabled={busy || offerSel.size === 0}
-              onClick={() => applyOffer(null)}>Quitar oferta</button>
+              onClick={() => applyOffer({})}>Quitar oferta</button>
             <button type="button" className="btn ghost sm" onClick={exitOfferMode}>Cancelar</button>
           </div>
         )}
@@ -850,11 +871,11 @@ export default function Inventory() {
                       </td>
                       <td className="mono">{p.sku}</td>
                       <td className="num">
-                        {p.offer_percent ? (
+                        {hasOffer(p) ? (
                           <>
                             <span className="offer-old">{money(p.price)}</span>{' '}
-                            <strong>{money(offerPrice(p.price, p.offer_percent))}</strong>
-                            <div><span className="badge offer">🏷 −{Number(p.offer_percent)}%</span></div>
+                            <strong>{money(offerPrice(p.price, p))}</strong>
+                            <div><span className="badge offer">🏷 {offerTag(p)}</span></div>
                           </>
                         ) : money(p.price)}
                         {Number(p.cost) > 0 && <div className="muted">costo {money(p.cost)}</div>}
@@ -875,10 +896,10 @@ export default function Inventory() {
                         <td className="variant-cell">↳ {variantLabel(v.attributes, p.variant_axes) || 'Estándar'}</td>
                         <td className="mono">{v.sku}</td>
                         <td className="num">
-                          {p.offer_percent ? (
+                          {hasOffer(p) ? (
                             <>
                               <span className="offer-old">{money(v.price ?? p.price)}</span>{' '}
-                              <strong>{money(offerPrice(v.price ?? p.price, p.offer_percent))}</strong>
+                              <strong>{money(offerPrice(v.price ?? p.price, p))}</strong>
                             </>
                           ) : (v.price != null ? money(v.price) : <span className="muted">{money(p.price)}</span>)}
                           {Number(v.cost ?? p.cost) > 0 && <div className="muted">costo {money(v.cost ?? p.cost)}</div>}
@@ -928,13 +949,13 @@ export default function Inventory() {
                   <span className="inv-card-info">
                     <span className="inv-card-name">
                       {p.name}
-                      {p.offer_percent && <span className="badge offer">🏷 −{Number(p.offer_percent)}%</span>}
+                      {hasOffer(p) && <span className="badge offer">🏷 {offerTag(p)}</span>}
                       {hasLow && <span className="badge low">Bajo</span>}
                     </span>
                     <span className="muted">
                       {p.sku ? `${p.sku} · ` : ''}
-                      {p.offer_percent
-                        ? <><span className="offer-old">{money(p.price)}</span> {money(offerPrice(p.price, p.offer_percent))}</>
+                      {hasOffer(p)
+                        ? <><span className="offer-old">{money(p.price)}</span> {money(offerPrice(p.price, p))}</>
                         : money(p.price)}
                       {' · '}<strong>{stock}</strong> en stock
                       {!simple && ` · ${variantsOf(p).length} variantes`}
@@ -961,7 +982,7 @@ export default function Inventory() {
                         <div className="inv-var-info">
                           <span>{variantLabel(v.attributes, p.variant_axes) || 'Estándar'}{isLow(v) && <span className="badge low">Bajo</span>}</span>
                           <span className="muted">
-                            <strong>{branchStock(v, branchId)}</strong> en stock · {money(offerPrice(v.price ?? p.price, p.offer_percent))}
+                            <strong>{branchStock(v, branchId)}</strong> en stock · {money(offerPrice(v.price ?? p.price, p))}
                           </span>
                         </div>
                         <div className="inv-var-actions">
@@ -1288,8 +1309,8 @@ export default function Inventory() {
                 </div>
                 <div className="muted">
                   {p.sku ? `${p.sku} · ` : ''}
-                  {p.offer_percent
-                    ? <><span className="offer-old">{money(p.price)}</span> {money(offerPrice(p.price, p.offer_percent))} (−{Number(p.offer_percent)}%)</>
+                  {hasOffer(p)
+                    ? <><span className="offer-old">{money(p.price)}</span> {money(offerPrice(p.price, p))}{Number(p.offer_percent) > 0 && ` (${offerTag(p)})`}</>
                     : money(p.price)}
                   {' · '}<strong>{stock}</strong> {p.unit} en stock
                   {!isSimple(p) && ` · ${variantsOf(p).length} variantes`}

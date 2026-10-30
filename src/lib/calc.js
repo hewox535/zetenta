@@ -59,10 +59,21 @@ export function variantLabel(attributes, axes) {
   return keys.map((k) => attrs[k]).filter(Boolean).join(' · ');
 }
 
+// Oferta de un producto: un % de descuento (offer_percent) o un precio fijo
+// (offer_price) para todas sus variantes; nunca las dos a la vez.
+export const hasOffer = (product) =>
+  Number(product?.offer_price) > 0 || Number(product?.offer_percent) > 0;
+
+// Etiqueta corta de la oferta: "−20%" o "$5,00".
+export const offerTag = (product) =>
+  (Number(product?.offer_price) > 0 ? usd(product.offer_price) : `−${Number(product?.offer_percent)}%`);
+
 // Precio con la oferta del producto aplicada (redondeado a céntimos, igual
-// que create_order en el servidor). offerPercent NULL/0 = sin oferta.
-export function offerPrice(price, offerPercent) {
+// que create_order en el servidor). Sin oferta devuelve el mismo precio.
+export function offerPrice(price, product) {
   const p = Number(price) || 0;
-  const off = Number(offerPercent) || 0;
+  const fixed = Number(product?.offer_price) || 0;
+  if (fixed > 0) return fixed;
+  const off = Number(product?.offer_percent) || 0;
   return off > 0 && off < 100 ? Math.round(p * (1 - off / 100) * 100) / 100 : p;
 }

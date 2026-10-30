@@ -33,7 +33,7 @@ export default function OrderReceipt({ business, order }) {
               <td>
                 {it.name}{it.variant_label ? ` · ${it.variant_label}` : ''}
                 <div className="receipt-muted receipt-unitprice">
-                  {usd(it.unit_price_usd)} c/u{it.offer_percent ? ` (oferta −${Number(it.offer_percent)}%)` : ''}
+                  {usd(it.unit_price_usd)} c/u{it.offer_percent ? ` (oferta −${Number(it.offer_percent)}%)` : it.offer_price ? ' (oferta)' : ''}
                 </div>
               </td>
               <td className="receipt-amt">{usd(it.line_total_usd)}</td>

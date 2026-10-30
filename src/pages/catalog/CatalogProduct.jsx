@@ -3,7 +3,7 @@ import { Link, Navigate, useOutletContext, useParams } from 'react-router-dom';
 import { Icon } from './Catalog';
 import { ProductCard, Swatch } from './CatalogHome';
 import {
-  axisOptions, defaultSelection, findVariant, fmtPrice, galleryImages, isColorAxis, optionAvailable,
+  axisOptions, defaultSelection, findVariant, fmtPrice, galleryImages, isColorAxis, offerPercentOf, optionAvailable,
   productAxes, selectValue, variantBase, variantPrice, variantText, whatsappLink, colorHex, isMulticolor,
 } from './catalogUtils';
 
@@ -130,9 +130,9 @@ function ProductView({ product, store, catalog, href, goBack }) {
   );
   const images = useMemo(() => galleryImages(product, variant, axes), [product, variant, axes]);
 
-  const offer = Number(product.offer_percent) > 0 ? Number(product.offer_percent) : 0;
   const price = variantPrice(product, variant);
   const base = variantBase(product, variant);
+  const offer = offerPercentOf(product, base);
   const available = variant ? variant.available : product.available;
   const label = variantText(variant, axes);
 
