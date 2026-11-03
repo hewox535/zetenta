@@ -6,8 +6,9 @@ import { Z_CELLS, WORDMARK_D } from './brand.js';
 
 gsap.registerPlugin(ScrollTrigger);
 
-// La app vive aparte (white-label): los botones de cuenta apuntan a ella.
-const APP_URL = (import.meta.env.VITE_APP_URL || 'https://zetenta.app').replace(/\/$/, '');
+// La app vive en el mismo dominio (la landing solo ocupa la raíz), así que los
+// botones de cuenta son rutas internas; VITE_APP_URL permite apuntar a otra.
+const APP_URL = (import.meta.env.VITE_APP_URL || '').replace(/\/$/, '');
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const $ = (s, el = document) => el.querySelector(s);

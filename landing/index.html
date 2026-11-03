@@ -2,6 +2,19 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
+  <script>
+    // La landing ocupa la raíz de zetenta.app, que antes era la entrada de la
+    // app. Quien ya tiene sesión (o abre la app instalada) va directo al panel.
+    (function () {
+      try {
+        var logged = Object.keys(localStorage).some(function (k) {
+          return /^sb-.+-auth-token$/.test(k) && /refresh_token/.test(localStorage.getItem(k) || '');
+        });
+        var installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+        if (logged || installed) location.replace(logged ? '/inicio' : '/login');
+      } catch (e) { /* sin acceso a localStorage: se muestra la landing */ }
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Zetenta · Tus cuentas de la A a la Z</title>
   <meta name="description" content="Vende, cobra y cuadra en un solo lugar. Punto de venta, caja, inventario por sucursal, catálogo web conectado y estadísticas para tiendas en Venezuela." />
@@ -10,7 +23,7 @@
   <meta property="og:site_name" content="Zetenta" />
   <meta property="og:title" content="Zetenta · Tus cuentas de la A a la Z" />
   <meta property="og:description" content="Ventas, cobros en pago móvil, efectivo, divisas y Cashea, caja, inventario y catálogo en un solo lugar." />
-  <meta property="og:image" content="/img/laptop-1600.webp" />
+  <meta property="og:image" content="https://zetenta.app/l/img/laptop-1600.webp" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="preload" href="/fonts/geist-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />

@@ -1,23 +1,24 @@
 # Landing de Zetenta
 
-Sitio de marketing de zetenta.app, separado de la app (que es white-label y
-ocupa todas las rutas de su dominio). Vite + GSAP (ScrollTrigger) + Lenis, sin
-framework.
+Sitio de marketing de zetenta.app. Vive en el mismo repo y en el mismo sitio
+de Netlify que la app: se compila en `dist/l/` y Netlify la sirve en la raíz
+del dominio principal (ver `public/_redirects`). Vite + GSAP (ScrollTrigger) +
+Lenis, sin framework.
 
 ```bash
-cd landing
-npm install
-npm run dev      # http://localhost:5180
-npm run build    # sale en landing/dist
+npm run dev:landing   # http://localhost:5180/l/
+npm run build         # compila la app y luego la landing en dist/l
 ```
 
-## Configuración
+## Cómo convive con la app
 
-- `VITE_APP_URL`: dónde vive la app; los botones "Prueba gratis" e "Iniciar
-  sesión" van a `${VITE_APP_URL}/register` y `/login`. Por defecto
-  `https://zetenta.app`.
-- Netlify: crear un sitio nuevo con **Base directory = `landing`** (el
-  `netlify.toml` de esta carpeta pone el comando y la carpeta de salida).
+- Solo `https://zetenta.app/` (y `www.`) muestran la landing. Los subdominios
+  de las tiendas (`roma.zetenta.app`…) y todas las demás rutas (`/login`,
+  `/orders`, `/catalogo`…) siguen siendo la app.
+- Quien ya tiene sesión, o abre la app instalada, no ve la landing: un script
+  en el `<head>` lo manda a `/inicio` (o a `/login`), la entrada del panel.
+- Los botones "Prueba gratis" e "Iniciar sesión" son rutas internas
+  (`/register`, `/login`). `VITE_APP_URL` permite apuntarlos a otro dominio.
 
 ## Estructura
 

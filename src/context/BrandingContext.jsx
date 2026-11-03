@@ -130,7 +130,8 @@ export function BrandingProvider({ children }) {
       const manifest = {
         name: appName,
         short_name: appName,
-        start_url: `${window.location.origin}/${store ? 'catalogo' : ''}`,
+        // En zetenta.app la raíz es la landing: el panel instalado arranca en /inicio.
+        start_url: `${window.location.origin}/${store ? 'catalogo' : branding.businessId ? '' : 'inicio'}`,
         scope: `${window.location.origin}/`,
         display: 'standalone',
         background_color: '#ffffff',
