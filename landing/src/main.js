@@ -255,6 +255,7 @@ function heroIntro() {
     .from('.hero-title .line > span', { yPercent: 110, duration: 1.1, ease: 'expo.out', stagger: .1 })
     .from('.hero .reveal-up', { y: 24, opacity: 0, duration: .9, ease: 'power3.out', stagger: .08 }, '-=.8')
     .fromTo('.hero-title .az', { opacity: 0 }, { opacity: 1, duration: .06, repeat: 4, yoyo: true, ease: 'none', stagger: .2 }, '-=.6')
+    .from('.hero-device', { y: 140, opacity: 0, duration: 1.4, ease: 'expo.out' }, '-=1.1')
     .from('.scroll-hint', { opacity: 0, duration: .6 }, '-=.4');
   return tl;
 }
@@ -351,7 +352,8 @@ function heroMotion() {
   // Al bajar, el texto se aleja y la matriz se queda atrás.
   gsap.timeline({ scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } })
     .to('.hero-copy', { y: -80, opacity: .2, ease: 'none' }, 0)
-    .to('.hero-led', { yPercent: 18, ease: 'none' }, 0);
+    .to('.hero-led', { yPercent: 18, ease: 'none' }, 0)
+    .to('.hero-device', { y: -60, scale: 1.04, ease: 'none' }, 0);
 }
 
 /* ============================================================
@@ -582,6 +584,26 @@ function features() {
 }
 
 /* ============================================================
+   EN LA TIENDA Y EN LA WEB: fotos que se abren y hacen parallax
+   ============================================================ */
+function shops() {
+  $$('.shot').forEach((shot) => {
+    gsap.fromTo($('.shot-media', shot), { clipPath: 'inset(18% 12% 18% 12% round 32px)' }, {
+      clipPath: 'inset(0% 0% 0% 0% round 32px)', ease: 'none',
+      scrollTrigger: { trigger: shot, start: 'top 95%', end: 'top 35%', scrub: 1 },
+    });
+    gsap.fromTo($('img', shot), { scale: 1.25, yPercent: -6 }, {
+      scale: 1, yPercent: 6, ease: 'none',
+      scrollTrigger: { trigger: shot, start: 'top bottom', end: 'bottom top', scrub: true },
+    });
+    gsap.from($('figcaption', shot), {
+      y: 30, opacity: 0, duration: 1, ease: 'expo.out',
+      scrollTrigger: { trigger: shot, start: 'top 55%' },
+    });
+  });
+}
+
+/* ============================================================
    BENTO: aparecen en cascada y se inclinan al pasar el mouse
    ============================================================ */
 function bento() {
@@ -625,7 +647,10 @@ function visor() {
 function sky() {
   gsap.from('.sky-head > *', { y: 50, opacity: 0, stagger: .12, duration: 1.1, ease: 'expo.out', scrollTrigger: { trigger: '.sky', start: 'top 70%' } });
   gsap.fromTo('.sky-orb', { yPercent: 30 }, { yPercent: 0, ease: 'none', scrollTrigger: { trigger: '.sky', start: 'top bottom', end: 'bottom bottom', scrub: true } });
-  gsap.to('.sky-icon', { y: -14, duration: 2.4, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+  gsap.fromTo('.sky-phone', { y: 120, rotation: -6 }, {
+    y: 0, rotation: 0, ease: 'none',
+    scrollTrigger: { trigger: '.sky-stage', start: 'top bottom', end: 'center center', scrub: 1 },
+  });
   gsap.to('.sky-ring.r1', { rotation: 360, duration: 90, ease: 'none', repeat: -1 });
   $$('.ncard').forEach((card, i) => {
     const depth = +card.dataset.depth || 1;
@@ -756,6 +781,7 @@ if (REDUCED) {
   scrubWords();
   today();
   story();
+  shops();
   features();
   bento();
   visor();
