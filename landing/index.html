@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Zetenta · Tus cuentas de la A a la Z</title>
+  <meta name="description" content="Vende, cobra y cuadra en un solo lugar. Punto de venta, caja, inventario por sucursal, catálogo web conectado y estadísticas para tiendas en Venezuela." />
+  <meta name="theme-color" content="#2323FF" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Zetenta" />
+  <meta property="og:title" content="Zetenta · Tus cuentas de la A a la Z" />
+  <meta property="og:description" content="Ventas, cobros en pago móvil, efectivo, divisas y Cashea, caja, inventario y catálogo en un solo lugar." />
+  <meta property="og:image" content="/img/laptop-1600.webp" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preload" href="/fonts/geist-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/Doto-Round-Variable.woff2" as="font" type="font/woff2" crossorigin />
+</head>
+<body class="is-loading">
+
+  <!-- ================= LOADER: la Z se enciende cuadro a cuadro ================= -->
+  <div class="loader" id="loader" aria-hidden="true">
+    <div class="loader-bg"></div>
+    <div class="loader-stage">
+      <svg class="loader-grid" viewBox="0 0 288 288" id="loaderGrid"></svg>
+      <svg class="loader-word" viewBox="-8 -168 730.2 222" data-wordmark></svg>
+    </div>
+    <div class="loader-meta">
+      <span class="mono">CARGANDO TU TIENDA</span>
+      <span class="led loader-count" id="loaderCount">000</span>
+    </div>
+  </div>
+
+  <!-- ================= NAV ================= -->
+  <header class="nav" id="nav">
+    <div class="nav-pill nav-left">
+      <a href="#top" class="nav-logo" aria-label="Zetenta, inicio">
+        <svg viewBox="0 0 288 288" class="nav-z" data-zsymbol></svg>
+        <svg viewBox="-8 -168 730.2 222" class="nav-word" data-wordmark></svg>
+      </a>
+      <nav class="nav-links" aria-label="Secciones">
+        <a href="#como-funciona">Cómo funciona</a>
+        <a href="#inventario">Inventario</a>
+        <a href="#catalogo">Catálogo</a>
+        <a href="#estadisticas">Estadísticas</a>
+        <a href="#todo">Funciones</a>
+      </nav>
+      <button class="nav-more" id="navMore" aria-label="Abrir menú" aria-expanded="false"><span></span><span></span><span></span></button>
+    </div>
+    <div class="nav-pill nav-right">
+      <a class="nav-login" href="#" data-app="/login">Iniciar sesión</a>
+      <a class="btn btn-primary btn-sm" href="#" data-app="/register">Prueba gratis</a>
+    </div>
+  </header>
+
+  <div class="menu" id="menu" aria-hidden="true">
+    <nav>
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#inventario">Inventario</a>
+      <a href="#catalogo">Catálogo</a>
+      <a href="#estadisticas">Estadísticas</a>
+      <a href="#todo">Funciones</a>
+      <a href="#" data-app="/login">Iniciar sesión</a>
+    </nav>
+    <a class="btn btn-primary" href="#" data-app="/register">Prueba gratis</a>
+  </div>
+
+  <main id="top">
+
+    <!-- ================= HERO ================= -->
+    <section class="hero" id="hero">
+      <div class="hero-dots" aria-hidden="true"></div>
+      <div class="hero-glow" aria-hidden="true"></div>
+
+      <!-- Tiles colgantes (como llaves): cada uno es un módulo de Zetenta -->
+      <div class="hang" aria-hidden="true">
+        <div class="hang-item" style="--x:-31%; --len:110px; --d:0">
+          <i class="hang-string"></i>
+          <div class="tile tile-azul"><span class="tile-ico" data-ico="cart"></span></div>
+        </div>
+        <div class="hang-item" style="--x:-14%; --len:150px; --d:1">
+          <i class="hang-string"></i>
+          <div class="tile tile-paper"><span class="led tile-led">$</span></div>
+        </div>
+        <div class="hang-item hang-main" style="--x:0%; --len:70px; --d:2">
+          <i class="hang-string"></i>
+          <div class="tile tile-icon"><svg viewBox="0 0 288 288" data-zsymbol class="tile-z"></svg></div>
+        </div>
+        <div class="hang-item" style="--x:14%; --len:135px; --d:3">
+          <i class="hang-string"></i>
+          <div class="tile tile-noche"><span class="led tile-led cielo">Bs.</span></div>
+        </div>
+        <div class="hang-item" style="--x:30%; --len:95px; --d:4">
+          <i class="hang-string"></i>
+          <div class="tile tile-cielo"><span class="tile-ico" data-ico="box"></span></div>
+        </div>
+      </div>
+
+      <div class="hero-copy">
+        <p class="eyebrow mono reveal-up">HECHA PARA VENDER EN VENEZUELA</p>
+        <h1 class="display-xl hero-title">
+          <span class="line"><span>Tus cuentas</span></span>
+          <span class="line"><span>de la <b class="led az">A</b> a la <b class="led az">Z</b>.</span></span>
+        </h1>
+        <p class="hero-sub reveal-up">Vende, cobra en pago móvil, efectivo, divisas o Cashea, controla tu inventario y cuadra la caja. Todo desde el teléfono, sin cuadernos ni hojas de cálculo.</p>
+        <div class="hero-ctas reveal-up">
+          <a class="btn btn-primary btn-lg magnetic" href="#" data-app="/register">Prueba gratis</a>
+          <a class="btn btn-ghost btn-lg" href="#como-funciona">Ver cómo funciona</a>
+        </div>
+      </div>
+
+      <div class="scroll-hint mono" aria-hidden="true"><span></span>DESLIZA</div>
+    </section>
+
+    <!-- ================= MARQUEE: cómo cobra Venezuela ================= -->
+    <section class="marquee-sec" aria-label="Formas de cobro">
+      <p class="mono muted center">Cobra como cobra tu cliente</p>
+      <div class="marquee" data-marquee>
+        <div class="marquee-track">
+          <span class="led">PAGO MÓVIL</span><i></i>
+          <span class="led">EFECTIVO</span><i></i>
+          <span class="led">DIVISAS</span><i></i>
+          <span class="led">CASHEA</span><i></i>
+          <span class="led">TRANSFERENCIAS</span><i></i>
+          <span class="led">TASA BCV</span><i></i>
+          <span class="led">PAGOS COMBINADOS</span><i></i>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= STATEMENT con tiles en línea (palabras se encienden) ================= -->
+    <section class="statement" id="statement">
+      <p class="statement-text" data-scrub-words>
+        Zetenta <span class="itile itile-azul"><svg viewBox="0 0 288 288" data-zsymbol></svg></span> es el sistema para que vendas
+        <span class="itile itile-paper"><span class="tile-ico" data-ico="cart"></span></span>, cobres en cualquier moneda
+        <span class="itile itile-noche"><span class="led cielo">$</span></span> y cuadres tu caja
+        <span class="itile itile-cielo"><span class="tile-ico" data-ico="check"></span></span> desde el teléfono
+        <span class="itile itile-ink"><span class="tile-ico" data-ico="phone"></span></span>.
+      </p>
+    </section>
+
+    <!-- ================= PANEL "HOY" (los tiles caen en el visor) ================= -->
+    <section class="today" aria-label="Resumen del día">
+      <div class="today-panel" id="todayPanel">
+        <div class="today-bar">
+          <div class="today-bar-l">
+            <span class="dot-live"></span>
+            <span class="mono">HOY · ROMA, LECHERÍA</span>
+          </div>
+          <div class="today-tabs mono"><span class="on">Ventas</span><span>Caja</span><span>Inventario</span></div>
+          <span class="mono today-rate">TASA BCV DEL 3/11</span>
+        </div>
+        <div class="today-ruler mono" aria-hidden="true">
+          <span>9AM</span><span>11AM</span><span>1PM</span><span>3PM</span><span>5PM</span><span>7PM</span>
+          <div class="today-ruler-sel"></div>
+        </div>
+        <div class="today-tiles">
+          <div class="ttile ttile-azul">
+            <span class="mono">VENTAS</span>
+            <strong class="led" data-count="1284.50" data-prefix="$">$0,00</strong>
+            <em>32 ventas</em>
+          </div>
+          <div class="ttile ttile-dark">
+            <span class="mono">PAGO MÓVIL</span>
+            <strong class="led cielo" data-count="2450" data-prefix="Bs. ">Bs. 0,00</strong>
+            <em>Última: hace 2 min</em>
+          </div>
+          <div class="ttile ttile-paper">
+            <span class="mono">DIVISAS</span>
+            <strong class="led az" data-count="415" data-prefix="$">$0,00</strong>
+            <em>Efectivo en $</em>
+          </div>
+          <div class="ttile ttile-cielo">
+            <span class="mono">CASHEA</span>
+            <strong class="led" data-count="180" data-prefix="$">$0,00</strong>
+            <em>4 cuotas</em>
+          </div>
+          <div class="ttile ttile-ok">
+            <span class="mono">CAJA</span>
+            <strong class="ttile-check"><span class="tile-ico" data-ico="check"></span> Cuadra</strong>
+            <em>Por cuenta, al céntimo</em>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= HISTORIA DEL TELÉFONO (pin): Vende. Cobra. Cuadra. ================= -->
+    <section class="story" id="como-funciona">
+      <div class="story-sky" aria-hidden="true"></div>
+      <div class="story-stars" aria-hidden="true"></div>
+      <div class="story-pin">
+        <div class="story-words" aria-hidden="true">
+          <span class="sw sw-1">Vende.</span>
+          <span class="sw sw-2">Cobra.</span>
+          <span class="sw sw-3">Cuadra.</span>
+        </div>
+
+        <div class="phone" id="phone">
+          <div class="phone-glow"></div>
+          <div class="phone-frame">
+            <div class="phone-island"></div>
+            <div class="phone-screen">
+              <div class="ps-status"><span>9:41</span><span class="ps-icons"><i></i><i></i><i></i></span></div>
+
+              <!-- Pantalla 0: intro -->
+              <div class="screen screen-intro">
+                <p class="mono">ZETENTA</p>
+                <h3>Vende, cobra y cuadra.<br><span class="muted2">En un solo lugar.</span></h3>
+              </div>
+
+              <!-- Pantalla 1: punto de venta -->
+              <div class="screen screen-pos">
+                <div class="ps-head"><b>Nueva venta</b><span class="mono">ROMA</span></div>
+                <div class="ps-search">Buscar producto o SKU…</div>
+                <div class="ps-grid">
+                  <div class="ps-prod"><i style="--c:#2323FF"></i><b>Franela Oxford</b><span>$12,00</span></div>
+                  <div class="ps-prod"><i style="--c:#4CD5FF"></i><b>Pulsera charm</b><span>$35,00</span></div>
+                  <div class="ps-prod"><i style="--c:#0B0F3A"></i><b>Jean recto</b><span>$28,00</span></div>
+                  <div class="ps-prod"><i style="--c:#C9CBFF"></i><b>Gorra lino</b><span>$9,50</span></div>
+                </div>
+                <div class="ps-cart">
+                  <div class="ps-line"><span>Pulsera charm ×1</span><span>$35,00</span></div>
+                  <div class="ps-line"><span>Franela Oxford M ×2</span><span>$24,00</span></div>
+                  <div class="ps-total"><span>Total</span><b class="led">$59,00</b></div>
+                  <div class="ps-btn">Cobrar</div>
+                </div>
+              </div>
+
+              <!-- Pantalla 2: cobro combinado -->
+              <div class="screen screen-pay">
+                <div class="ps-head"><b>Cobrar</b><span class="mono">TASA BCV 3/11</span></div>
+                <div class="pay-amount">
+                  <span class="mono">TOTAL</span>
+                  <b class="led">$59,00</b>
+                  <em>Bs. 13.865,00</em>
+                </div>
+                <div class="pay-methods">
+                  <div class="pm on"><span class="pm-ico">Bs</span><div><b>Pago móvil</b><em>Bs. 7.050,00</em></div><i class="pm-ok"></i></div>
+                  <div class="pm on"><span class="pm-ico">$</span><div><b>Divisas · efectivo</b><em>$29,00</em></div><i class="pm-ok"></i></div>
+                  <div class="pm"><span class="pm-ico">C</span><div><b>Cashea</b><em>Inicial + cuotas</em></div></div>
+                </div>
+                <div class="pay-left"><span>Pendiente</span><b>$0,00</b></div>
+                <div class="ps-btn">Registrar venta</div>
+              </div>
+
+              <!-- Pantalla 3: cierre de caja -->
+              <div class="screen screen-close">
+                <div class="ps-head"><b>Cierre de caja</b><span class="mono">3/11</span></div>
+                <div class="close-hero">
+                  <div class="close-z"><svg viewBox="0 0 288 288" data-zsymbol></svg></div>
+                  <h4>Tu caja cuadra.</h4>
+                  <b class="led">$1.284,50</b>
+                </div>
+                <div class="close-list">
+                  <div><span>Pago móvil · Banesco</span><b>Bs. 158.300,00</b><i class="pm-ok"></i></div>
+                  <div><span>Efectivo $</span><b>$415,00</b><i class="pm-ok"></i></div>
+                  <div><span>Efectivo Bs.</span><b>Bs. 12.450,00</b><i class="pm-ok"></i></div>
+                  <div><span>Cashea</span><b>$180,00</b><i class="pm-ok"></i></div>
+                </div>
+              </div>
+
+              <div class="ps-home"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="story-captions">
+          <p class="cap cap-1"><b>Vende en segundos.</b> Busca, toca y agrega. Precios en dólares con conversión a tasa BCV.</p>
+          <p class="cap cap-2"><b>Cobra en cualquier moneda.</b> Combina pago móvil, efectivo, divisas y Cashea en una misma venta.</p>
+          <p class="cap cap-3"><b>Cuadra sin calculadora.</b> El cierre te dice cuánto debe haber en cada cuenta.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= BIG LINE (estilo facilpay) ================= -->
+    <section class="bigline">
+      <p class="bigline-text" data-scrub-chars>La calculadora puede descansar. Zetenta convierte a tasa BCV <span class="grad">por ti.</span></p>
+    </section>
+
+    <!-- ================= INVENTARIO ================= -->
+    <section class="feature" id="inventario">
+      <div class="feature-copy">
+        <p class="eyebrow mono">INVENTARIO</p>
+        <h2 class="display" data-scrub-words>Tu inventario por sucursal, al día y desde el teléfono.</h2>
+        <ul class="ticks">
+          <li>Variaciones por talla, color o lo que vendas, cada una con su foto y su precio.</li>
+          <li>Stock por sucursal y traslados entre tiendas con un toque.</li>
+          <li>Alertas de stock bajo y el historial de cada movimiento.</li>
+          <li>Carga todo tu inventario de una vez desde Excel o CSV.</li>
+        </ul>
+      </div>
+      <div class="feature-visual">
+        <div class="app-panel inv-panel" id="invPanel">
+          <div class="ap-head">
+            <b>Inventario</b>
+            <div class="ap-seg mono"><span class="on">Principal</span><span>Lechería</span></div>
+          </div>
+          <div class="inv-rows">
+            <div class="inv-row">
+              <i class="inv-thumb" style="--c:#2323FF"></i>
+              <div class="inv-info"><b>Franela Oxford</b><div class="chips"><span class="chip" style="--c:#0B0E2A"></span><span class="chip" style="--c:#fff"></span><span class="chip" style="--c:#2323FF"></span><em>S · M · L</em></div></div>
+              <div class="inv-stock"><b class="led" data-stock="24">24</b><em>en stock</em></div>
+            </div>
+            <div class="inv-row">
+              <i class="inv-thumb" style="--c:#4CD5FF"></i>
+              <div class="inv-info"><b>Pulsera charm</b><div class="chips"><span class="chip" style="--c:#D8B66A"></span><span class="chip" style="--c:#C8CAD6"></span><em>Dorado · Plata</em></div></div>
+              <div class="inv-stock"><b class="led" data-stock="11">11</b><em>en stock</em></div>
+            </div>
+            <div class="inv-row low">
+              <i class="inv-thumb" style="--c:#0B0F3A"></i>
+              <div class="inv-info"><b>Jean recto</b><div class="chips"><em>28 · 30 · 32</em><span class="badge-low">Bajo</span></div></div>
+              <div class="inv-stock"><b class="led" data-stock="3">3</b><em>en stock</em></div>
+            </div>
+            <div class="inv-row">
+              <i class="inv-thumb" style="--c:#C9CBFF"></i>
+              <div class="inv-info"><b>Vestido lino</b><div class="chips"><span class="chip" style="--c:#EDE3D1"></span><span class="chip" style="--c:#1E1E1E"></span><em>Única</em></div></div>
+              <div class="inv-stock"><b class="led" data-stock="8">8</b><em>en stock</em></div>
+            </div>
+          </div>
+          <div class="inv-transfer">
+            <div class="it-node"><span class="mono">PRINCIPAL</span><b>Franela Oxford M</b></div>
+            <div class="it-track"><i></i><i></i><i></i><i></i><i></i><span class="it-box">×6</span></div>
+            <div class="it-node"><span class="mono">LECHERÍA</span><b>Traslado listo</b></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CATÁLOGO CONECTADO ================= -->
+    <section class="feature feature-rev" id="catalogo">
+      <div class="feature-copy">
+        <p class="eyebrow mono">CATÁLOGO WEB</p>
+        <h2 class="display" data-scrub-words>Tu catálogo, conectado al inventario.</h2>
+        <p class="body-lg">Lo que vendes en el mostrador se descuenta del catálogo al instante. Tus clientes ven fotos, precios y tallas al día, y te piden directo por WhatsApp.</p>
+        <ul class="ticks">
+          <li>Tu tienda en la web, con tu nombre, tu logo y tus colores.</li>
+          <li>Si un producto se agota, el catálogo lo marca solo.</li>
+          <li>Ofertas por porcentaje o a precio fijo, en todos lados a la vez.</li>
+        </ul>
+      </div>
+      <div class="feature-visual">
+        <div class="sync" id="sync">
+          <div class="sync-store">
+            <div class="app-panel sync-pos">
+              <div class="ap-head"><b>Venta</b><span class="mono">MOSTRADOR</span></div>
+              <div class="sync-item">
+                <i class="inv-thumb" style="--c:#2323FF"></i>
+                <div><b>Franela Oxford · M</b><em>$12,00</em></div>
+                <span class="sync-qty led">×1</span>
+              </div>
+              <div class="sync-stockline"><span>Stock</span><b class="led" id="syncStock">3</b></div>
+              <div class="ps-btn sync-btn" id="syncBtn">Venta registrada</div>
+            </div>
+          </div>
+          <div class="sync-wire" aria-hidden="true">
+            <svg viewBox="0 0 200 40" preserveAspectRatio="none"><path d="M0 20 C 60 20, 140 20, 200 20" /></svg>
+            <span class="sync-pulse"></span>
+          </div>
+          <div class="sync-phone">
+            <div class="mini-phone">
+              <div class="mp-island"></div>
+              <div class="mp-screen">
+                <div class="cat-head"><b>ROMA</b><span>Ropa y accesorios</span></div>
+                <div class="cat-grid">
+                  <div class="cat-card" id="catCard">
+                    <div class="cat-img" style="--c:#2323FF"><span class="cat-badge" id="catBadge">Quedan 3</span></div>
+                    <b>Franela Oxford</b><span class="cat-price">$12,00</span>
+                  </div>
+                  <div class="cat-card">
+                    <div class="cat-img" style="--c:#4CD5FF"><span class="cat-badge off">−20%</span></div>
+                    <b>Pulsera charm</b><span class="cat-price"><s>$35,00</s> $28,00</span>
+                  </div>
+                  <div class="cat-card">
+                    <div class="cat-img" style="--c:#0B0F3A"><span class="cat-badge fix">$5</span></div>
+                    <b>Gorra lino</b><span class="cat-price"><s>$9,50</s> $5,00</span>
+                  </div>
+                  <div class="cat-card">
+                    <div class="cat-img" style="--c:#C9CBFF"></div>
+                    <b>Vestido lino</b><span class="cat-price">$42,00</span>
+                  </div>
+                </div>
+                <div class="cat-wa"><span class="tile-ico" data-ico="chat"></span> Pedir por WhatsApp</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ESTADÍSTICAS ================= -->
+    <section class="feature" id="estadisticas">
+      <div class="feature-copy">
+        <p class="eyebrow mono">ESTADÍSTICAS</p>
+        <h2 class="display" data-scrub-words>Tus números, claros. Sin hacerlos de noche.</h2>
+        <p class="body-lg">Ventas por día, por método de pago y por vendedor. Qué se vende, qué se queda y cuánto te deja cada producto.</p>
+      </div>
+      <div class="feature-visual">
+        <div class="app-panel stats-panel" id="statsPanel">
+          <div class="ap-head"><b>Estadísticas</b><div class="ap-seg mono"><span>Semana</span><span class="on">Mes</span><span>Año</span></div></div>
+          <div class="kpis">
+            <div class="kpi"><span class="mono">VENTAS DEL MES</span><b class="led az" data-count="18420" data-dec="0" data-prefix="$">$0</b><em class="up">▲ 12%</em></div>
+            <div class="kpi"><span class="mono">TICKET PROMEDIO</span><b class="led" data-count="38.6" data-prefix="$">$0</b><em>478 ventas</em></div>
+            <div class="kpi"><span class="mono">MARGEN</span><b class="led" data-count="41" data-dec="0" data-suffix="%">0%</b><em>Con tus costos</em></div>
+          </div>
+          <div class="chart">
+            <div class="chart-bars">
+              <i style="--h:38%"></i><i style="--h:52%"></i><i style="--h:44%"></i><i style="--h:61%"></i><i style="--h:57%"></i><i style="--h:72%"></i><i style="--h:66%"></i><i style="--h:49%"></i><i style="--h:63%"></i><i style="--h:80%"></i><i style="--h:74%"></i><i style="--h:92%"></i>
+            </div>
+            <div class="chart-x mono"><span>1</span><span>5</span><span>10</span><span>15</span><span>20</span><span>25</span><span>30</span></div>
+          </div>
+          <div class="split">
+            <div class="split-row"><span>Pago móvil</span><div class="split-bar"><i style="--w:46%"></i></div><b>46%</b></div>
+            <div class="split-row"><span>Divisas</span><div class="split-bar"><i style="--w:31%; --c:var(--cielo)"></i></div><b>31%</b></div>
+            <div class="split-row"><span>Cashea</span><div class="split-bar"><i style="--w:15%; --c:#8A8FAE"></i></div><b>15%</b></div>
+            <div class="split-row"><span>Efectivo Bs.</span><div class="split-bar"><i style="--w:8%; --c:#C9CBFF"></i></div><b>8%</b></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TODO EN UN LUGAR (bento) ================= -->
+    <section class="all" id="todo">
+      <div class="all-head">
+        <p class="eyebrow mono">TODO EN UN LUGAR</p>
+        <h2 class="display">Del pedido al cierre de caja.</h2>
+      </div>
+      <div class="bento">
+        <article class="card c-pos">
+          <div class="card-vis vis-pos"><span class="led">$59,00</span><i></i></div>
+          <h3>Punto de venta</h3>
+          <p>Carrito, búsqueda por SKU, clientes y recibo. En el teléfono, la tablet o la compu.</p>
+        </article>
+        <article class="card c-caja">
+          <div class="card-vis vis-caja"><div class="vc-row"><span>Apertura</span><b>$50,00</b></div><div class="vc-row"><span>Ventas</span><b>$1.234,50</b></div><div class="vc-row total"><span>Debe haber</span><b>$1.284,50</b></div></div>
+          <h3>Caja por sesión</h3>
+          <p>Abre, vende y cierra. Te dice cuánto falta o sobra en cada cuenta.</p>
+        </article>
+        <article class="card c-suc">
+          <div class="card-vis vis-suc"><span>Principal</span><i></i><span>Lechería</span><i></i><span>Barcelona</span></div>
+          <h3>Sucursales y permisos</h3>
+          <p>Cada tienda con su stock. Cada persona ve solo lo que le toca.</p>
+        </article>
+        <article class="card c-cli">
+          <div class="card-vis vis-cli"><span class="av" style="--c:#2323FF">MG</span><span class="av" style="--c:#4CD5FF">JR</span><span class="av" style="--c:#0B0F3A">AL</span><span class="av more">+120</span></div>
+          <h3>Clientes</h3>
+          <p>Quién te compra, qué y cuándo. Para volver a venderle.</p>
+        </article>
+        <article class="card c-ret card-dark">
+          <div class="card-vis vis-ret"><div class="scan"><i></i><span class="mono">FACTURA 00-000390</span></div></div>
+          <h3>Retenciones de IVA con IA</h3>
+          <p>Toma una foto de la factura y Zetenta llena el comprobante. Con tu sello, listo para imprimir.</p>
+        </article>
+        <article class="card c-off card-azul">
+          <div class="card-vis vis-off"><span class="led">−20%</span><span class="led">$5</span></div>
+          <h3>Ofertas</h3>
+          <p>Por porcentaje o a precio fijo. Se aplican en el punto de venta y en el catálogo.</p>
+        </article>
+        <article class="card c-push">
+          <div class="card-vis vis-push"><div class="notif"><svg viewBox="0 0 288 288" data-zsymbol></svg><div><b>Llegó la colección nueva</b><em>Pásate hoy por la tienda</em></div></div></div>
+          <h3>Campañas</h3>
+          <p>Avisa a tus clientes de ofertas y novedades con notificaciones.</p>
+        </article>
+        <article class="card c-pwa">
+          <div class="card-vis vis-pwa"><div class="pwa-icon"><svg viewBox="0 0 288 288" data-zsymbol></svg></div></div>
+          <h3>Se instala como una app</h3>
+          <p>En Android, iPhone o la compu. Sin tienda de apps.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ================= VISOR LED ================= -->
+    <section class="visor" id="visor">
+      <div class="visor-media">
+        <img class="visor-led" src="/img/pos-led-1600.webp" alt="" loading="lazy" />
+        <img class="visor-photo" src="/img/pos-1600.webp" srcset="/img/pos-800.webp 800w, /img/pos-1600.webp 1600w" sizes="(max-width: 800px) 100vw, 1200px" alt="Punto de venta de una tienda de ropa con Zetenta en una tablet y un visor que marca $59,00" loading="lazy" />
+        <div class="visor-shade"></div>
+      </div>
+      <div class="visor-copy">
+        <p class="eyebrow mono cielo">LO QUE SIEMPRE CUMPLIMOS</p>
+        <div class="proofs">
+          <div class="proof"><span class="led">01</span><p>Precios en dólares con conversión a tasa BCV.</p></div>
+          <div class="proof"><span class="led">02</span><p>Caja que cuadra por cuenta.</p></div>
+          <div class="proof"><span class="led">03</span><p>Retenciones de IVA sin sufrir.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CIELO: notificaciones orbitando ================= -->
+    <section class="sky" id="sky">
+      <div class="sky-head">
+        <h2 class="display">Tu tienda, en orden.<br>Desde el teléfono.</h2>
+        <p class="body-lg">Zetenta te avisa lo importante mientras atiendes.</p>
+      </div>
+      <div class="sky-stage">
+        <div class="sky-orb">
+          <div class="sky-ring r1"></div><div class="sky-ring r2"></div><div class="sky-ring r3"></div>
+          <div class="sky-icon"><svg viewBox="0 0 288 288" data-zsymbol></svg></div>
+        </div>
+        <div class="ncard n1" data-depth="0.6"><span class="n-ico az"><span class="tile-ico" data-ico="cart"></span></span><div><b>Venta registrada</b><em>Bs. 2.450,00 en pago móvil</em></div></div>
+        <div class="ncard n2" data-depth="1.1"><span class="n-ico wa"><span class="tile-ico" data-ico="chat"></span></span><div><b>Pedido desde tu catálogo</b><em>Pulsera charm · Dorado</em></div></div>
+        <div class="ncard n3" data-depth="0.8"><span class="n-ico warn"><span class="tile-ico" data-ico="box"></span></span><div><b>Stock bajo</b><em>Jean recto talla 30 · quedan 2</em></div></div>
+        <div class="ncard n4" data-depth="1.3"><span class="n-ico ok"><span class="tile-ico" data-ico="check"></span></span><div><b>Cierre de hoy: todo cuadró</b><em>$1.284,50 en 4 cuentas</em></div></div>
+        <div class="ncard n5" data-depth="0.5"><span class="n-ico cie"><span class="tile-ico" data-ico="doc"></span></span><div><b>Retención emitida</b><em>Comprobante listo para imprimir</em></div></div>
+        <div class="ncard n6" data-depth="1"><span class="n-ico az"><span class="tile-ico" data-ico="truck"></span></span><div><b>Traslado recibido</b><em>6 unidades en Lechería</em></div></div>
+      </div>
+    </section>
+
+    <!-- ================= MARCA BLANCA ================= -->
+    <section class="wl" id="marca">
+      <div class="wl-copy">
+        <p class="eyebrow mono">TU MARCA</p>
+        <h2 class="display">Tus clientes ven tu tienda. No la nuestra.</h2>
+        <p class="body-lg">Tu catálogo y tu sistema llevan tu nombre, tu logo y tu color, en tu propio dominio. Zetenta trabaja detrás.</p>
+      </div>
+      <div class="wl-visual">
+        <div class="wl-card" id="wlCard">
+          <div class="wl-top">
+            <span class="wl-logo" id="wlLogo">R</span>
+            <div><b id="wlName">Roma</b><em id="wlDomain">roma.zetenta.app</em></div>
+          </div>
+          <div class="wl-body">
+            <div class="wl-field"></div>
+            <div class="wl-field short"></div>
+            <div class="wl-btn" id="wlBtn">Entrar</div>
+          </div>
+          <div class="wl-foot"><span>Impulsado por</span><svg viewBox="-8 -168 730.2 222" data-wordmark></svg></div>
+        </div>
+        <div class="wl-swatches" aria-hidden="true"><i style="--c:#2323FF"></i><i style="--c:#E0457B"></i><i style="--c:#0E8A6A"></i><i style="--c:#F28C28"></i></div>
+      </div>
+    </section>
+
+    <!-- ================= GALERÍA HORIZONTAL ================= -->
+    <section class="gallery" id="galeria">
+      <div class="gallery-pin">
+        <div class="gallery-head">
+          <p class="eyebrow mono">ZETENTA EN LA CALLE</p>
+          <h2 class="display">Del mostrador<br>a la parada.</h2>
+        </div>
+        <div class="gallery-track" id="galleryTrack">
+          <figure class="gcard g-wide"><img src="/img/pos-1600.webp" alt="Zetenta en el punto de venta de una tienda de ropa" loading="lazy" /><figcaption class="mono">EN EL MOSTRADOR</figcaption></figure>
+          <figure class="gcard g-tall"><img src="/img/telefono-800.webp" alt="Pantalla de carga de Zetenta en un teléfono" loading="lazy" /><figcaption class="mono">EN TU TELÉFONO</figcaption></figure>
+          <figure class="gcard g-wide"><img src="/img/laptop-1600.webp" alt="Zetenta en una laptop" loading="lazy" /><figcaption class="mono">EN LA COMPU</figcaption></figure>
+          <figure class="gcard g-tall"><img src="/img/valla-800.webp" alt="Valla de Zetenta en una parada de autobús" loading="lazy" /><figcaption class="mono">EN LA PARADA</figcaption></figure>
+          <figure class="gcard g-wide"><img src="/img/recepcion-1600.webp" alt="Logo de Zetenta en una recepción" loading="lazy" /><figcaption class="mono">EN LA OFICINA</figcaption></figure>
+          <figure class="gcard g-tall"><img src="/img/bolsa-800.webp" alt="Bolsa y franela con la Z de Zetenta" loading="lazy" /><figcaption class="mono">EN LA FRANELA</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CTA FINAL ================= -->
+    <section class="cta" id="cta">
+      <div class="cta-z" aria-hidden="true"><svg viewBox="0 0 288 288" id="ctaZ"></svg></div>
+      <div class="cta-copy">
+        <h2 class="display-xl">Registra tu<br>primera venta.</h2>
+        <p class="body-lg">Crea la cuenta de tu tienda en minutos. El cuaderno se merece unas vacaciones.</p>
+        <a class="btn btn-white btn-lg magnetic" href="#" data-app="/register">Prueba gratis</a>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="footer">
+    <div class="foot-cols">
+      <div><p class="mono muted">PRODUCTO</p><a href="#como-funciona">Cómo funciona</a><a href="#inventario">Inventario</a><a href="#catalogo">Catálogo</a><a href="#estadisticas">Estadísticas</a></div>
+      <div><p class="mono muted">CUENTA</p><a href="#" data-app="/register">Crear cuenta</a><a href="#" data-app="/login">Iniciar sesión</a></div>
+      <div><p class="mono muted">ZETENTA</p><span>zetenta.app</span><span>Lechería, Venezuela</span></div>
+    </div>
+    <div class="foot-mark" id="footMark" aria-hidden="true">
+      <svg viewBox="-17.2 -156 978.6 206.1" class="foot-logo">
+        <g transform="translate(0 -138.86) scale(0.59625) translate(-112 -112)" data-zsymbol-g></g>
+        <path transform="translate(230.1 0)" data-wordmark-path />
+      </svg>
+      <div class="foot-glow"></div>
+    </div>
+    <div class="foot-bottom mono"><span>© 2026 ZETENTA</span><span>TUS CUENTAS DE LA A A LA Z</span></div>
+  </footer>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
