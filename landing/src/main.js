@@ -57,6 +57,9 @@ const ICONS = {
   chat: '<path d="M4 18.5 5.3 15A7.5 7.5 0 1 1 9 18.2L4 18.5Z"/>',
   doc: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>',
   truck: '<path d="M3 6h11v10H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="1.6"/><circle cx="17.5" cy="18" r="1.6"/>',
+  chart: '<path d="M4 20h16M7 16v-5M12 16V7M17 16v-8"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
 };
 function paintIcons() {
   $$('[data-ico]').forEach((el) => {
@@ -248,53 +251,126 @@ function exitLoader(loader, grid, offs, ons, word) {
    ============================================================ */
 function heroIntro() {
   const tl = gsap.timeline();
-  tl.from('.hero-title .line > span', { yPercent: 110, duration: 1.1, ease: 'expo.out', stagger: .1 })
+  tl.call(() => heroLed?.sweep())
+    .from('.hero-title .line > span', { yPercent: 110, duration: 1.1, ease: 'expo.out', stagger: .1 })
     .from('.hero .reveal-up', { y: 24, opacity: 0, duration: .9, ease: 'power3.out', stagger: .08 }, '-=.8')
-    .from('.hang-item', { yPercent: -120, duration: 1.4, ease: 'elastic.out(1, .55)', stagger: { each: .07, from: 'center' } }, '<-.3')
-    .fromTo('.hero-title .az', { opacity: 0 }, { opacity: 1, duration: .06, repeat: 4, yoyo: true, ease: 'none', stagger: .2 }, '-=1')
+    .fromTo('.hero-title .az', { opacity: 0 }, { opacity: 1, duration: .06, repeat: 4, yoyo: true, ease: 'none', stagger: .2 }, '-=.6')
     .from('.scroll-hint', { opacity: 0, duration: .6 }, '-=.4');
   return tl;
 }
 
-function heroMotion() {
-  const items = $$('.hang-item');
-  // Péndulo suave, cada pieza con su ritmo.
-  items.forEach((el, i) => {
-    gsap.fromTo(el, { rotation: -3 + i * 1.3 }, {
-      rotation: 3 - i * .9, duration: 2.6 + i * .35, ease: 'sine.inOut', yoyo: true, repeat: -1,
-    });
+/* ============================================================
+   HERO: matriz LED de fondo. Los puntos se encienden alrededor del cursor
+   (en táctil, una luz que pasea sola) y al entrar una onda la recorre.
+   ============================================================ */
+let heroLed = null;
+function createHeroLed() {
+  const canvas = $('#heroLed');
+  const ctx = canvas.getContext('2d');
+  const PITCH = 22;
+  const RADIUS = 220;
+  let w = 0, h = 0, dpr = 1, cols = 0, rows = 0, glow = new Float32Array(0);
+  let pointer = { x: -9999, y: -9999, active: false };
+  let wave = -1; // radio de la onda de entrada; -1 = sin onda
+  let running = false;
+  let t0 = performance.now();
+
+  const resize = () => {
+    const r = canvas.getBoundingClientRect();
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    w = r.width; h = r.height;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    cols = Math.ceil(w / PITCH) + 1; rows = Math.ceil(h / PITCH) + 1;
+    glow = new Float32Array(cols * rows);
+  };
+
+  const frame = (now) => {
+    if (!running) return;
+    const t = (now - t0) / 1000;
+    let px = pointer.x, py = pointer.y;
+    if (!pointer.active) { // luz que pasea sola (táctil o sin mouse encima)
+      px = w * (.5 + .34 * Math.sin(t * .45));
+      py = h * (.32 + .18 * Math.sin(t * .7 + 1));
+    }
+    if (wave >= 0) wave += 22;
+    if (wave > Math.hypot(w, h)) wave = -1;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const ox = (w - (cols - 1) * PITCH) / 2;
+    for (let r = 0; r < rows; r++) {
+      const y = r * PITCH + PITCH / 2;
+      const fade = Math.max(0, 1 - Math.pow(y / h, 1.4) * .95); // se apaga hacia abajo
+      if (fade <= 0) continue;
+      for (let c = 0; c < cols; c++) {
+        const x = ox + c * PITCH;
+        const k = r * cols + c;
+        const d = Math.hypot(x - px, y - py);
+        let target = d < RADIUS ? Math.pow(1 - d / RADIUS, 2) : 0;
+        if (wave >= 0) {
+          const dw = Math.abs(Math.hypot(x, y) - wave);
+          if (dw < 60) target = Math.max(target, 1 - dw / 60);
+        }
+        if (Math.random() < .0006) target = Math.max(target, .7); // destellos sueltos
+        glow[k] += (target - glow[k]) * (target > glow[k] ? .35 : .06);
+        const g = glow[k];
+        const a = (.13 + g * .87) * fade;
+        const rad = 1.4 + g * 3.6;
+        // De azul Zetenta a cielo en el centro del brillo.
+        ctx.fillStyle = g > .55 ? `rgba(76,213,255,${a})` : `rgba(35,35,255,${a})`;
+        ctx.beginPath();
+        ctx.arc(x, y, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    requestAnimationFrame(frame);
+  };
+
+  const hero = $('.hero');
+  hero.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const r = canvas.getBoundingClientRect();
+    pointer = { x: e.clientX - r.left, y: e.clientY - r.top, active: true };
   });
-  // Parallax con el mouse: las piezas se inclinan hacia el cursor.
-  if (matchMedia('(pointer: fine)').matches) {
-    const tiles = items.map((el) => $('.tile', el));
-    const qx = tiles.map((t) => gsap.quickTo(t, 'rotationY', { duration: .8, ease: 'power3' }));
-    const qy = tiles.map((t) => gsap.quickTo(t, 'rotationX', { duration: .8, ease: 'power3' }));
-    gsap.set(tiles, { transformPerspective: 600 });
-    $('.hero').addEventListener('pointermove', (e) => {
-      const nx = e.clientX / innerWidth - .5;
-      const ny = e.clientY / innerHeight - .5;
-      tiles.forEach((_, i) => { qx[i](nx * 34); qy[i](-ny * 26); });
-    });
-  }
-  // Al bajar, las piezas suben y el texto se aleja.
+  hero.addEventListener('pointerleave', () => { pointer.active = false; });
+  addEventListener('resize', resize);
+  resize();
+
+  // Solo anima mientras el hero está a la vista.
+  new IntersectionObserver(([entry]) => {
+    const was = running;
+    running = entry.isIntersecting;
+    if (running && !was) requestAnimationFrame(frame);
+  }).observe(hero);
+
+  return { sweep: () => { wave = 0; } };
+}
+
+function heroMotion() {
+  heroLed = createHeroLed();
+  // Al bajar, el texto se aleja y la matriz se queda atrás.
   gsap.timeline({ scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } })
-    .to('.hang', { yPercent: -45, ease: 'none' }, 0)
     .to('.hero-copy', { y: -80, opacity: .2, ease: 'none' }, 0)
-    .to('.hero-dots', { yPercent: 20, ease: 'none' }, 0);
+    .to('.hero-led', { yPercent: 18, ease: 'none' }, 0);
 }
 
 /* ============================================================
-   NAV
+   NAV y menú: la pastilla del logo se despliega en un panel
    ============================================================ */
 let menuOpen = false;
-function closeMenu() {
-  if (!menuOpen) return;
-  menuOpen = false;
-  $('#menu').classList.remove('open');
-  $('#menu').setAttribute('aria-hidden', 'true');
-  $('#navMore').setAttribute('aria-expanded', 'false');
-  lenis?.start();
+let menuTl = null;
+function setMenu(open) {
+  if (open === menuOpen) return;
+  menuOpen = open;
+  $('#nav').classList.toggle('menu-open', open);
+  $('#menuScrim').classList.toggle('open', open);
+  $('#menu').setAttribute('aria-hidden', String(!open));
+  $('#navMore').setAttribute('aria-expanded', String(open));
+  $('#navMore').setAttribute('aria-label', open ? 'Cerrar menú' : 'Abrir menú');
+  if (open) { lenis?.stop(); menuTl.timeScale(1).play(); } else { lenis?.start(); menuTl.timeScale(1.6).reverse(); }
 }
+function closeMenu() { setMenu(false); }
+
 function nav() {
   const navEl = $('#nav');
   ScrollTrigger.create({
@@ -308,16 +384,18 @@ function nav() {
       onToggle: (self) => navEl.classList.toggle('on-dark', self.isActive),
     });
   });
-  $('#navMore').addEventListener('click', () => {
-    menuOpen = !menuOpen;
-    $('#menu').classList.toggle('open', menuOpen);
-    $('#menu').setAttribute('aria-hidden', String(!menuOpen));
-    $('#navMore').setAttribute('aria-expanded', String(menuOpen));
-    if (menuOpen) {
-      lenis?.stop();
-      gsap.from('#menu nav a', { y: 40, opacity: 0, duration: .7, ease: 'expo.out', stagger: .05, delay: .15 });
-    } else lenis?.start();
-  });
+
+  menuTl = gsap.timeline({ paused: true, defaults: { ease: 'expo.out' } })
+    .set('#menu', { visibility: 'visible' })
+    .fromTo('#menu', { opacity: 0, y: -14, scaleY: .92, clipPath: 'inset(0 0 100% 0 round 22px)' },
+      { opacity: 1, y: 0, scaleY: 1, clipPath: 'inset(0 0 0% 0 round 22px)', duration: .6 })
+    .fromTo('.menu-row', { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: .5, stagger: .05 }, '-=.42')
+    .fromTo('.mtile', { scale: .4, rotation: -20 }, { scale: 1, rotation: 0, duration: .6, ease: 'back.out(2.2)', stagger: .05 }, '<')
+    .fromTo('.menu-foot', { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: .4 }, '-=.35');
+  menuTl.eventCallback('onReverseComplete', () => gsap.set('#menu', { visibility: 'hidden' }));
+
+  $('#navMore').addEventListener('click', () => setMenu(!menuOpen));
+  $('#menuScrim').addEventListener('click', closeMenu);
   $$('#menu a').forEach((a) => a.addEventListener('click', closeMenu));
   addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 }

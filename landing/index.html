@@ -58,7 +58,10 @@
         <a href="#estadisticas">Estadísticas</a>
         <a href="#todo">Funciones</a>
       </nav>
-      <button class="nav-more" id="navMore" aria-label="Abrir menú" aria-expanded="false"><span></span><span></span><span></span></button>
+      <button class="nav-more" id="navMore" aria-label="Abrir menú" aria-expanded="false" aria-controls="menu">
+        <span class="nav-more-label">Cerrar</span>
+        <span class="nav-more-ico"><i></i><i></i><i></i></span>
+      </button>
     </div>
     <div class="nav-pill nav-right">
       <a class="nav-login" href="#" data-app="/login">Iniciar sesión</a>
@@ -66,48 +69,51 @@
     </div>
   </header>
 
+  <div class="menu-scrim" id="menuScrim" aria-hidden="true"></div>
   <div class="menu" id="menu" aria-hidden="true">
-    <nav>
-      <a href="#como-funciona">Cómo funciona</a>
-      <a href="#inventario">Inventario</a>
-      <a href="#catalogo">Catálogo</a>
-      <a href="#estadisticas">Estadísticas</a>
-      <a href="#todo">Funciones</a>
-      <a href="#" data-app="/login">Iniciar sesión</a>
+    <nav class="menu-main" aria-label="Menú">
+      <a href="#como-funciona" class="menu-row">
+        <span class="mtile itile-azul"><svg viewBox="0 0 288 288" data-zsymbol></svg></span>
+        <span class="menu-txt"><b>Cómo funciona</b><em>Vende, cobra y cuadra</em></span>
+        <span class="menu-arrow" data-ico="arrow"></span>
+      </a>
+      <a href="#inventario" class="menu-row">
+        <span class="mtile itile-cielo"><span class="tile-ico" data-ico="box"></span></span>
+        <span class="menu-txt"><b>Inventario</b><em>Stock por sucursal</em></span>
+        <span class="menu-arrow" data-ico="arrow"></span>
+      </a>
+      <a href="#catalogo" class="menu-row">
+        <span class="mtile itile-paper"><span class="tile-ico" data-ico="chat"></span></span>
+        <span class="menu-txt"><b>Catálogo</b><em>Conectado al inventario</em></span>
+        <span class="menu-arrow" data-ico="arrow"></span>
+      </a>
+      <a href="#estadisticas" class="menu-row">
+        <span class="mtile itile-noche"><span class="tile-ico" data-ico="chart"></span></span>
+        <span class="menu-txt"><b>Estadísticas</b><em>Tus números, claros</em></span>
+        <span class="menu-arrow" data-ico="arrow"></span>
+      </a>
+      <a href="#todo" class="menu-row">
+        <span class="mtile itile-ink"><span class="tile-ico" data-ico="grid"></span></span>
+        <span class="menu-txt"><b>Funciones</b><em>Todo en un solo lugar</em></span>
+        <span class="menu-arrow" data-ico="arrow"></span>
+      </a>
     </nav>
-    <a class="btn btn-primary" href="#" data-app="/register">Prueba gratis</a>
+    <div class="menu-foot">
+      <div class="menu-links">
+        <p class="mono">CUENTA</p>
+        <a href="#" data-app="/login">Iniciar sesión</a>
+        <a href="#" data-app="/register">Crear cuenta</a>
+      </div>
+      <a class="btn btn-primary menu-cta" href="#" data-app="/register">Prueba gratis</a>
+    </div>
   </div>
 
   <main id="top">
 
     <!-- ================= HERO ================= -->
     <section class="hero" id="hero">
-      <div class="hero-dots" aria-hidden="true"></div>
+      <canvas class="hero-led" id="heroLed" aria-hidden="true"></canvas>
       <div class="hero-glow" aria-hidden="true"></div>
-
-      <!-- Tiles colgantes (como llaves): cada uno es un módulo de Zetenta -->
-      <div class="hang" aria-hidden="true">
-        <div class="hang-item" style="--x:-31%; --len:110px; --d:0">
-          <i class="hang-string"></i>
-          <div class="tile tile-azul"><span class="tile-ico" data-ico="cart"></span></div>
-        </div>
-        <div class="hang-item" style="--x:-14%; --len:150px; --d:1">
-          <i class="hang-string"></i>
-          <div class="tile tile-paper"><span class="led tile-led">$</span></div>
-        </div>
-        <div class="hang-item hang-main" style="--x:0%; --len:70px; --d:2">
-          <i class="hang-string"></i>
-          <div class="tile tile-icon"><svg viewBox="0 0 288 288" data-zsymbol class="tile-z"></svg></div>
-        </div>
-        <div class="hang-item" style="--x:14%; --len:135px; --d:3">
-          <i class="hang-string"></i>
-          <div class="tile tile-noche"><span class="led tile-led cielo">Bs.</span></div>
-        </div>
-        <div class="hang-item" style="--x:30%; --len:95px; --d:4">
-          <i class="hang-string"></i>
-          <div class="tile tile-cielo"><span class="tile-ico" data-ico="box"></span></div>
-        </div>
-      </div>
 
       <div class="hero-copy">
         <p class="eyebrow mono reveal-up">HECHA PARA VENDER EN VENEZUELA</p>

@@ -6,7 +6,7 @@ del dominio principal (ver `public/_redirects`). Vite + GSAP (ScrollTrigger) +
 Lenis, sin framework.
 
 ```bash
-npm run dev:landing   # http://localhost:5180/l/
+npm run dev:landing   # http://localhost:5180
 npm run build         # compila la app y luego la landing en dist/l
 ```
 
