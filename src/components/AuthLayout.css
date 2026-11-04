@@ -100,7 +100,14 @@
 /* ---------- Formulario ---------- */
 .zauth-main { display: grid; place-items: center; padding: 40px 24px; }
 .zauth-card { width: min(420px, 100%); }
-.zauth-logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none !important; }
+.zauth-back {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 28px;
+  font-size: 14px; font-weight: 500 !important; color: var(--z-gris) !important;
+  text-decoration: none !important; transition: color .2s;
+}
+.zauth-back:hover { color: var(--z-azul) !important; }
+.zauth-back svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.zauth-logo { display: flex; width: fit-content; align-items: center; gap: 10px; text-decoration: none !important; }
 .zauth-logo-z { width: 28px; height: 28px; fill: var(--z-azul); }
 .zauth-logo-word { height: 22px; width: auto; fill: var(--z-tinta); }
 .zauth h1 { margin: 36px 0 8px; font-size: clamp(30px, 3vw, 38px); line-height: 1.05; letter-spacing: -.035em; font-weight: 600; }

@@ -3,6 +3,11 @@ import Brand from './Brand';
 import { Z_CELLS, WORDMARK_D } from '../../landing/src/brand.js';
 import './AuthLayout.css';
 
+// La landing vive en la raíz de zetenta.app (Netlify la sirve en /, ver
+// public/_redirects). En local corre aparte en el 5180.
+const LANDING_URL = import.meta.env.VITE_LANDING_URL
+  || (import.meta.env.DEV ? 'http://localhost:5180/' : '/');
+
 // Marco de las pantallas de acceso (login, registro, contraseñas).
 // - En zetenta.app (sin negocio en el dominio): la estética de la landing,
 //   con el panel nocturno de la Z LED y el formulario sobre papel.
@@ -52,7 +57,11 @@ export default function AuthLayout({ children, title, sub }) {
 
       <main className="zauth-main">
         <div className="zauth-card">
-          <a href="/" className="zauth-logo" aria-label="Zetenta">
+          <a href={LANDING_URL} className="zauth-back">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" /></svg>
+            Volver al inicio
+          </a>
+          <a href={LANDING_URL} className="zauth-logo" aria-label="Zetenta — ir al inicio">
             <svg viewBox="0 0 288 288" className="zauth-logo-z">
               {Z_CELLS.map(([r, c]) => <rect key={`${r}-${c}`} x={c * 60} y={r * 60} width="48" height="48" rx="12" />)}
             </svg>

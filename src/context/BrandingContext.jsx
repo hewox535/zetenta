@@ -75,7 +75,7 @@ export function BrandingProvider({ children }) {
     const root = document.documentElement;
     const branded = branding.name && branding.name !== 'zetenta';
     const title = branded ? branding.name : 'Zetenta';
-    const accent = branding.accent || '#0071e3';
+    const accent = branding.accent || '#2323FF';
 
     if (branding.accent) {
       root.style.setProperty('--accent', branding.accent);

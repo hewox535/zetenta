@@ -12,12 +12,12 @@
   --text: #1d1d1f;
   --text-2: #6e6e73;
   --border: #e4e4e9;
-  --accent: #0071e3;
-  --accent-hover: #0077ed;
+  --accent: #2323FF;
+  --accent-hover: #1515e6;
   /* Derivados del acento (recoloreados por el white-label). */
-  --accent-soft: rgba(0,113,227,.10);
-  --accent-ring: rgba(0,113,227,.18);
-  --accent-line: rgba(0,113,227,.40);
+  --accent-soft: rgba(35,35,255,.10);
+  --accent-ring: rgba(35,35,255,.18);
+  --accent-line: rgba(35,35,255,.40);
   --danger: #d70015;
   --danger-bg: #fdf0f0;
   --ok: #248a3d;

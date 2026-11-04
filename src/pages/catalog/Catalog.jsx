@@ -120,7 +120,7 @@ export default function Catalog() {
     if (window.history.state?.idx > 0) navigate(-1); else navigate(href('/catalogo'));
   }, [navigate, href]);
 
-  const accent = store?.accent || '#0071e3';
+  const accent = store?.accent || '#2323FF';
   const rootStyle = { '--c-accent': accent, '--c-accent-ink': onAccent(accent) };
 
   let body;
