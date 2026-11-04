@@ -75,7 +75,7 @@ export function BrandingProvider({ children }) {
     const root = document.documentElement;
     const branded = branding.name && branding.name !== 'zetenta';
     const title = branded ? branding.name : 'Zetenta';
-    const accent = branding.accent || '#0071e3';
+    const accent = branding.accent || '#2323FF';
 
     if (branding.accent) {
       root.style.setProperty('--accent', branding.accent);
@@ -130,7 +130,8 @@ export function BrandingProvider({ children }) {
       const manifest = {
         name: appName,
         short_name: appName,
-        start_url: `${window.location.origin}/${store ? 'catalogo' : ''}`,
+        // En zetenta.app la raíz es la landing: el panel instalado arranca en /inicio.
+        start_url: `${window.location.origin}/${store ? 'catalogo' : branding.businessId ? '' : 'inicio'}`,
         scope: `${window.location.origin}/`,
         display: 'standalone',
         background_color: '#ffffff',

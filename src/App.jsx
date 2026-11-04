@@ -130,6 +130,8 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<RootGate><RequireAuth><Shell /></RequireAuth></RootGate>}>
             <Route index element={<Home />} />
+            {/* Entrada al panel en zetenta.app, cuya raíz es la landing */}
+            <Route path="inicio" element={<Home />} />
             <Route path="retentions" element={<RequirePermission name="retentions"><RequireCapability name="retentions"><Retentions /></RequireCapability></RequirePermission>} />
             <Route path="retentions/new" element={<RequirePermission name="retentions"><RequireCapability name="retentions"><RetentionNew /></RequireCapability></RequirePermission>} />
             <Route path="retentions/:id/edit" element={<RequirePermission name="retentions"><RequireCapability name="retentions"><RetentionNew /></RequireCapability></RequirePermission>} />

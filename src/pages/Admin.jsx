@@ -95,8 +95,8 @@ function BrandingModal({ business, onClose, onSaved }) {
   const [slug, setSlug] = useState(business.slug || '');
   const [customDomain, setCustomDomain] = useState(business.custom_domain || '');
   const [name, setName] = useState(business.branding?.name || '');
-  const [accent, setAccent] = useState(business.branding?.accent || '#0071e3');
-  const [accent2, setAccent2] = useState(business.branding?.accent2 || business.branding?.accent || '#0077ed');
+  const [accent, setAccent] = useState(business.branding?.accent || '#2323FF');
+  const [accent2, setAccent2] = useState(business.branding?.accent2 || business.branding?.accent || '#1515e6');
   const [logoUrl, setLogoUrl] = useState(business.branding?.logo_url || '');
   const [faviconUrl, setFaviconUrl] = useState(business.branding?.favicon_url || '');
   const [caps, setCaps] = useState({ ...business.capabilities });
@@ -229,7 +229,7 @@ function ColorField({ label, hint, value, onChange }) {
       <span className="asset-label">{label}</span>
       <div className="color-row">
         <input type="color" value={valid ? value : '#000000'} onChange={(e) => onChange(e.target.value)} />
-        <input className="color-hex" value={value} onChange={onText} placeholder="#0071e3" maxLength={7} spellCheck={false} />
+        <input className="color-hex" value={value} onChange={onText} placeholder="#2323FF" maxLength={7} spellCheck={false} />
       </div>
       <span className="hint">{hint}</span>
     </div>

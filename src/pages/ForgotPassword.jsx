@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import AuthLayout from '../components/AuthLayout';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -24,24 +25,16 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <div className="auth-brand">zetenta</div>
-        <h1>Recuperar contraseña</h1>
+    <AuthLayout
+      title="Recuperar contraseña"
+      sub={sent
+        ? <>Si <strong>{email}</strong> está registrado, en unos minutos recibirás un correo con un enlace para crear una contraseña nueva. Revisa también la carpeta de spam.</>
+        : 'Escribe tu correo y te enviaremos un enlace para crear una contraseña nueva.'}
+    >
         {sent ? (
-          <>
-            <p className="auth-sub">
-              Si <strong>{email}</strong> está registrado, en unos minutos recibirás un
-              correo con un enlace para crear una contraseña nueva. Revisa también la
-              carpeta de spam.
-            </p>
-            <p className="auth-alt"><Link to="/login">Volver a iniciar sesión</Link></p>
-          </>
+          <p className="auth-alt"><Link to="/login">Volver a iniciar sesión</Link></p>
         ) : (
           <>
-            <p className="auth-sub">
-              Escribe tu correo y te enviaremos un enlace para crear una contraseña nueva.
-            </p>
             <form onSubmit={onSubmit} className="auth-form">
               <label>
                 Correo electrónico
@@ -53,7 +46,6 @@ export default function ForgotPassword() {
             <p className="auth-alt"><Link to="/login">Volver a iniciar sesión</Link></p>
           </>
         )}
-      </div>
-    </div>
+    </AuthLayout>
   );
 }
