@@ -8,6 +8,10 @@ import { defineConfig } from 'vite';
 export default defineConfig(({ command }) => ({
   root: __dirname,
   base: command === 'build' ? '/l/' : '/',
+  // Caché propia: si comparte node_modules/.vite con la app y los dos
+  // servidores corren a la vez, se pisan las dependencias optimizadas y la app
+  // queda en blanco.
+  cacheDir: resolve(__dirname, '../node_modules/.vite-landing'),
   server: { port: 5180 },
   build: {
     target: 'es2020',
