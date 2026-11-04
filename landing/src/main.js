@@ -667,10 +667,11 @@ function sky() {
    ============================================================ */
 function whiteLabel() {
   const brands = [
-    { name: 'Roma', domain: 'roma.zetenta.app', color: '#2323FF' },
-    { name: 'Lina Boutique', domain: 'tienda.linaboutique.com', color: '#E0457B' },
-    { name: 'Verde Café', domain: 'pedidos.verdecafe.com', color: '#0E8A6A' },
-    { name: 'Ferre Centro', domain: 'ferrecentro.zetenta.app', color: '#F28C28' },
+    // Un negocio entra por su subdominio de zetenta.app o por su dominio propio.
+    { name: 'Roma', domain: 'roma.zetenta.app', kind: 'Subdominio', color: '#2323FF' },
+    { name: 'Lina Boutique', domain: 'linaboutique.com', kind: 'Dominio propio', color: '#E0457B' },
+    { name: 'Verde Café', domain: 'verdecafe.zetenta.app', kind: 'Subdominio', color: '#0E8A6A' },
+    { name: 'Ferre Centro', domain: 'tienda.ferrecentro.com', kind: 'Dominio propio', color: '#F28C28' },
   ];
   const card = $('#wlCard');
   const sw = $$('.wl-swatches i');
@@ -679,15 +680,16 @@ function whiteLabel() {
   const apply = () => {
     const b = brands[i];
     gsap.timeline()
-      .to(['#wlName', '#wlDomain', '#wlLogo'], { opacity: 0, y: -6, duration: .2, stagger: .03 })
+      .to(['#wlName', '#wlDomain', '#wlLogo', '#wlKind'], { opacity: 0, y: -6, duration: .2, stagger: .03 })
       .call(() => {
         card.style.setProperty('--brand', b.color);
         $('#wlName').textContent = b.name;
         $('#wlDomain').textContent = b.domain;
+        $('#wlKind').textContent = b.kind;
         $('#wlLogo').textContent = b.name[0];
         sw.forEach((s, j) => s.classList.toggle('on', j === i));
       })
-      .to(['#wlName', '#wlDomain', '#wlLogo'], { opacity: 1, y: 0, duration: .35, stagger: .04 });
+      .to(['#wlName', '#wlDomain', '#wlLogo', '#wlKind'], { opacity: 1, y: 0, duration: .35, stagger: .04 });
   };
   sw[0].classList.add('on');
   ScrollTrigger.create({
