@@ -10,6 +10,9 @@ npm run dev:landing   # http://localhost:5180
 npm run build         # compila la app y luego la landing en dist/l
 ```
 
+En local los botones "Prueba gratis" e "Iniciar sesión" van a la app en
+`http://localhost:5173` (`landing/.env.development`): levántala con `npm run dev`.
+
 ## Cómo convive con la app
 
 - Solo `https://zetenta.app/` (y `www.`) muestran la landing. Los subdominios
