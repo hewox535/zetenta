@@ -1,7 +1,9 @@
 # La raíz del dominio principal es la landing (landing/, publicada en /l/).
 # Solo la raíz y solo en zetenta.app: los subdominios de las tiendas
 # (roma.zetenta.app…) y el resto de rutas siguen siendo la app.
-https://zetenta.app/      /l/index.html  200
-https://www.zetenta.app/  /l/index.html  200
+# Con "!" (forzado): sin él, Netlify no reescribe una ruta que ya tiene
+# archivo, y en / está el index.html de la app.
+https://zetenta.app/      /l/index.html  200!
+https://www.zetenta.app/  /l/index.html  200!
 
 /*  /index.html  200
