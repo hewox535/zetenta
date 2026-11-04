@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import PasswordInput from '../components/PasswordInput';
+import AuthLayout from '../components/AuthLayout';
 
 // Se llega aquí desde el enlace del correo de recuperación. Supabase procesa
 // el token de la URL y crea una sesión temporal; con ella se puede fijar la
@@ -37,22 +38,16 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <div className="auth-brand">zetenta</div>
-        <h1>Nueva contraseña</h1>
-        {loading ? (
-          <p className="auth-sub">Verificando el enlace…</p>
-        ) : !session ? (
-          <>
-            <p className="auth-sub">
-              El enlace no es válido o ya expiró (dura 1 hora y solo se puede usar una vez).
-            </p>
-            <p className="auth-alt"><Link to="/forgot-password">Pedir un enlace nuevo</Link></p>
-          </>
+    <AuthLayout
+      title="Nueva contraseña"
+      sub={loading ? 'Verificando el enlace…'
+        : !session ? 'El enlace no es válido o ya expiró (dura 1 hora y solo se puede usar una vez).'
+        : 'Crea una contraseña nueva para tu cuenta.'}
+    >
+        {loading ? null : !session ? (
+          <p className="auth-alt"><Link to="/forgot-password">Pedir un enlace nuevo</Link></p>
         ) : (
           <>
-            <p className="auth-sub">Crea una contraseña nueva para tu cuenta.</p>
             <form onSubmit={onSubmit} className="auth-form">
               <label>
                 Contraseña nueva
@@ -69,7 +64,6 @@ export default function ResetPassword() {
             </form>
           </>
         )}
-      </div>
-    </div>
+    </AuthLayout>
   );
 }

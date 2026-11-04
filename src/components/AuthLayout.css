@@ -1,0 +1,165 @@
+/* ============================================================
+   Acceso en zetenta.app: misma estética que la landing (manual de marca v1.0).
+   Solo aplica dentro de .zauth; el white-label de los negocios usa
+   .auth-page/.auth-card de index.css.
+   ============================================================ */
+
+@font-face { font-family: "Geist"; src: url("../../landing/public/fonts/geist-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("../../landing/public/fonts/geist-sans-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("../../landing/public/fonts/geist-sans-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("../../landing/public/fonts/geist-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Doto"; src: url("../../landing/public/fonts/Doto-Round-Variable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+
+.zauth {
+  --z-azul: #2323FF;
+  --z-tinta: #0B0E2A;
+  --z-papel: #F4F5FF;
+  --z-cielo: #4CD5FF;
+  --z-gris: #565B78;
+  --z-border: #E2E4F0;
+  /* El acento de la app pasa a ser el azul Zetenta en estas pantallas. */
+  --accent: var(--z-azul);
+  --accent-hover: #1515e6;
+  --accent-ring: rgba(35, 35, 255, .16);
+  --accent-soft: rgba(35, 35, 255, .08);
+
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(400px, .95fr);
+  background: var(--z-papel);
+  color: var(--z-tinta);
+  font-family: "Geist", var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Panel nocturno ---------- */
+.zauth-side {
+  position: relative; overflow: hidden;
+  margin: 12px; border-radius: 28px;
+  background: #05061A; color: #fff;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: clamp(32px, 4vw, 56px);
+  /* Fijo mientras el formulario (registro) hace scroll. */
+  position: sticky; top: 12px; align-self: start;
+  height: calc(100vh - 24px); height: calc(100dvh - 24px);
+}
+.zauth-sky {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(70% 55% at 80% 0%, rgba(76, 213, 255, .45), transparent 60%),
+    radial-gradient(60% 50% at 0% 100%, rgba(35, 35, 255, .55), transparent 65%),
+    linear-gradient(180deg, #16247a 0%, #0B0F3A 45%, #05061A 100%);
+}
+.zauth-dots {
+  position: absolute; inset: 0;
+  background-image: radial-gradient(circle, rgba(76, 213, 255, .16) 1.3px, transparent 1.6px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(70% 60% at 50% 35%, #000, transparent 80%);
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 35%, #000, transparent 80%);
+}
+.zauth-z { position: relative; width: min(42%, 240px); height: auto; overflow: visible; }
+.zauth-z .off { fill: rgba(255, 255, 255, .07); }
+.zauth-z .on {
+  fill: #fff;
+  animation: zauth-light 5.4s calc(var(--i) * .09s) infinite;
+}
+/* La Z se enciende cuadro a cuadro, brilla y se apaga, en bucle. */
+@keyframes zauth-light {
+  0%, 4% { fill: rgba(255, 255, 255, .07); filter: none; }
+  10%, 70% { fill: #fff; filter: drop-shadow(0 0 10px rgba(76, 213, 255, .9)); }
+  82%, 100% { fill: rgba(255, 255, 255, .07); filter: none; }
+}
+
+.zauth-side-copy { position: relative; display: grid; gap: 28px; }
+.zauth-lema {
+  margin: 0; font-size: clamp(36px, 3.6vw, 58px); line-height: 1; letter-spacing: -.045em; font-weight: 600;
+}
+.zauth-lema b {
+  font-family: "Doto", monospace; font-variation-settings: "ROND" 100; font-weight: 900;
+  color: var(--z-cielo); letter-spacing: 0;
+}
+.zauth-visor {
+  position: relative; height: 44px; border-radius: 12px;
+  background: rgba(255, 255, 255, .06); box-shadow: inset 0 0 0 1px rgba(76, 213, 255, .18);
+  font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; font-weight: 500; letter-spacing: .08em;
+  color: var(--z-cielo); overflow: hidden; max-width: 420px;
+}
+.zauth-visor span {
+  position: absolute; left: 16px; right: 16px; top: 50%; translate: 0 -50%;
+  opacity: 0; animation: zauth-visor 10s infinite; white-space: nowrap;
+}
+.zauth-visor span:nth-child(2) { animation-delay: 2.5s; }
+.zauth-visor span:nth-child(3) { animation-delay: 5s; }
+.zauth-visor span:nth-child(4) { animation-delay: 7.5s; }
+@keyframes zauth-visor {
+  0% { opacity: 0; transform: translateY(10px); }
+  4%, 22% { opacity: 1; transform: none; }
+  26%, 100% { opacity: 0; transform: translateY(-10px); }
+}
+
+/* ---------- Formulario ---------- */
+.zauth-main { display: grid; place-items: center; padding: 40px 24px; }
+.zauth-card { width: min(420px, 100%); }
+.zauth-logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none !important; }
+.zauth-logo-z { width: 28px; height: 28px; fill: var(--z-azul); }
+.zauth-logo-word { height: 22px; width: auto; fill: var(--z-tinta); }
+.zauth h1 { margin: 36px 0 8px; font-size: clamp(30px, 3vw, 38px); line-height: 1.05; letter-spacing: -.035em; font-weight: 600; }
+.zauth-sub { margin: 0 0 30px; color: var(--z-gris); font-size: 16px; line-height: 1.5; }
+
+.zauth .auth-form { gap: 18px; }
+.zauth label { font-size: 13px; font-weight: 600; color: var(--z-tinta); }
+.zauth input, .zauth select {
+  height: 50px; padding: 0 16px; border-radius: 14px;
+  border: 1px solid var(--z-border); background: #fff; font-size: 16px;
+  box-shadow: 0 1px 2px rgba(11, 14, 42, .04);
+}
+.zauth .pw-field input { padding-right: 48px; }
+.zauth input:focus, .zauth select:focus { border-color: var(--z-azul); box-shadow: 0 0 0 4px var(--accent-ring); }
+.zauth .btn.primary.lg {
+  height: 54px; border-radius: 999px; font-size: 16px; font-weight: 600; margin-top: 6px;
+  background: var(--z-azul);
+  box-shadow: 0 10px 26px -10px rgba(35, 35, 255, .7), inset 0 1px 0 rgba(255, 255, 255, .25);
+  transition: background .2s, transform .2s, box-shadow .2s;
+}
+.zauth .btn.primary.lg:hover:not(:disabled) { background: #1515e6; transform: translateY(-1px); box-shadow: 0 14px 32px -10px rgba(35, 35, 255, .8), inset 0 1px 0 rgba(255, 255, 255, .25); }
+.zauth .field-hint { color: var(--z-gris); font-weight: 400; }
+.zauth .form-error { border-radius: 12px; margin: 0; }
+.zauth .auth-alt { text-align: center; color: var(--z-gris); font-size: 14px; margin-top: 22px; }
+.zauth .auth-alt + .auth-alt { margin-top: 8px; }
+.zauth a { color: var(--z-azul); font-weight: 600; }
+
+/* Tipo de negocio como tarjetas (registro) */
+.ztype { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ztype-opt { position: relative; cursor: pointer; }
+.ztype-opt input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.ztype-card {
+  display: grid; gap: 4px; padding: 14px; border-radius: 14px; height: 100%;
+  background: #fff; border: 1px solid var(--z-border); font-weight: 400;
+  transition: border-color .2s, box-shadow .2s;
+}
+.ztype-card b { font-size: 14.5px; font-weight: 600; }
+.ztype-card em { font-style: normal; font-size: 12.5px; color: var(--z-gris); line-height: 1.4; }
+.ztype-opt input:checked + .ztype-card { border-color: var(--z-azul); box-shadow: 0 0 0 4px var(--accent-ring); }
+.ztype-opt input:focus-visible + .ztype-card { outline: 2px solid var(--z-azul); outline-offset: 2px; }
+.ztype-title { font-size: 13px; font-weight: 600; margin-bottom: -10px; }
+
+/* ---------- Móvil: el panel pasa a ser una franja arriba ---------- */
+@media (max-width: 900px) {
+  .zauth { grid-template-columns: 1fr; align-content: start; }
+  .zauth-side {
+    position: relative; top: auto; height: auto;
+    min-height: 0; flex-direction: row; align-items: center; justify-content: flex-start; gap: 20px;
+    padding: 22px 24px; border-radius: 22px;
+  }
+  .zauth-z { width: 64px; flex: none; }
+  .zauth-lema { font-size: 26px; }
+  .zauth-visor { display: none; }
+  .zauth-main { padding: 28px 20px 40px; place-items: start center; }
+  .zauth h1 { margin-top: 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zauth-z .on { animation: none; fill: #fff; }
+  .zauth-visor span { animation: none; }
+  .zauth-visor span:first-child { opacity: 1; }
+}

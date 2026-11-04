@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranding } from '../context/BrandingContext';
-import Brand from '../components/Brand';
+import AuthLayout from '../components/AuthLayout';
 import PasswordInput from '../components/PasswordInput';
 
 export default function Login() {
@@ -28,11 +28,7 @@ export default function Login() {
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <Brand className="auth-brand" />
-        <h1>Inicia sesión</h1>
-        <p className="auth-sub">Tus cuentas, de la A a la Z.</p>
+    <AuthLayout title="Inicia sesión" sub={businessId ? 'Entra con tu usuario o correo.' : 'Entra a tu tienda para vender, cobrar y cuadrar.'}>
         <form onSubmit={onSubmit} className="auth-form">
           <label>
             Usuario o correo
@@ -49,7 +45,6 @@ export default function Login() {
         {!businessId && (
           <p className="auth-alt">¿Tu negocio aún no está en Zetenta? <Link to="/register">Crear cuenta</Link></p>
         )}
-      </div>
-    </div>
+    </AuthLayout>
   );
 }

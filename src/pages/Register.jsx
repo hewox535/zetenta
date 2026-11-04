@@ -2,6 +2,12 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PasswordInput from '../components/PasswordInput';
+import AuthLayout from '../components/AuthLayout';
+
+const BUSINESS_TYPES = [
+  { value: 'general', label: 'Comercio general', hint: 'Empiezas con Marca y Modelo; las variaciones las configuras luego.' },
+  { value: 'ropa', label: 'Ropa y moda', hint: 'Te dejamos listas las tallas (S–XXL) y colores comunes.' },
+];
 
 export default function Register() {
   const { signUp } = useAuth();
@@ -32,40 +38,31 @@ export default function Register() {
 
   if (pendingEmail) {
     return (
-      <div className="auth-page">
-        <div className="auth-card">
-          <div className="auth-brand">zetenta</div>
-          <h1>Revisa tu correo</h1>
-          <p className="auth-sub">Te enviamos un enlace para confirmar tu cuenta. Al confirmarla podrás iniciar sesión.</p>
-          <p className="auth-alt"><Link to="/login">Volver a inicio de sesión</Link></p>
-        </div>
-      </div>
+      <AuthLayout title="Revisa tu correo" sub="Te enviamos un enlace para confirmar tu cuenta. Al confirmarla podrás iniciar sesión.">
+        <p className="auth-alt"><Link to="/login">Volver a inicio de sesión</Link></p>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <div className="auth-brand">zetenta</div>
-        <h1>Crea tu cuenta</h1>
-        <p className="auth-sub">Registra tu negocio y empieza en minutos.</p>
+    <AuthLayout title="Crea tu cuenta" sub="Registra tu tienda y haz tu primera venta hoy.">
         <form onSubmit={onSubmit} className="auth-form">
           <label>
             Nombre del negocio
             <input value={businessName} onChange={(e) => setBusinessName(e.target.value)} required autoFocus placeholder="Mi Negocio, C.A." />
           </label>
-          <label>
-            Tipo de negocio
-            <select value={businessType} onChange={(e) => setBusinessType(e.target.value)}>
-              <option value="general">General</option>
-              <option value="ropa">Tienda de ropa / moda</option>
-            </select>
-            <span className="field-hint">
-              {businessType === 'ropa'
-                ? 'Te dejamos listas las tallas (S–XXL) y colores comunes como variaciones.'
-                : 'Empiezas con Marca y Modelo; puedes configurar variaciones luego.'}
-            </span>
-          </label>
+          <div className="auth-type" role="radiogroup" aria-label="Tipo de negocio">
+            <span className="ztype-title">Tipo de negocio</span>
+            <div className="ztype">
+              {BUSINESS_TYPES.map((t) => (
+                <label className="ztype-opt" key={t.value}>
+                  <input type="radio" name="businessType" value={t.value}
+                    checked={businessType === t.value} onChange={() => setBusinessType(t.value)} />
+                  <span className="ztype-card"><b>{t.label}</b><em>{t.hint}</em></span>
+                </label>
+              ))}
+            </div>
+          </div>
           <label>
             Tu nombre
             <input value={fullName} onChange={(e) => setFullName(e.target.value)} required autoComplete="name" />
@@ -83,7 +80,6 @@ export default function Register() {
           <button className="btn primary lg" disabled={busy}>{busy ? 'Creando cuenta…' : 'Crear cuenta'}</button>
         </form>
         <p className="auth-alt">¿Ya tienes cuenta? <Link to="/login">Inicia sesión</Link></p>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }
