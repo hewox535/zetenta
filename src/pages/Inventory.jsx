@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
@@ -14,6 +14,9 @@ import {
 } from '../lib/api';
 import { money, variantLabel, offerPrice, hasOffer, offerTag } from '../lib/calc';
 import { useConfirm } from '../components/Confirm';
+import { RowMenu, SortHead } from '../components/FinUI';
+import './finance.css';
+import './inventory.css';
 import VariantBuilder, { VariationDialog, emptyVariations, sigOf, labelOf } from '../components/VariantBuilder';
 
 // Stock de una variante en una sucursal concreta (0 si no tiene fila).
@@ -106,6 +109,7 @@ function downloadInvTemplate(axisNames = []) {
 }
 
 const MOVE_LABELS = { in: 'Entrada', out: 'Salida', adjustment: 'Ajuste' };
+const STOCK_FILTERS = [['all', 'Todas'], ['in', 'Con stock'], ['low', 'Stock bajo'], ['out', 'Sin stock']];
 
 const variantsOf = (p) => p.product_variants || [];
 const mediaOf = (p) => (p.product_media || []).slice().sort((a, b) => a.sort_order - b.sort_order);
@@ -180,7 +184,6 @@ export default function Inventory() {
   const [expanded, setExpanded] = useState({});
   const [move, setMove] = useState(null);
   const [modal, setModal] = useState(null);   // modal crear/editar producto
-  const [moreOpen, setMoreOpen] = useState(false); // menú ⋯ del header (móvil)
   const [viewer, setViewer] = useState(null); // visor de fotos: { p, i } (índice en mediaOf(p))
   const [editVar, setEditVar] = useState(null);   // variación existente que se está editando
   const [photo, setPhoto] = useState(null);       // foto del modal abierta en grande
@@ -192,6 +195,21 @@ export default function Inventory() {
   const [offerSel, setOfferSel] = useState(new Set());
   const [offerPct, setOfferPct] = useState('');
   const [offerKind, setOfferKind] = useState('percent'); // 'percent' | 'price'
+
+  // Filtros agrupados en un botón, orden de la tabla e importación.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [stockFilter, setStockFilter] = useState('all');  // 'all' | 'in' | 'low' | 'out'
+  const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
+  const filterRef = useRef(null);
+  const importRef = useRef(null);
+  useEffect(() => {
+    if (!filterOpen) return undefined;
+    const close = (e) => { if (!filterRef.current?.contains(e.target)) setFilterOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setFilterOpen(false); };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', esc); };
+  }, [filterOpen]);
 
   const toggleOfferSel = (id) => setOfferSel((s) => {
     const n = new Set(s);
@@ -269,6 +287,12 @@ export default function Inventory() {
     if (ptype === 'variants' && isSimple(p)) return false;
     if (ptype === 'simple' && !isSimple(p)) return false;
     if (offerOnly && !hasOffer(p)) return false;
+    if (stockFilter !== 'all') {
+      const n = variantsOf(p).reduce((acc, v) => acc + branchStock(v, branchId), 0);
+      if (stockFilter === 'in' && n <= 0) return false;
+      if (stockFilter === 'out' && n > 0) return false;
+      if (stockFilter === 'low' && !productHasLow(p)) return false;
+    }
     if (!matchesSearch(p)) return false;
     return Object.entries(filters).every(([, termId]) =>
       !termId || (p.product_terms || []).some((pt) => pt.term_id === termId));
@@ -670,56 +694,71 @@ export default function Inventory() {
   const lockStock = editing && !canStock;
   const lockMedia = editing && !canMedia;
 
+  // ---------- Lista: resumen, filtros agrupados y orden ----------
+  const stockOf = (p) => variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0);
+  const costValueOf = (p) => variantsOf(p).reduce((s, v) => s + branchStock(v, branchId) * Number(v.cost ?? p.cost ?? 0), 0);
+  const priceValueOf = (p) => variantsOf(p).reduce((s, v) => s + branchStock(v, branchId) * Number(offerPrice(v.price ?? p.price, p) || 0), 0);
+  const sortedProducts = [...visibleProducts].sort((a, b) => {
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    if (sort.key === 'price') return dir * (Number(a.price) - Number(b.price));
+    if (sort.key === 'stock') return dir * (stockOf(a) - stockOf(b));
+    if (sort.key === 'value') return dir * (costValueOf(a) - costValueOf(b));
+    return dir * a.name.localeCompare(b.name);
+  });
+  const all = products || [];
+  const summary = {
+    products: all.length,
+    variants: all.reduce((s, p) => s + (isSimple(p) ? 0 : variantsOf(p).length), 0),
+    units: all.reduce((s, p) => s + stockOf(p), 0),
+    out: all.filter((p) => stockOf(p) <= 0).length,
+    cost: all.reduce((s, p) => s + costValueOf(p), 0),
+    price: all.reduce((s, p) => s + priceValueOf(p), 0),
+    withCost: all.some((p) => Number(p.cost) > 0 || variantsOf(p).some((v) => Number(v.cost) > 0)),
+  };
+  const lowList = all.flatMap((p) => variantsOf(p).filter(isLow).map((v) => ({ p, v })));
+  const activeFilters = [
+    ptype !== 'all' && { key: 'ptype', label: ptype === 'variants' ? 'Con variantes' : 'Simples', clear: () => setPtype('all') },
+    stockFilter !== 'all' && { key: 'stock', label: STOCK_FILTERS.find(([k]) => k === stockFilter)[1], clear: () => setStockFilter('all') },
+    offerOnly && { key: 'offer', label: 'En oferta', clear: () => setOfferOnly(false) },
+    ...Object.entries(filters).filter(([, v]) => v).map(([taxId, termId]) => ({
+      key: taxId, label: `${taxonomies.find((t) => t.id === taxId)?.name}: ${termName.get(termId)}`,
+      clear: () => setFilters((f) => ({ ...f, [taxId]: '' })),
+    })),
+  ].filter(Boolean);
+  const clearFilters = () => { setPtype('all'); setStockFilter('all'); setOfferOnly(false); setFilters({}); };
+
+  // Acciones de stock de una variación (entrada, salida, traslado) desde la lista.
+  const stockItems = (p, v, label) => [
+    { label: 'Registrar entrada', hint: 'Compra, reposición', hidden: !canStock || !v,
+      onClick: () => setMove({ productId: p.id, variantId: v.id, label, type: 'in', quantity: '', note: '' }) },
+    { label: 'Registrar salida', hint: 'Merma, consumo, regalo', hidden: !canStock || !v,
+      onClick: () => setMove({ productId: p.id, variantId: v.id, label, type: 'out', quantity: '', note: '' }) },
+    { label: 'Trasladar a otra sucursal', hidden: !canStock || !v || !multiBranch,
+      onClick: () => setTransfer({ productId: p.id, variantId: v.id, label: label || 'Estándar', to: '', quantity: '' }) },
+  ];
+
+  const stockBadge = (p, n, low) => (
+    n <= 0 ? <span className="inv-pill out">Sin stock</span>
+      : low ? <span className="inv-pill low">Stock bajo</span> : null
+  );
+
   return (
-    <div className="page">
+    <div className="page fin-page inv-page">
       <header className="page-head">
         <div>
           <h1>Inventario</h1>
-          <p className="page-sub">Productos, variantes y movimientos de stock.</p>
+          <p className="page-sub">Tus productos, sus variantes y cuánto hay{multiBranch && currentBranch ? ` en ${currentBranch.name}` : ''}.</p>
         </div>
-        <div className="page-actions inv-actions">
-          <Link to="/inventory/history" className="btn ghost inv-desktop">Historial completo</Link>
+        <div className="page-actions inv-head-actions">
+          <Link to="/inventory/history" className="btn ghost">Historial</Link>
           {canCreate && (
-            <>
-              <button className="btn ghost inv-desktop" title="Descarga el modelo con las columnas esperadas (ábrelo en Excel, llénalo y guárdalo como CSV)"
-                onClick={() => downloadInvTemplate(varTax.map((t) => t.name))}>
-                ⬇ Plantilla
-              </button>
-              <label className="btn ghost inv-desktop">
-                ⬆ Importar CSV
-                <input type="file" accept=".csv,text/csv" hidden disabled={busy} onChange={onImportProducts} />
-              </label>
-              <button className="btn primary" onClick={openCreate}>+ Nuevo producto</button>
-            </>
+            <RowMenu trigger="Importar" triggerClass="btn ghost" items={[
+              { label: 'Importar desde CSV', hint: 'Carga muchos productos de una vez', onClick: () => importRef.current?.click() },
+              { label: 'Descargar plantilla', hint: 'El archivo modelo para llenar en Excel', onClick: () => downloadInvTemplate(varTax.map((t) => t.name)) },
+            ]} />
           )}
-          {/* Móvil: Historial, Plantilla e Importar se recogen en un menú ⋯ */}
-          <div className="inv-more">
-            <button type="button" className="icon-btn inv-more-btn" aria-label="Más acciones"
-              aria-haspopup="menu" aria-expanded={moreOpen}
-              onClick={() => setMoreOpen((o) => !o)}>{ICON.dots}</button>
-            {moreOpen && (
-              <>
-                <div className="menu-backdrop" onClick={() => setMoreOpen(false)} />
-                <div className="menu-pop" role="menu">
-                  <Link to="/inventory/history" className="menu-item" role="menuitem"
-                    onClick={() => setMoreOpen(false)}>Historial completo</Link>
-                  {canCreate && (
-                    <>
-                      <button type="button" className="menu-item" role="menuitem"
-                        onClick={() => { downloadInvTemplate(varTax.map((t) => t.name)); setMoreOpen(false); }}>
-                        ⬇ Descargar plantilla
-                      </button>
-                      <label className="menu-item" role="menuitem">
-                        ⬆ Importar CSV
-                        <input type="file" accept=".csv,text/csv" hidden disabled={busy}
-                          onChange={(e) => { setMoreOpen(false); onImportProducts(e); }} />
-                      </label>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+          {canCreate && <button className="btn primary" onClick={openCreate}>+ Nuevo producto</button>}
+          <input ref={importRef} type="file" accept=".csv,text/csv" hidden disabled={busy} onChange={onImportProducts} />
         </div>
       </header>
 
@@ -730,284 +769,436 @@ export default function Inventory() {
         </div>
       )}
 
-      {products && (() => {
-        const low = products.flatMap((p) => variantsOf(p).filter(isLow).map((v) => ({ p, v })));
-        if (low.length === 0) return null;
-        return (
-          <div className="lowstock-banner">
-            <strong>⚠ {low.length} {low.length === 1 ? 'variante con' : 'variantes con'} stock bajo</strong>
-            <span className="muted"> · {low.slice(0, 6).map(({ p, v }) =>
-              `${p.name}${variantLabel(v.attributes) ? ' (' + variantLabel(v.attributes) + ')' : ''}: ${Number(v.stock)}`).join(' · ')}
-              {low.length > 6 ? '…' : ''}</span>
-          </div>
-        );
-      })()}
+      {error && !modal && <div className="form-error" onClick={() => setError(null)}>{error}</div>}
 
-      {error && !modal && <div className="form-error">{error}</div>}
+      {products !== null && products.length > 0 && (
+        <div className="fin-kpis">
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Productos</span>
+            <strong className="fin-kpi-value">{summary.products}</strong>
+            <span className="fin-kpi-sub">{summary.variants > 0 ? `${summary.variants} variantes` : 'sin variantes'}{summary.out > 0 ? ` · ${summary.out} sin stock` : ''}</span>
+          </div>
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Unidades en stock</span>
+            <strong className="fin-kpi-value">{summary.units.toLocaleString('es-VE')}</strong>
+            <span className="fin-kpi-sub">{multiBranch && currentBranch ? `en ${currentBranch.name}` : 'entre todos los productos'}</span>
+          </div>
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Valor en inventario</span>
+            <strong className="fin-kpi-value">{summary.withCost ? `$${money(summary.cost)}` : '—'}</strong>
+            <span className="fin-kpi-sub">{summary.withCost ? 'lo que te costó lo que tienes' : 'agrega el costo para calcularlo'}</span>
+          </div>
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Valor a precio de venta</span>
+            <strong className="fin-kpi-value">${money(summary.price)}</strong>
+            <span className="fin-kpi-sub">{summary.withCost ? `ganancia posible $${money(summary.price - summary.cost)}` : 'si vendes todo lo que tienes'}</span>
+          </div>
+        </div>
+      )}
+
+      {lowList.length > 0 && stockFilter !== 'low' && (
+        <div className="fin-alert">
+          <span className="fin-alert-icon" aria-hidden="true">!</span>
+          <span className="fin-alert-text">
+            <strong>{lowList.length === 1 ? '1 variante con stock bajo' : `${lowList.length} variantes con stock bajo`}</strong>
+            <span> · {lowList.slice(0, 3).map(({ p, v }) => `${p.name}${variantLabel(v.attributes) ? ` (${variantLabel(v.attributes)})` : ''}`).join(', ')}{lowList.length > 3 ? '…' : ''}</span>
+          </span>
+          <button type="button" className="btn sm" onClick={() => setStockFilter('low')}>Ver cuáles</button>
+        </div>
+      )}
 
       {products === null ? (
-        <div className="empty">Cargando…</div>
+        <div className="card fin-board"><div className="fin-empty"><span className="muted">Cargando…</span></div></div>
       ) : products.length === 0 ? (
-        <div className="empty">
-          Aún no hay productos.{canCreate && <> Usa <strong>+ Nuevo producto</strong> para agregar el primero.</>}
+        <div className="card fin-board">
+          <div className="fin-empty">
+            <div className="fin-empty-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 8l8-4 8 4v8l-8 4-8-4V8z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M4 8l8 4 8-4M12 12v8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+            </div>
+            <p className="fin-empty-title">Aún no tienes productos</p>
+            <p className="muted">Agrégalos uno por uno o carga muchos a la vez con la plantilla de Excel.</p>
+            {canCreate && (
+              <div className="inv-empty-actions">
+                <button type="button" className="btn primary" onClick={openCreate}>+ Nuevo producto</button>
+                <button type="button" className="btn" onClick={() => importRef.current?.click()}>Importar CSV</button>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
-        <>
-        <div className="inv-filters">
-          <input className="inv-search" type="search" placeholder="Buscar por nombre, SKU o variante…"
-            value={search} onChange={(e) => setSearch(e.target.value)} />
-          <div className="seg sm">
-            <button type="button" className={`seg-btn${ptype === 'all' ? ' active' : ''}`} onClick={() => setPtype('all')}>Todos</button>
-            <button type="button" className={`seg-btn${ptype === 'variants' ? ' active' : ''}`} onClick={() => setPtype('variants')}>Con variantes</button>
-            <button type="button" className={`seg-btn${ptype === 'simple' ? ' active' : ''}`} onClick={() => setPtype('simple')}>Simples</button>
-          </div>
-          <button type="button" className={`chip-btn${offerOnly ? ' active' : ''}`}
-            onClick={() => setOfferOnly((v) => !v)}>🏷 En oferta</button>
-          {filterables.map((t) => (
-            <select key={t.id} value={filters[t.id] || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, [t.id]: e.target.value }))}>
-              <option value="">{t.name}: todas</option>
-              {t.taxonomy_terms.map((term) => (
-                <option key={term.id} value={term.id}>{term.name}</option>
-              ))}
-            </select>
-          ))}
-          {canPrice && !offerMode && (
-            <button type="button" className="btn offer sm inv-offer-enter"
-              onClick={() => setOfferMode(true)}>🏷 Marcar ofertas</button>
-          )}
-        </div>
-
-        {/* -------- Barra del modo ofertas: aplicar/quitar % o precio fijo a la selección -------- */}
-        {offerMode && (
-          <div className="offer-bar card">
-            <strong>{offerSel.size} seleccionado{offerSel.size === 1 ? '' : 's'}</strong>
-            <button type="button" className="linklike" onClick={() => {
-              const all = visibleProducts.map((p) => p.id);
-              setOfferSel((s) => (s.size === all.length ? new Set() : new Set(all)));
-            }}>
-              {offerSel.size === visibleProducts.length ? 'Ninguno' : 'Todos los visibles'}
-            </button>
-            <span className="offer-bar-gap" />
-            <div className="seg sm offer-kind" role="group" aria-label="Tipo de oferta">
-              <button type="button" className={`seg-btn${offerKind === 'percent' ? ' active' : ''}`}
-                onClick={() => { setOfferKind('percent'); setOfferPct(''); }}>% descuento</button>
-              <button type="button" className={`seg-btn${offerKind === 'price' ? ' active' : ''}`}
-                onClick={() => { setOfferKind('price'); setOfferPct(''); }}>Precio fijo</button>
+        <div className="card fin-board inv-board">
+          <div className="fin-toolbar inv-toolbar">
+            <div className="fin-search-wrap">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M16 16l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              <input type="search" className="fin-search" value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nombre, SKU, color, talla…" aria-label="Buscar productos" />
             </div>
-            {offerKind === 'percent' ? (
-              <label className="offer-pct-label">
-                <input type="number" min="1" max="99" step="1" placeholder="%" value={offerPct}
-                  onChange={(e) => setOfferPct(e.target.value)} className="offer-pct" />
-                %
-              </label>
-            ) : (
-              <label className="offer-pct-label" title="Todas las variaciones de los productos seleccionados quedan a este precio">
-                $
-                <input type="number" min="0.01" step="0.01" placeholder="5,00" value={offerPct}
-                  onChange={(e) => setOfferPct(e.target.value)} className="offer-pct" />
-              </label>
-            )}
-            <button type="button" className="btn primary sm"
-              disabled={busy || offerSel.size === 0 || !(offerKind === 'percent'
-                ? Number(offerPct) > 0 && Number(offerPct) < 100
-                : Number(offerPct) > 0)}
-              onClick={() => applyOffer(offerKind === 'percent' ? { percent: Number(offerPct) } : { price: Number(offerPct) })}>
-              Aplicar
-            </button>
-            <button type="button" className="btn ghost sm" disabled={busy || offerSel.size === 0}
-              onClick={() => applyOffer({})}>Quitar oferta</button>
-            <button type="button" className="btn ghost sm" onClick={exitOfferMode}>Cancelar</button>
-          </div>
-        )}
-        {visibleProducts.length === 0 ? (
-          <div className="empty">Ningún producto coincide con la búsqueda o los filtros.</div>
-        ) : (
-        <>
-        <div className="card table-card inv-table">
-          <table className="list">
-            <thead>
-              <tr><th>Producto</th><th>SKU</th><th className="num">Precio</th><th className="num">Stock</th><th /></tr>
-            </thead>
-            <tbody>
-              {visibleProducts.map((p) => {
-                const simple = isSimple(p);
-                const dv = defaultVariant(p);
-                const open = expanded[p.id];
-                return (
-                  <Fragment key={p.id}>
-                    <tr>
-                      <td>
-                        <div className="prod-cell">
-                          {offerMode && (
-                            <input type="checkbox" className="offer-check" checked={offerSel.has(p.id)}
-                              onChange={() => toggleOfferSel(p.id)} aria-label={`Seleccionar ${p.name}`} />
-                          )}
-                          {simple ? (
-                            <span className="tree-spacer" />
-                          ) : (
-                            <button className={`tree-toggle${open ? ' open' : ''}`}
-                              title={open ? 'Ocultar variantes' : 'Ver variantes'}
-                              onClick={() => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }))}>{ICON.chevron}</button>
-                          )}
-                          <span className={`list-thumb${productImg(p) ? ' thumb-click' : ''}`}
-                            title={productImg(p) ? 'Ver foto' : undefined}
-                            onClick={() => openViewer(p)}>
-                            {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
-                          </span>
-                          <div className="prod-info">
-                            <div className="prod-name">
-                              {p.name}
-                              {!simple && <span className="variant-count">{variantsOf(p).length} variantes</span>}
-                            </div>
-                            {(p.product_terms || []).length > 0 && (
-                              <div className="product-tags">
-                                {p.product_terms.map((pt) => termName.get(pt.term_id)).filter(Boolean).join(' · ')}
-                              </div>
-                            )}
-                            {p.note && <div className="product-note">📝 {p.note}</div>}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="mono">{p.sku}</td>
-                      <td className="num">
-                        {hasOffer(p) ? (
-                          <>
-                            <span className="offer-old">{money(p.price)}</span>{' '}
-                            <strong>{money(offerPrice(p.price, p))}</strong>
-                            <div><span className="badge offer">🏷 {offerTag(p)}</span></div>
-                          </>
-                        ) : money(p.price)}
-                        {Number(p.cost) > 0 && <div className="muted">costo {money(p.cost)}</div>}
-                      </td>
-                      <td className="num">
-                        <strong>{variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0)}</strong> {p.unit}
-                        {multiBranch && <div className="muted">total {totalStock(p)}</div>}
-                        {simple && dv && isLow(dv) && <span className="badge low">Bajo</span>}
-                        {!simple && productHasLow(p) && <span className="badge low">Bajo</span>}
-                      </td>
-                      <td className="row-actions">
-                        {canEdit && <button className="icon-btn" title="Editar producto" onClick={() => openEdit(p)}>{ICON.edit}</button>}
-                        {canDelete && <button className="icon-btn danger" title="Eliminar producto" onClick={() => onDeleteProduct(p)}>{ICON.trash}</button>}
-                      </td>
-                    </tr>
-                    {!simple && open && variantsOf(p).map((v) => (
-                      <tr key={v.id} className="variant-row">
-                        <td className="variant-cell">↳ {variantLabel(v.attributes, p.variant_axes) || 'Estándar'}</td>
-                        <td className="mono">{v.sku}</td>
-                        <td className="num">
-                          {hasOffer(p) ? (
-                            <>
-                              <span className="offer-old">{money(v.price ?? p.price)}</span>{' '}
-                              <strong>{money(offerPrice(v.price ?? p.price, p))}</strong>
-                            </>
-                          ) : (v.price != null ? money(v.price) : <span className="muted">{money(p.price)}</span>)}
-                          {Number(v.cost ?? p.cost) > 0 && <div className="muted">costo {money(v.cost ?? p.cost)}</div>}
-                        </td>
-                        <td className="num">
-                          <strong>{branchStock(v, branchId)}</strong> {p.unit}
-                          {multiBranch && <div className="muted">total {Number(v.stock)}</div>}
-                          {isLow(v) && <span className="badge low">Bajo</span>}
-                          {v.target_stock != null && <div className="muted">objetivo {Number(v.target_stock)}</div>}
-                        </td>
-                        <td className="row-actions">
-                          {canDelete && <button className="icon-btn danger" title="Quitar variante" onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>}
-                        </td>
-                      </tr>
-                    ))}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
 
-        {/* -------- Lista móvil: tarjetas expandibles en vez de tabla con
-             scroll horizontal. Mismo estado de expansión que la tabla. -------- */}
-        <div className="inv-cards">
-          {visibleProducts.map((p) => {
-            const simple = isSimple(p);
-            const dv = defaultVariant(p);
-            const open = expanded[p.id];
-            const stock = variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0);
-            const hasLow = simple ? (dv && isLow(dv)) : productHasLow(p);
-            return (
-              <div className="inv-card" key={p.id}>
-                <button type="button" className="inv-card-head" aria-expanded={!!open}
-                  onClick={() => {
-                    if (offerMode) { toggleOfferSel(p.id); return; }
-                    setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }));
-                  }}>
-                  {offerMode && (
-                    <input type="checkbox" className="offer-check" checked={offerSel.has(p.id)}
-                      readOnly tabIndex={-1} aria-hidden="true" />
-                  )}
-                  <span className={`list-thumb${productImg(p) ? ' thumb-click' : ''}`}
-                    onClick={(e) => { if (!offerMode && productImg(p)) { e.stopPropagation(); openViewer(p); } }}>
-                    {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
-                  </span>
-                  <span className="inv-card-info">
-                    <span className="inv-card-name">
-                      {p.name}
-                      {hasOffer(p) && <span className="badge offer">🏷 {offerTag(p)}</span>}
-                      {hasLow && <span className="badge low">Bajo</span>}
-                    </span>
-                    <span className="muted">
-                      {p.sku ? `${p.sku} · ` : ''}
-                      {hasOffer(p)
-                        ? <><span className="offer-old">{money(p.price)}</span> {money(offerPrice(p.price, p))}</>
-                        : money(p.price)}
-                      {' · '}<strong>{stock}</strong> en stock
-                      {!simple && ` · ${variantsOf(p).length} variantes`}
-                    </span>
-                    {(p.product_terms || []).length > 0 && (
-                      <span className="muted inv-card-tags">
-                        {p.product_terms.map((pt) => termName.get(pt.term_id)).filter(Boolean).join(' · ')}
-                      </span>
-                    )}
-                    {p.note && <span className="product-note">📝 {p.note}</span>}
-                  </span>
-                  <span className={`inv-card-chev${open ? ' open' : ''}`} aria-hidden="true">{ICON.chevron}</span>
-                </button>
-                {open && (
-                  <div className="inv-card-body">
-                    {simple && dv ? (
-                      <div className="inv-var-row">
-                        <div className="inv-var-info">
-                          <span className="muted">Stock: <strong>{branchStock(dv, branchId)}</strong>{multiBranch ? ` · total ${Number(dv.stock)}` : ''}</span>
-                        </div>
+            <div className="inv-filter" ref={filterRef}>
+              <button type="button" className={`inv-filter-btn${activeFilters.length ? ' on' : ''}`}
+                aria-expanded={filterOpen} aria-haspopup="dialog" onClick={() => setFilterOpen((o) => !o)}>
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg>
+                Filtros
+                {activeFilters.length > 0 && <span className="inv-filter-count">{activeFilters.length}</span>}
+              </button>
+              {filterOpen && <div className="inv-filter-scrim" aria-hidden="true" onClick={() => setFilterOpen(false)} />}
+              {filterOpen && (
+                <div className="inv-filter-pop" role="dialog" aria-label="Filtros">
+                  <div className="inv-filter-head">
+                    <strong>Filtros</strong>
+                    <button type="button" className="fm-link" disabled={!activeFilters.length} onClick={clearFilters}>Limpiar todo</button>
+                  </div>
+                  <div className="inv-filter-body">
+                    <div className="inv-filter-group">
+                      <span className="fm-label">Existencias</span>
+                      <div className="chip-row">
+                        {STOCK_FILTERS.map(([k, l]) => (
+                          <button key={k} type="button" className={`chip${stockFilter === k ? ' on' : ''}`} onClick={() => setStockFilter(k)}>{l}</button>
+                        ))}
                       </div>
-                    ) : variantsOf(p).map((v) => (
-                      <div className="inv-var-row" key={v.id}>
-                        <div className="inv-var-info">
-                          <span>{variantLabel(v.attributes, p.variant_axes) || 'Estándar'}{isLow(v) && <span className="badge low">Bajo</span>}</span>
-                          <span className="muted">
-                            <strong>{branchStock(v, branchId)}</strong> en stock · {money(offerPrice(v.price ?? p.price, p))}
-                          </span>
-                        </div>
-                        <div className="inv-var-actions">
-                          {canDelete && (
-                            <button className="icon-btn danger" title="Quitar variante" aria-label="Quitar variante"
-                              onClick={() => onDeleteVariant(p, v)}>{ICON.trash}</button>
-                          )}
-                        </div>
+                    </div>
+                    <div className="inv-filter-group">
+                      <span className="fm-label">Tipo de producto</span>
+                      <div className="chip-row">
+                        {[['all', 'Todos'], ['simple', 'Simples'], ['variants', 'Con variantes']].map(([k, l]) => (
+                          <button key={k} type="button" className={`chip${ptype === k ? ' on' : ''}`} onClick={() => setPtype(k)}>{l}</button>
+                        ))}
                       </div>
-                    ))}
-                    {(canEdit || canDelete) && (
-                      <div className="inv-card-foot">
-                        {canEdit && <button className="btn ghost sm" onClick={() => openEdit(p)}>{ICON.edit} Editar</button>}
-                        {canDelete && <button className="btn danger sm" onClick={() => onDeleteProduct(p)}>{ICON.trash} Eliminar</button>}
+                    </div>
+                    <label className="fin-check inv-filter-check">
+                      <input type="checkbox" checked={offerOnly} onChange={(e) => setOfferOnly(e.target.checked)} />
+                      Solo productos en oferta
+                    </label>
+                    {filterables.length > 0 && (
+                      <div className="inv-filter-group">
+                        <span className="fm-label">Categorías y propiedades</span>
+                        <div className="inv-filter-selects">
+                          {filterables.map((t) => (
+                            <label key={t.id} className="inv-filter-select">
+                              <span>{t.name}</span>
+                              <select value={filters[t.id] || ''} onChange={(e) => setFilters((f) => ({ ...f, [t.id]: e.target.value }))}>
+                                <option value="">Todas</option>
+                                {t.taxonomy_terms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}
+                              </select>
+                            </label>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
-                )}
+                  <div className="inv-filter-foot">
+                    <button type="button" className="btn primary block" onClick={() => setFilterOpen(false)}>
+                      Ver {visibleProducts.length} {visibleProducts.length === 1 ? 'producto' : 'productos'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <span className="inv-toolbar-gap" />
+            {summary.withCost && (
+              <span className="fin-total inv-value-pill" title="Valor al costo de lo que muestra la lista">
+                Valor: <strong>${money(sortedProducts.reduce((s, p) => s + costValueOf(p), 0))}</strong>
+              </span>
+            )}
+            {canPrice && !offerMode && (
+              <button type="button" className="btn sm inv-offer-btn" onClick={() => setOfferMode(true)}>
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1 1 0 0 1 0 1.4l-7.3 7.3a1 1 0 0 1-1.4 0l-8.3-8.3z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/></svg>
+                Ofertas
+              </button>
+            )}
+          </div>
+
+          {activeFilters.length > 0 && (
+            <div className="inv-active">
+              {activeFilters.map((f) => (
+                <span key={f.key} className="inv-active-chip">
+                  {f.label}
+                  <button type="button" aria-label={`Quitar filtro ${f.label}`} onClick={f.clear}>
+                    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+                  </button>
+                </span>
+              ))}
+              <button type="button" className="fm-link" onClick={clearFilters}>Limpiar filtros</button>
+            </div>
+          )}
+
+          {/* -------- Modo ofertas: aplicar/quitar % o precio fijo a la selección -------- */}
+          {offerMode && (
+            <div className="inv-offer-bar">
+              <div className="inv-offer-sel">
+                <strong>{offerSel.size} {offerSel.size === 1 ? 'seleccionado' : 'seleccionados'}</strong>
+                <button type="button" className="fm-link" onClick={() => {
+                  const ids = visibleProducts.map((p) => p.id);
+                  setOfferSel((s) => (s.size === ids.length ? new Set() : new Set(ids)));
+                }}>
+                  {offerSel.size === visibleProducts.length && offerSel.size > 0 ? 'Quitar selección' : 'Seleccionar todos'}
+                </button>
               </div>
-            );
-          })}
+              <div className="inv-offer-controls">
+                <div className="seg sm" role="group" aria-label="Tipo de oferta">
+                  <button type="button" className={`seg-btn${offerKind === 'percent' ? ' active' : ''}`}
+                    onClick={() => { setOfferKind('percent'); setOfferPct(''); }}>% descuento</button>
+                  <button type="button" className={`seg-btn${offerKind === 'price' ? ' active' : ''}`}
+                    onClick={() => { setOfferKind('price'); setOfferPct(''); }}>Precio fijo</button>
+                </div>
+                <div className="fm-input-affix inv-offer-input">
+                  <input type="number" min={offerKind === 'percent' ? 1 : 0.01} max={offerKind === 'percent' ? 99 : undefined}
+                    step={offerKind === 'percent' ? 1 : 0.01} placeholder={offerKind === 'percent' ? '20' : '5,00'}
+                    value={offerPct} onChange={(e) => setOfferPct(e.target.value)} aria-label="Valor de la oferta" />
+                  <span>{offerKind === 'percent' ? '%' : '$'}</span>
+                </div>
+                <button type="button" className="btn primary sm"
+                  disabled={busy || offerSel.size === 0 || !(offerKind === 'percent' ? Number(offerPct) > 0 && Number(offerPct) < 100 : Number(offerPct) > 0)}
+                  onClick={() => applyOffer(offerKind === 'percent' ? { percent: Number(offerPct) } : { price: Number(offerPct) })}>
+                  Aplicar
+                </button>
+                <button type="button" className="btn sm" disabled={busy || offerSel.size === 0} onClick={() => applyOffer({})}>Quitar oferta</button>
+                <button type="button" className="btn ghost sm" onClick={exitOfferMode}>Listo</button>
+              </div>
+            </div>
+          )}
+
+          {visibleProducts.length === 0 ? (
+            <div className="fin-empty">
+              <p className="fin-empty-title">Ningún producto coincide</p>
+              <p className="muted">Prueba con otra búsqueda o quita algún filtro.</p>
+              <button type="button" className="btn" onClick={() => { clearFilters(); setSearch(''); }}>Quitar filtros</button>
+            </div>
+          ) : (
+            <>
+              <div className="inv-table">
+                <table className="inv-tbl">
+                  <thead>
+                    <tr>
+                      {offerMode && <th className="inv-col-check" />}
+                      <th><SortHead label="Producto" k="name" sort={sort} setSort={setSort} /></th>
+                      <th className="inv-col-sku">SKU</th>
+                      <th className="num"><SortHead label="Precio" k="price" sort={sort} setSort={setSort} align="right" /></th>
+                      <th className="num"><SortHead label="Stock" k="stock" sort={sort} setSort={setSort} align="right" /></th>
+                      <th className="num inv-col-value"><SortHead label="Valor" k="value" sort={sort} setSort={setSort} align="right" /></th>
+                      <th className="inv-col-actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedProducts.map((p) => {
+                      const simple = isSimple(p);
+                      const dv = defaultVariant(p);
+                      const open = !!expanded[p.id];
+                      const n = stockOf(p);
+                      const low = simple ? dv && isLow(dv) : productHasLow(p);
+                      const tags = (p.product_terms || []).map((pt) => termName.get(pt.term_id)).filter(Boolean);
+                      const value = costValueOf(p);
+                      return (
+                        <Fragment key={p.id}>
+                          <tr className={`inv-row${open ? ' open' : ''}${offerSel.has(p.id) ? ' selected' : ''}`}
+                            onClick={() => (offerMode ? toggleOfferSel(p.id) : !simple && setExpanded((s) => ({ ...s, [p.id]: !s[p.id] })))}>
+                            {offerMode && (
+                              <td className="inv-col-check" onClick={(e) => e.stopPropagation()}>
+                                <input type="checkbox" className="offer-check" checked={offerSel.has(p.id)}
+                                  onChange={() => toggleOfferSel(p.id)} aria-label={`Seleccionar ${p.name}`} />
+                              </td>
+                            )}
+                            <td>
+                              <div className="inv-prod">
+                                <span className="inv-expander">
+                                  {!simple && (
+                                    <button type="button" className={`tree-toggle${open ? ' open' : ''}`} aria-expanded={open}
+                                      aria-label={open ? 'Ocultar variantes' : 'Ver variantes'}
+                                      onClick={(e) => { e.stopPropagation(); setExpanded((s) => ({ ...s, [p.id]: !s[p.id] })); }}>{ICON.chevron}</button>
+                                  )}
+                                </span>
+                                <span className={`list-thumb${productImg(p) ? ' thumb-click' : ''}`}
+                                  title={productImg(p) ? 'Ver fotos' : undefined}
+                                  onClick={(e) => { if (productImg(p)) { e.stopPropagation(); openViewer(p); } }}>
+                                  {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
+                                </span>
+                                <span className="inv-prod-text">
+                                  <span className="inv-prod-name">
+                                    {canEdit && !offerMode
+                                      ? <button type="button" className="inv-name-btn" onClick={(e) => { e.stopPropagation(); openEdit(p); }}>{p.name}</button>
+                                      : <strong>{p.name}</strong>}
+                                    {hasOffer(p) && <span className="inv-pill offer">{offerTag(p)}</span>}
+                                  </span>
+                                  <span className="inv-prod-meta">
+                                    {!simple && <span>{variantsOf(p).length} variantes</span>}
+                                    {tags.length > 0 && <span>{tags.join(' · ')}</span>}
+                                    {p.note && <span className="inv-note" title={p.note}>{p.note}</span>}
+                                  </span>
+                                </span>
+                              </div>
+                            </td>
+                            <td className="inv-col-sku mono">{p.sku || <span className="fin-faint">—</span>}</td>
+                            <td className="num">
+                              {hasOffer(p) ? (
+                                <span className="inv-num">
+                                  <strong>${money(offerPrice(p.price, p))}</strong>
+                                  <small className="offer-old">${money(p.price)}</small>
+                                </span>
+                              ) : (
+                                <span className="inv-num">
+                                  <strong>${money(p.price)}</strong>
+                                  {Number(p.cost) > 0 && <small>costo ${money(p.cost)}</small>}
+                                </span>
+                              )}
+                            </td>
+                            <td className="num">
+                              <span className="inv-num">
+                                <strong className={n <= 0 ? 'inv-zero' : ''}>{n.toLocaleString('es-VE')} <span className="inv-unit">{p.unit}</span></strong>
+                                {stockBadge(p, n, low) || (multiBranch && <small>total {totalStock(p)}</small>)}
+                              </span>
+                            </td>
+                            <td className="num inv-col-value">
+                              {value > 0 ? <span className="inv-num"><strong>${money(value)}</strong></span> : <span className="fin-faint">—</span>}
+                            </td>
+                            <td className="inv-col-actions" onClick={(e) => e.stopPropagation()}>
+                              <div className="inv-actions-cell">
+                                {canEdit && !offerMode && (
+                                  <button type="button" className="inv-icon-btn" title="Editar producto" aria-label={`Editar ${p.name}`}
+                                    onClick={() => openEdit(p)}>{ICON.edit}</button>
+                                )}
+                                {!offerMode && (
+                                  <RowMenu items={[
+                                    { label: 'Editar producto', onClick: () => openEdit(p), hidden: !canEdit },
+                                    ...(simple ? stockItems(p, dv, '') : []),
+                                    { label: open ? 'Ocultar variantes' : 'Ver variantes', hidden: simple,
+                                      onClick: () => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] })) },
+                                    { label: 'div', divider: true, hidden: !canDelete },
+                                    { label: 'Eliminar producto', danger: true, hidden: !canDelete, onClick: () => onDeleteProduct(p) },
+                                  ]} />
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                          {!simple && open && variantsOf(p).map((v) => {
+                            const label = variantLabel(v.attributes, p.variant_axes) || 'Estándar';
+                            const vn = branchStock(v, branchId);
+                            const vValue = vn * Number(v.cost ?? p.cost ?? 0);
+                            return (
+                              <tr key={v.id} className="inv-var">
+                                {offerMode && <td className="inv-col-check" />}
+                                <td>
+                                  <div className="inv-var-name">
+                                    <span className="inv-var-dot" aria-hidden="true" />
+                                    {label}
+                                  </div>
+                                </td>
+                                <td className="inv-col-sku mono">{v.sku || <span className="fin-faint">—</span>}</td>
+                                <td className="num">
+                                  <span className="inv-num">
+                                    {hasOffer(p)
+                                      ? <><span>${money(offerPrice(v.price ?? p.price, p))}</span><small className="offer-old">${money(v.price ?? p.price)}</small></>
+                                      : <span className={v.price == null ? 'fin-faint-text' : ''}>${money(v.price ?? p.price)}</span>}
+                                  </span>
+                                </td>
+                                <td className="num">
+                                  <span className="inv-num">
+                                    <span className={vn <= 0 ? 'inv-zero' : ''}>{vn.toLocaleString('es-VE')}</span>
+                                    {vn <= 0 ? <span className="inv-pill out">Sin stock</span>
+                                      : isLow(v) ? <span className="inv-pill low">Stock bajo</span>
+                                        : v.target_stock != null ? <small>objetivo {Number(v.target_stock)}</small>
+                                          : multiBranch ? <small>total {Number(v.stock)}</small> : null}
+                                  </span>
+                                </td>
+                                <td className="num inv-col-value">{vValue > 0 ? `$${money(vValue)}` : <span className="fin-faint">—</span>}</td>
+                                <td className="inv-col-actions">
+                                  <div className="inv-actions-cell">
+                                    <RowMenu items={[
+                                      ...stockItems(p, v, label),
+                                      { label: 'div', divider: true, hidden: !canDelete || !canStock },
+                                      { label: 'Quitar variante', danger: true, hidden: !canDelete, onClick: () => onDeleteVariant(p, v) },
+                                    ]} />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* -------- Celular: tarjetas desplegables -------- */}
+              <div className="inv-cards">
+                {sortedProducts.map((p) => {
+                  const simple = isSimple(p);
+                  const dv = defaultVariant(p);
+                  const open = expanded[p.id];
+                  const n = stockOf(p);
+                  const low = simple ? dv && isLow(dv) : productHasLow(p);
+                  return (
+                    <div className={`inv-card${offerSel.has(p.id) ? ' selected' : ''}`} key={p.id}>
+                      <button type="button" className="inv-card-head" aria-expanded={!!open}
+                        onClick={() => {
+                          if (offerMode) { toggleOfferSel(p.id); return; }
+                          setExpanded((s) => ({ ...s, [p.id]: !s[p.id] }));
+                        }}>
+                        {offerMode && <input type="checkbox" className="offer-check" checked={offerSel.has(p.id)} readOnly tabIndex={-1} aria-hidden="true" />}
+                        <span className={`list-thumb${productImg(p) ? ' thumb-click' : ''}`}
+                          onClick={(e) => { if (!offerMode && productImg(p)) { e.stopPropagation(); openViewer(p); } }}>
+                          {productImg(p) ? <img src={productImg(p)} alt="" loading="lazy" /> : <span className="thumb-ph">{p.name.slice(0, 1)}</span>}
+                        </span>
+                        <span className="inv-card-info">
+                          <span className="inv-card-name">
+                            {p.name}
+                            {hasOffer(p) && <span className="inv-pill offer">{offerTag(p)}</span>}
+                          </span>
+                          <span className="inv-card-line">
+                            <strong>${money(offerPrice(p.price, p))}</strong>
+                            {hasOffer(p) && <span className="offer-old">${money(p.price)}</span>}
+                            <span className="inv-card-sep">·</span>
+                            <span className={n <= 0 ? 'inv-zero' : ''}>{n} {p.unit}</span>
+                            {stockBadge(p, n, low)}
+                          </span>
+                          <span className="muted inv-card-tags">
+                            {[!simple && `${variantsOf(p).length} variantes`, p.sku, ...(p.product_terms || []).map((pt) => termName.get(pt.term_id))].filter(Boolean).join(' · ')}
+                          </span>
+                        </span>
+                        <span className={`inv-card-chev${open ? ' open' : ''}`} aria-hidden="true">{ICON.chevron}</span>
+                      </button>
+                      {open && !offerMode && (
+                        <div className="inv-card-body">
+                          {(simple ? [dv].filter(Boolean) : variantsOf(p)).map((v) => {
+                            const label = simple ? 'Existencias' : (variantLabel(v.attributes, p.variant_axes) || 'Estándar');
+                            const vn = branchStock(v, branchId);
+                            return (
+                              <div className="inv-var-row" key={v.id}>
+                                <div className="inv-var-info">
+                                  <span>{label}{isLow(v) && <span className="inv-pill low">Stock bajo</span>}</span>
+                                  <span className="muted"><strong>{vn}</strong> en stock{!simple && ` · $${money(offerPrice(v.price ?? p.price, p))}`}</span>
+                                </div>
+                                <div className="inv-var-actions">
+                                  <RowMenu items={[
+                                    ...stockItems(p, v, simple ? '' : label),
+                                    { label: 'Quitar variante', danger: true, hidden: simple || !canDelete, onClick: () => onDeleteVariant(p, v) },
+                                  ]} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {(canEdit || canDelete) && (
+                            <div className="inv-card-foot">
+                              {canEdit && <button className="btn sm" onClick={() => openEdit(p)}>{ICON.edit} Editar</button>}
+                              {canDelete && <button className="btn danger sm" onClick={() => onDeleteProduct(p)}>{ICON.trash} Eliminar</button>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="inv-foot">
+                {visibleProducts.length === products.length
+                  ? `${products.length} ${products.length === 1 ? 'producto' : 'productos'}`
+                  : `${visibleProducts.length} de ${products.length} productos`}
+              </div>
+            </>
+          )}
         </div>
-        </>
-        )}
-        </>
       )}
 
       {/* ============ Modal crear / editar producto ============ */}

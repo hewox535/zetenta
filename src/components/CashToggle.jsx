@@ -18,9 +18,6 @@ const num = (v) => (v === '' || v === null || v === undefined ? null : Number(St
 const hour = (iso) => new Date(iso).toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' });
 const sameDay = (iso) => new Date(iso).toDateString() === new Date().toDateString();
 
-const CashIcon = (
-  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M6.5 9.5h.01M17.5 14.5h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-);
 
 // Interruptor de caja en la parte de arriba del menú lateral. Apagado: abre la
 // caja con el fondo del día. Encendido: abre el arqueo para cerrarla. La caja
@@ -62,7 +59,6 @@ export default function CashToggle({ onAction }) {
       <button type="button" className={`cash-toggle${open ? ' on' : ''}`} onClick={onClick}
         role="switch" aria-checked={open} disabled={session === undefined}
         title={open ? `Caja abierta desde ${since}. Toca para cerrarla.` : 'Caja cerrada. Toca para abrirla.'}>
-        <span className="cash-toggle-icon">{CashIcon}<i className="cash-toggle-dot" /></span>
         <span className="cash-toggle-text">
           <span className="cash-toggle-label">{open ? 'Caja abierta' : 'Caja cerrada'}</span>
           <span className="cash-toggle-sub">{session === undefined ? '…' : open ? `Desde ${since}` : 'Toca para abrir'}</span>
