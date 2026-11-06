@@ -11,6 +11,8 @@ import { notifySale } from '../lib/push';
 import { usd, bs, money, variantLabel, offerPrice, hasOffer, offerTag } from '../lib/calc';
 import OrderReceipt from '../components/OrderReceipt';
 import OpenCashModal from '../components/OpenCashModal';
+import { CASH_EVENT, notifyCashChanged } from '../lib/cashEvents';
+import { addDays, localISO } from '../lib/finance';
 
 const EMPTY_CUST = { name: '', document: '', phone: '', email: '' };
 
@@ -279,9 +281,17 @@ export default function Orders() {
 
   const puedeCaja = capabilities.cash && (isBusinessAdmin || !!permissions?.cash);
   useEffect(() => {
-    if (!puedeCaja || !branchId) return;
-    fetchOpenCashSession(branchId).then((s) => setCajaCerrada(!s)).catch(() => {});
+    if (!puedeCaja || !branchId) return undefined;
+    const check = () => fetchOpenCashSession(branchId).then((s) => setCajaCerrada(!s)).catch(() => {});
+    check();
+    // La caja se abre y se cierra desde el menú lateral: el aviso se entera.
+    window.addEventListener(CASH_EVENT, check);
+    return () => window.removeEventListener(CASH_EVENT, check);
   }, [puedeCaja, branchId]);
+
+  // Venta a crédito: lo que no se cobre queda como cuenta por cobrar del cliente.
+  const [creditOn, setCreditOn] = useState(false);
+  const [creditDue, setCreditDue] = useState(() => addDays(localISO(), 15));
 
   useEffect(() => {
     Promise.all([fetchProducts(), fetchTaxonomies(), fetchBankAccounts(), fetchCustomers()])
@@ -430,6 +440,10 @@ export default function Orders() {
 
   const pickCustomer = (c) => { setSelectedCustomer(c); setCustSearch(''); setShowNewCust(false); };
   const setNew = (k) => (e) => setNewCust((f) => ({ ...f, [k]: e.target.value }));
+  // Vender a crédito: el negocio tiene el módulo de cuentas (no hace falta que la
+  // vendedora tenga permiso para verlo; la cuenta se crea con la venta).
+  const canCredit = !!capabilities.accounts;
+  const hasCustomer = !!selectedCustomer || (showNewCust && !!newCust.name.trim());
   const resetCustomer = () => { setSelectedCustomer(null); setCustSearch(''); setShowNewCust(false); setNewCust(EMPTY_CUST); };
 
   // Configuración del negocio: cliente obligatorio y qué datos exige al
@@ -507,14 +521,17 @@ export default function Orders() {
           currency: x.m.currency, amount: x.amount,
         }));
 
+      const asCredit = creditOn && !isCovered;
+      if (asCredit && !customerId) { setError('Para vender a crédito elige o crea el cliente.'); setBusy(false); return; }
       const created = await createOrder({
         items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName, branchId,
+        creditDue: asCredit ? creditDue : null,
       });
       notifySale(created.id); // push a los admins del negocio (fuego y olvido)
       const full = await fetchOrder(created.id);
       setFinished(full);
       setStage('done');
-      setCart([]); setPayments({}); setSelectedMethods([]); resetCustomer(); setPanelOpen(false);
+      setCart([]); setPayments({}); setSelectedMethods([]); resetCustomer(); setPanelOpen(false); setCreditOn(false);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -578,7 +595,7 @@ export default function Orders() {
       )}
       {openingCash && (
         <OpenCashModal branchId={branchId} onClose={() => setOpeningCash(false)}
-          onOpened={() => { setOpeningCash(false); setCajaCerrada(false); }} />
+          onOpened={() => { setOpeningCash(false); setCajaCerrada(false); notifyCashChanged(); }} />
       )}
 
       <div className="pos">
@@ -845,15 +862,32 @@ export default function Orders() {
                   </>
                 )}
               </div>
+              {stage === 'pay' && canCredit && !isCovered && cart.length > 0 && (
+                <div className={`pos-credit${creditOn ? ' on' : ''}`}>
+                  <label className="pos-credit-toggle">
+                    <input type="checkbox" checked={creditOn} onChange={(e) => setCreditOn(e.target.checked)} />
+                    <span>Dejar <strong>{usd(Math.max(0, rawRemaining))}</strong> a crédito</span>
+                  </label>
+                  {creditOn && (
+                    <>
+                      <label className="pos-credit-due">Vence
+                        <input type="date" value={creditDue} min={localISO()} onChange={(e) => setCreditDue(e.target.value)} />
+                      </label>
+                      {!hasCustomer && <span className="pos-credit-warn">Elige o crea el cliente que queda debiendo.</span>}
+                    </>
+                  )}
+                </div>
+              )}
               {stage === 'shop' ? (
                 <button className="btn primary lg block" disabled={cart.length === 0}
                   onClick={() => { setStage('pay'); setPanelOpen(true); }}>
                   Ir al pago
                 </button>
               ) : (
-                <button className="btn primary lg block" disabled={busy || !isCovered}
+                <button className="btn primary lg block"
+                  disabled={busy || !(isCovered || (creditOn && canCredit && hasCustomer && creditDue))}
                   onClick={onFinish}>
-                  {busy ? 'Guardando…' : 'Finalizar venta'}
+                  {busy ? 'Guardando…' : !isCovered && creditOn ? 'Finalizar venta a crédito' : 'Finalizar venta'}
                 </button>
               )}
             </div>

@@ -1,9 +1,11 @@
-import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import Brand from '../components/Brand';
 import { useConfirm } from '../components/Confirm';
+import CashToggle from '../components/CashToggle';
+import { fetchFinanceAlerts } from '../lib/api';
 
 // Selector global de sucursal (solo si el usuario tiene acceso a más de una).
 function BranchSwitch({ className }) {
@@ -25,6 +27,8 @@ const Icon = {
   shield: <svg viewBox="0 0 24 24"><path d="M12 3l7 2.5v5.2c0 4.6-3 8.4-7 10.3-4-1.9-7-5.7-7-10.3V5.5L12 3z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 12l2.2 2.2L15.5 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   cart: <svg viewBox="0 0 24 24"><path d="M4 5h2l1.6 10.4a1 1 0 0 0 1 .85h8.2a1 1 0 0 0 1-.8L20 8H7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><circle cx="9.5" cy="19.5" r="1.4" fill="currentColor"/><circle cx="17" cy="19.5" r="1.4" fill="currentColor"/></svg>,
   cash: <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M6.5 9.5h.01M17.5 14.5h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>,
+  ledger: <svg viewBox="0 0 24 24"><path d="M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M9 9.5l2.5-2.5L14 9.5M11.5 7v6M15 14.5l-2.5 2.5L10 14.5M12.5 17v-6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  receipt: <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 8h6M9 11.5h6M9 15h3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
   chart: <svg viewBox="0 0 24 24"><path d="M4 20V4M4 20h16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M8 20v-6M12 20v-9M16 20v-4M20 20V9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
   user: <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M4.5 20c.9-3.6 3.6-5.5 7.5-5.5s6.6 1.9 7.5 5.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
   chevLeft: <svg viewBox="0 0 24 24"><path d="M11.5 6L6 12l5.5 6M18 6l-5.5 6 5.5 6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>,
@@ -57,6 +61,16 @@ export default function Shell() {
     });
   }
 
+  // Avisos de vencimiento (cuentas y gastos fijos que vencen en 3 días o ya
+  // vencieron). Se refrescan al cambiar de pantalla.
+  const { pathname } = useLocation();
+  const [alerts, setAlerts] = useState({});
+  const wantsAlerts = !!business && (capabilities.accounts || capabilities.expenses);
+  useEffect(() => {
+    if (!wantsAlerts) return;
+    fetchFinanceAlerts().then((a) => setAlerts(a || {})).catch(() => {});
+  }, [wantsAlerts, pathname]);
+
   const items = [];
   if (capabilities.orders) {
     items.push({ to: '/orders', label: 'Ventas', icon: Icon.cart });
@@ -64,14 +78,17 @@ export default function Shell() {
   // Módulos de administración del negocio: para el admin, o para la vendedora
   // con el permiso otorgado en Negocio → Personal.
   const canModule = (name) => capabilities[name] && (isBusinessAdmin || !!permissions?.[name]);
-  if (canModule('cash')) {
-    items.push({ to: '/cash', label: 'Caja', icon: Icon.cash });
-  }
   if (capabilities.customers) {
     items.push({ to: '/customers', label: 'Clientes', icon: Icon.user });
   }
   if (canModule('inventory')) {
     items.push({ to: '/inventory', label: 'Inventario', icon: Icon.box });
+  }
+  if (canModule('accounts')) {
+    items.push({ to: '/accounts', label: 'Cuentas por cobrar/pagar', icon: Icon.ledger, alert: alerts.debts });
+  }
+  if (canModule('expenses')) {
+    items.push({ to: '/expenses', label: 'Gastos', icon: Icon.receipt, alert: alerts.recurring });
   }
   if (canModule('stats')) {
     items.push({ to: '/stats', label: 'Estadísticas', icon: Icon.chart });
@@ -112,12 +129,16 @@ export default function Shell() {
           </button>
         </div>
         <BranchSwitch />
+        {canModule('cash') && <CashToggle onAction={() => setMenuOpen(false)} />}
         <nav className="sidebar-nav">
           {items.map((it) => (
             <NavLink key={it.to} to={it.to} onClick={() => setMenuOpen(false)} title={it.label}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
               <span className="nav-icon">{it.icon}</span>
               <span className="nav-label">{it.label}</span>
+              {it.alert > 0 && (
+                <span className="nav-alert" title={`${it.alert} por vencer o vencidas`}>{it.alert}</span>
+              )}
             </NavLink>
           ))}
         </nav>
