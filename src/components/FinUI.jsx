@@ -33,8 +33,9 @@ export function FinModal({ title, sub, onClose, busy, children, footer, onSubmit
   );
 }
 
-// Menú "⋯" de una fila. items: [{ label, onClick, danger, hidden }]
-export function RowMenu({ items, label = 'Más acciones' }) {
+// Menú "⋯" de una fila. items: [{ label, onClick, danger, hidden, hint }]
+// Con `trigger` el botón es un texto (p. ej. "Importar ▾") en vez de los tres puntos.
+export function RowMenu({ items, label = 'Más acciones', trigger, triggerClass = 'btn ghost', align = 'right' }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -49,15 +50,25 @@ export function RowMenu({ items, label = 'Más acciones' }) {
   if (!visible.length) return <span className="rm-spacer" />;
   return (
     <div className="rm" ref={ref} onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="rm-btn" aria-label={label} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18.5" cy="12" r="1.6" fill="currentColor"/></svg>
-      </button>
+      {trigger ? (
+        <button type="button" className={`${triggerClass} rm-trigger`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          {trigger}
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      ) : (
+        <button type="button" className="rm-btn" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18.5" cy="12" r="1.6" fill="currentColor"/></svg>
+        </button>
+      )}
       {open && (
-        <div className="rm-menu" role="menu">
-          {visible.map((i) => (
+        <div className={`rm-menu${align === 'left' ? ' left' : ''}`} role="menu">
+          {visible.map((i) => (i.divider ? <hr key={i.label} /> : (
             <button key={i.label} type="button" role="menuitem" className={i.danger ? 'danger' : ''}
-              onClick={() => { setOpen(false); i.onClick(); }}>{i.label}</button>
-          ))}
+              onClick={() => { setOpen(false); i.onClick(); }}>
+              {i.label}
+              {i.hint && <small>{i.hint}</small>}
+            </button>
+          )))}
         </div>
       )}
     </div>
