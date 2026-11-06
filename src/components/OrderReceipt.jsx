@@ -10,7 +10,8 @@ export default function OrderReceipt({ business, order }) {
   const discount = Number(order.discount_usd) || 0;
   const effectiveTotal = (Number(order.total_usd) || 0) - discount;
   const paidUsd = payments.reduce((s, p) => s + (Number(p.amount_usd) || 0), 0);
-  const change = paidUsd - effectiveTotal;
+  const credit = Number(order.credit_usd) || 0;
+  const change = credit > 0 ? 0 : paidUsd - effectiveTotal;
 
   return (
     <div className="receipt">
@@ -71,7 +72,7 @@ export default function OrderReceipt({ business, order }) {
         </div>
       </div>
 
-      {payments.length > 0 && (
+      {(payments.length > 0 || credit > 0) && (
         <>
           <div className="receipt-divider" />
           <div className="receipt-totals">
@@ -84,6 +85,9 @@ export default function OrderReceipt({ business, order }) {
                 <span>{p.currency === 'USD' ? usd(p.amount) : bs(p.amount)}</span>
               </div>
             ))}
+            {credit > 0 && (
+              <div className="receipt-total-row"><span>A crédito (por pagar)</span><span>{usd(credit)}</span></div>
+            )}
             {change > 0.001 && (
               <div className="receipt-total-row"><span>Vuelto</span><span>{usd(change)}</span></div>
             )}

@@ -527,7 +527,9 @@ export async function deleteCustomer(id) {
 // ---------- Pedidos ----------
 
 // items: [{ variant_id, quantity }]   payments: [{ method_id, method_name, currency, amount }]
-export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note, branchId }) {
+// creditDue (yyyy-mm-dd): lo que no se cobre queda como cuenta por cobrar del
+// cliente, con ese vencimiento.
+export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note, branchId, creditDue }) {
   return unwrap(await supabase.rpc('create_order', {
     p_items: items,
     p_payments: payments,
@@ -537,6 +539,7 @@ export async function createOrder({ items, payments, rate, rateSource, customerI
     p_note: note || '',
     p_customer_id: customerId || null,
     p_branch_id: branchId || null,
+    p_credit_due: creditDue || null,
   }));
 }
 
@@ -745,4 +748,126 @@ export async function fetchBrandBySlug(slug) {
   if (error) throw new Error(error.message);
   const b = Array.isArray(data) ? data[0] : data;
   return b || null;
+}
+
+// ---------- Avisos de vencimientos (badge del menú) ----------
+
+export async function fetchFinanceAlerts() {
+  return unwrap(await supabase.rpc('finance_alerts'));
+}
+
+// ---------- Cuentas por cobrar y por pagar ----------
+
+export async function fetchDebts() {
+  return unwrap(await supabase.from('debts')
+    .select('*, debt_payments(*), orders(number), expenses(name)')
+    .is('cancelled_at', null)
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .order('issue_date', { ascending: true }));
+}
+
+export async function createDebt({ kind, partyType, customerId, supplierId, partyName, concept, amountUsd, issueDate, dueDate, note, branchId }) {
+  return unwrap(await supabase.rpc('create_debt', {
+    p_kind: kind, p_party_type: partyType,
+    p_customer_id: customerId || null, p_supplier_id: supplierId || null,
+    p_party_name: partyName || '', p_concept: concept || '',
+    p_amount_usd: Number(amountUsd), p_issue_date: issueDate || null,
+    p_due_date: dueDate || null, p_note: note || '', p_branch_id: branchId || null,
+  }));
+}
+
+export async function updateDebt(id, { concept, amountUsd, dueDate, note }) {
+  return unwrap(await supabase.rpc('update_debt', {
+    p_id: id, p_concept: concept || '', p_amount_usd: Number(amountUsd),
+    p_due_date: dueDate || null, p_note: note || '',
+  }));
+}
+
+export async function deleteDebt(id) {
+  unwrap(await supabase.rpc('delete_debt', { p_id: id }));
+}
+
+// amount va en la moneda de la cuenta; se reparte de la que vence primero a la última.
+export async function payDebts(debtIds, accountId, amount, rate, note) {
+  return unwrap(await supabase.rpc('pay_debts', {
+    p_debt_ids: debtIds, p_account_id: accountId, p_amount: Number(amount),
+    p_rate: Number(rate) || 0, p_note: note || '',
+  }));
+}
+
+export async function deleteDebtPayment(id) {
+  unwrap(await supabase.rpc('delete_debt_payment', { p_id: id }));
+}
+
+// ---------- Gastos ----------
+
+export async function fetchExpenses(fromISO, toISO) {
+  let q = supabase.from('expenses').select('*')
+    .order('spent_on', { ascending: false }).order('created_at', { ascending: false });
+  if (fromISO) q = q.gte('spent_on', fromISO);
+  if (toISO) q = q.lte('spent_on', toISO);
+  return unwrap(await q);
+}
+
+export async function createExpense(payload) {
+  return unwrap(await supabase.rpc('create_expense', { p: payload }));
+}
+
+export async function updateExpense(id, patch) {
+  return unwrap(await supabase.from('expenses').update(patch).eq('id', id).select().single());
+}
+
+export async function deleteExpense(id) {
+  unwrap(await supabase.rpc('delete_expense', { p_id: id }));
+}
+
+export async function fetchExpenseCategories() {
+  return unwrap(await supabase.from('expense_categories').select('*').order('sort_order').order('name'));
+}
+
+export async function createExpenseCategory(businessId, name) {
+  return unwrap(await supabase.from('expense_categories')
+    .insert({ business_id: businessId, name: name.trim(), sort_order: 100 }).select().single());
+}
+
+export async function fetchRecurringExpenses() {
+  return unwrap(await supabase.from('recurring_expenses').select('*').order('next_due'));
+}
+
+export async function createRecurringExpense(businessId, row) {
+  return unwrap(await supabase.from('recurring_expenses')
+    .insert({ business_id: businessId, ...row }).select().single());
+}
+
+export async function updateRecurringExpense(id, patch) {
+  return unwrap(await supabase.from('recurring_expenses').update(patch).eq('id', id).select().single());
+}
+
+export async function deleteRecurringExpense(id) {
+  unwrap(await supabase.from('recurring_expenses').delete().eq('id', id));
+}
+
+// Comprobante del gasto: carpeta privada del negocio; se ve con un enlace temporal.
+export async function uploadExpenseReceipt(businessId, file) {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const path = `${businessId}/${crypto.randomUUID()}.${ext || 'jpg'}`;
+  const { error } = await supabase.storage.from('expense-receipts')
+    .upload(path, file, { contentType: file.type || undefined });
+  if (error) throw new Error(error.message);
+  return path;
+}
+
+export async function expenseReceiptUrl(path) {
+  const { data, error } = await supabase.storage.from('expense-receipts').createSignedUrl(path, 300);
+  if (error) throw new Error(error.message);
+  return data.signedUrl;
+}
+
+// Ventas netas de un período (para comparar gastos contra ingresos).
+export async function fetchSalesTotal(fromISO, toISO) {
+  const rows = unwrap(await supabase.from('orders')
+    .select('total_usd, discount_usd, created_at')
+    .is('cancelled_at', null)
+    .gte('created_at', fromISO).lt('created_at', toISO));
+  return rows.reduce((s, o) => s + Number(o.total_usd) - Number(o.discount_usd || 0), 0);
 }

@@ -8,7 +8,10 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 const CAPABILITIES = [
   ['orders', 'Ventas'],
+  ['cash', 'Caja'],
   ['inventory', 'Inventario'],
+  ['accounts', 'Cuentas por cobrar/pagar'],
+  ['expenses', 'Gastos'],
   ['stats', 'Estadísticas'],
   ['customers', 'Clientes'],
   ['campaigns', 'Campañas'],
@@ -17,6 +20,9 @@ const CAPABILITIES = [
 
 const CAP_HINTS = {
   orders: 'Punto de venta y historial de pedidos.',
+  cash: 'Apertura y cierre de caja desde el menú lateral.',
+  accounts: 'Lo que le deben al negocio y lo que debe, con cobros y pagos.',
+  expenses: 'Gastos variables y fijos, por categoría, frente a las ventas.',
   inventory: 'Productos, variaciones y stock.',
   stats: 'Estadísticas del negocio.',
   customers: 'Base de clientes.',

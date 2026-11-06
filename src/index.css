@@ -114,6 +114,54 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
 .branch-select { width: auto; max-width: 100%; margin: 0 10px 16px; padding: 8px 30px 8px 12px; font-size: 14px; font-weight: 600; }
 .branch-select.mobile { margin: 0 0 0 auto; padding: 6px 26px 6px 10px; font-size: 13px; max-width: 46vw; }
 .sidebar-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+
+/* ---------- Caja: interruptor arriba del menú ---------- */
+.cash-toggle {
+  display: flex; align-items: center; gap: 10px; width: 100%; margin: 0 0 14px;
+  padding: 10px 10px 10px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.cash-toggle:hover { border-color: var(--accent-line); }
+.cash-toggle:disabled { cursor: default; opacity: .7; }
+.cash-toggle.on { background: var(--ok-bg); border-color: rgba(36,138,61,.28); }
+.cash-toggle-icon { position: relative; display: inline-flex; width: 19px; height: 19px; flex: none; color: var(--text-2); }
+.cash-toggle.on .cash-toggle-icon { color: var(--ok); }
+.cash-toggle-icon svg { width: 100%; height: 100%; }
+.cash-toggle-dot {
+  position: absolute; right: -3px; top: -3px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-2); box-shadow: 0 0 0 2px var(--surface);
+}
+.cash-toggle.on .cash-toggle-dot { background: #34c759; box-shadow: 0 0 0 2px var(--ok-bg); }
+.cash-toggle-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.cash-toggle-label { font-size: 13.5px; font-weight: 600; }
+.cash-toggle-sub { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cash-toggle .switch { flex: none; pointer-events: none; display: inline-block; }
+.sidebar.collapsed .cash-toggle { justify-content: center; padding: 10px 0; }
+.sidebar.collapsed .cash-toggle-text, .sidebar.collapsed .cash-toggle .switch { display: none; }
+.cash-panel-sub { margin: 4px 0 0; font-size: 13px; }
+.cash-panel-tabs { margin-bottom: 16px; }
+
+/* Aviso de vencimientos en el menú */
+.nav-alert {
+  margin-left: auto; min-width: 19px; height: 19px; padding: 0 6px; border-radius: 999px;
+  display: inline-grid; place-items: center; font-size: 11px; font-weight: 700;
+  background: var(--danger); color: #fff;
+}
+.sidebar.collapsed .nav-item { position: relative; }
+.sidebar.collapsed .nav-alert { position: absolute; top: 3px; right: 3px; min-width: 8px; height: 8px; padding: 0; font-size: 0; }
+
+/* Venta a crédito en el cobro */
+.pos-credit {
+  display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; padding: 10px 12px;
+  border-radius: var(--radius-sm); border: 1px dashed var(--border);
+}
+.pos-credit.on { border-style: solid; border-color: var(--accent-line); background: var(--accent-soft); }
+.pos-credit-toggle { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; cursor: pointer; }
+.pos-credit-toggle input { width: 16px; height: 16px; margin: 0; flex: none; }
+.pos-credit-due { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.pos-credit-due input { flex: 1; min-width: 0; padding: 6px 10px; }
+.pos-credit-warn { font-size: 12.5px; color: var(--danger); }
 .nav-item {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 10px; border-radius: var(--radius-sm);

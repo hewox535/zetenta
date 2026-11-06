@@ -21,7 +21,8 @@ import Orders from './pages/Orders';
 import OrdersHistory from './pages/OrdersHistory';
 import OrderView from './pages/OrderView';
 import Stats from './pages/Stats';
-import Cash from './pages/Cash';
+import Accounts from './pages/Accounts';
+import Expenses from './pages/Expenses';
 import Settings from './pages/Settings';
 import Account from './pages/Account';
 import Admin from './pages/Admin';
@@ -86,7 +87,7 @@ function RequireBusinessAdmin({ children }) {
 }
 
 // Módulos de administración delegables: entra el admin del negocio o una
-// vendedora con el permiso otorgado (inventory/stats/retentions).
+// vendedora con el permiso otorgado (inventory/stats/retentions/cash/accounts/expenses).
 function RequirePermission({ name, children }) {
   const { isBusinessAdmin, permissions } = useAuth();
   if (!isBusinessAdmin && !permissions?.[name]) return <Navigate to="/" replace />;
@@ -143,7 +144,10 @@ export default function App() {
             <Route path="orders" element={<RequireCapability name="orders"><Orders /></RequireCapability>} />
             <Route path="orders/history" element={<RequireCapability name="orders"><OrdersHistory /></RequireCapability>} />
             <Route path="orders/:id" element={<RequireCapability name="orders"><OrderView /></RequireCapability>} />
-            <Route path="cash" element={<RequirePermission name="cash"><RequireCapability name="cash"><Cash /></RequireCapability></RequirePermission>} />
+            {/* La caja ya no es una pantalla: se abre y se cierra desde el menú lateral */}
+            <Route path="cash" element={<Navigate to="/" replace />} />
+            <Route path="accounts" element={<RequirePermission name="accounts"><RequireCapability name="accounts"><Accounts /></RequireCapability></RequirePermission>} />
+            <Route path="expenses" element={<RequirePermission name="expenses"><RequireCapability name="expenses"><Expenses /></RequireCapability></RequirePermission>} />
             <Route path="stats" element={<RequirePermission name="stats"><RequireCapability name="stats"><Stats /></RequireCapability></RequirePermission>} />
             <Route path="settings" element={<RequireBusinessAdmin><Settings /></RequireBusinessAdmin>} />
             <Route path="account" element={<Account />} />

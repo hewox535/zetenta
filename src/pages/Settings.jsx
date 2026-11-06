@@ -1098,6 +1098,8 @@ const ROLE_LABEL = { admin: 'Administrador', seller: 'Vendedora' };
 const PERM_OPTIONS = [
   ['inventory', 'Inventario'],
   ['cash', 'Caja'],
+  ['accounts', 'Cuentas por cobrar/pagar'],
+  ['expenses', 'Gastos'],
   ['stats', 'Estadísticas'],
   ['retentions', 'Retenciones'],
 ];
