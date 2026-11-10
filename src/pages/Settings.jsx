@@ -567,6 +567,7 @@ function OrdersSection({ business, refreshBusiness }) {
   const [rateError, setRateError] = useState(null);
 
   const [discount, setDiscount] = useState(String(business.foreign_discount_percent ?? 0));
+  const [localDiscount, setLocalDiscount] = useState(String(business.local_discount_percent ?? 0));
   const [discBusy, setDiscBusy] = useState(false);
   const [discSaved, setDiscSaved] = useState(false);
   const [discError, setDiscError] = useState(null);
@@ -596,6 +597,7 @@ function OrdersSection({ business, refreshBusiness }) {
     try {
       await updateBusinessSettings({
         foreignDiscountPercent: Number(discount) || 0,
+        localDiscountPercent: Number(localDiscount) || 0,
         lowStockPercent: business.low_stock_percent ?? 20,
       });
       await refreshBusiness();
@@ -654,21 +656,37 @@ function OrdersSection({ business, refreshBusiness }) {
       </section>
 
       <section className="card vsection">
-        <h2>Descuento por pago en divisa</h2>
+        <h2>Descuentos de contado</h2>
         <p className="hint">
-          Descuento que se aplica <strong>solo</strong> a la parte de la venta que se paga
-          en divisa (métodos en dólares). La parte pagada en bolívares no recibe descuento.
-          Se calcula sobre el saldo pendiente que se liquida en divisa, no sobre el total.
+          Descuento para quien paga de contado, según la moneda. Se aplica solo a la parte de la
+          venta que se paga con esa moneda y se calcula sobre el saldo que se liquida con ella.
+          Las ventas con Cashea van a precio de lista, sin estos descuentos.
         </p>
-        <label className="short">
-          Descuento (%)
-          <input type="number" min="0" max="100" step="0.5" value={discount}
-            onChange={(e) => setDiscount(e.target.value)} placeholder="0" />
-        </label>
+        <div className="disc-grid">
+          <label>
+            En divisa (%)
+            <input type="number" min="0" max="99" step="0.5" value={discount}
+              onChange={(e) => setDiscount(e.target.value)} placeholder="0" />
+            <span className="field-hint">Efectivo en dólares, Zelle, USDT…</span>
+          </label>
+          <label>
+            En bolívares (%)
+            <input type="number" min="0" max="99" step="0.5" value={localDiscount}
+              onChange={(e) => setLocalDiscount(e.target.value)} placeholder="0" />
+            <span className="field-hint">Pago móvil, transferencia, punto…</span>
+          </label>
+        </div>
+        {(Number(discount) > 0 || Number(localDiscount) > 0) && (
+          <p className="hint">
+            Ejemplo: un producto de $100 queda en{' '}
+            <strong>${(100 * (1 - (Number(localDiscount) || 0) / 100)).toFixed(2)}</strong> pagando en bolívares y en{' '}
+            <strong>${(100 * (1 - (Number(discount) || 0) / 100)).toFixed(2)}</strong> pagando en divisa.
+          </p>
+        )}
         {discError && <div className="form-error">{discError}</div>}
-        {discSaved && <div className="form-ok">Descuento guardado.</div>}
+        {discSaved && <div className="form-ok">Descuentos guardados.</div>}
         <button type="button" className="btn primary" disabled={discBusy} onClick={saveDiscount}>
-          {discBusy ? 'Guardando…' : 'Guardar descuento'}
+          {discBusy ? 'Guardando…' : 'Guardar descuentos'}
         </button>
       </section>
 

@@ -441,11 +441,13 @@ export async function updateCustomerConfig(customerConfig) {
   return unwrap(await supabase.rpc('update_customer_config', { p_customer_config: customerConfig }));
 }
 
-// Descuento por pago en divisa (%) y umbral de stock bajo (%).
-export async function updateBusinessSettings({ foreignDiscountPercent, lowStockPercent }) {
+// Descuentos de contado (%) en divisa y en bolívares, y umbral de stock bajo (%).
+// Sin localDiscountPercent, el descuento en bolívares no se toca.
+export async function updateBusinessSettings({ foreignDiscountPercent, lowStockPercent, localDiscountPercent }) {
   return unwrap(await supabase.rpc('update_business_settings', {
     p_foreign_discount_percent: foreignDiscountPercent,
     p_low_stock_percent: lowStockPercent,
+    p_local_discount_percent: localDiscountPercent ?? null,
   }));
 }
 

@@ -155,6 +155,7 @@ function payOptionsFromAccounts(accounts) {
 const isCashea = (m) => m?.kind === 'cashea';
 // El descuento por pagar en divisa premia el efectivo en dólares; lo que
 // financia Cashea no lo gana, aunque su cuenta sea en USD (igual que el servidor).
+// El contado en bolívares tiene su propio descuento (local_discount_percent).
 const isForeignCash = (m) => m?.currency === 'USD' && !isCashea(m);
 
 // Helpers de monto (aceptan coma o punto decimal).
@@ -340,31 +341,41 @@ export default function Orders() {
   // restante < 1 céntimo que se mostraba como $0,00 pero mantenía deshabilitado
   // "Finalizar". Los Bs se normalizan a USD redondeando cada pago, como el servidor.
   const PAY_EPS = 0.01;
-  // Descuento por divisa: el pago en USD "rinde" más (amt / (1-d)); los Bs no.
-  const d = Math.min(0.99, Math.max(0, (Number(business?.foreign_discount_percent) || 0) / 100));
-  // vesCredit: lo que vale a precio de lista (Bs y lo financiado por Cashea).
-  // usdPaid: solo el efectivo en divisa, que es lo que gana descuento.
-  const vesCredit = selectedMethods.reduce((s, id) => {
+  // Descuentos de contado: el pago en divisa "rinde" amt / (1-d) y el de
+  // bolívares amt / (1-dv). Lo que financia Cashea va a precio de lista, y si
+  // la venta lleva Cashea no hay descuentos (igual que el servidor).
+  // listUsd: lo de Cashea (a precio de lista). bsUsd: el contado en Bs, en $.
+  // usdPaid: el contado en divisa.
+  const toUsd = (m, amt) => (m.currency === 'USD' ? amt : (rate.value ? round2(amt / rate.value) : 0));
+  const sumBy = (pred) => selectedMethods.reduce((acc, id) => {
     const m = methods.find((x) => x.id === id);
-    if (!m || isForeignCash(m)) return s;
-    const amt = parseAmt(payments[id]);
-    if (m.currency === 'USD') return s + amt;
-    return s + (rate.value ? round2(amt / rate.value) : 0);
+    return m && pred(m) ? acc + toUsd(m, parseAmt(payments[id])) : acc;
   }, 0);
-  const usdPaid = selectedMethods.reduce((s, id) => {
-    const m = methods.find((x) => x.id === id);
-    if (!m || !isForeignCash(m)) return s;
-    return s + parseAmt(payments[id]);
-  }, 0);
-  const paidUsd = vesCredit + (d > 0 ? usdPaid / (1 - d) : usdPaid);
+  const listUsd = sumBy((m) => isCashea(m));
+  // Con un monto en Cashea, la venta va a precio de lista (el servidor mira lo mismo).
+  const clampPct = (v) => Math.min(0.99, Math.max(0, (Number(v) || 0) / 100));
+  const d = listUsd > 0 ? 0 : clampPct(business?.foreign_discount_percent);
+  const dv = listUsd > 0 ? 0 : clampPct(business?.local_discount_percent);
+  const bsUsd = sumBy((m) => !isCashea(m) && !isForeignCash(m));
+  const usdPaid = sumBy((m) => isForeignCash(m));
+  const vesCredit = listUsd + bsUsd;   // todo lo que no es divisa (para los totales)
+  const paidUsd = listUsd + (dv > 0 ? bsUsd / (1 - dv) : bsUsd) + (d > 0 ? usdPaid / (1 - d) : usdPaid);
   const rawRemaining = totalUsd - paidUsd;
   // Cubierto (habilita Finalizar) cuando el restante cae dentro de la tolerancia.
   const isCovered = cart.length > 0 && rawRemaining <= PAY_EPS;
-  // Descuento concedido (igual criterio que el servidor).
-  const pendingForUsd = Math.max(0, totalUsd - vesCredit);
-  const usdNeeded = pendingForUsd * (1 - d);
-  const discountUsd = d <= 0 ? 0
-    : (usdPaid + 0.005 >= usdNeeded ? pendingForUsd * d : (usdPaid * d) / (1 - d));
+  // Descuento concedido: Cashea primero, luego Bs, luego divisa (igual que el servidor).
+  let discountUsd = 0;
+  {
+    let pending = totalUsd - listUsd;
+    if (pending > 0 && bsUsd > 0) {
+      if (bsUsd + PAY_EPS >= round2(pending * (1 - dv))) { discountUsd += pending * dv; pending = 0; }
+      else { discountUsd += (bsUsd * dv) / (1 - dv); pending -= bsUsd / (1 - dv); }
+    }
+    if (pending > 0 && usdPaid > 0) {
+      discountUsd += usdPaid + PAY_EPS >= round2(pending * (1 - d)) ? pending * d : (usdPaid * d) / (1 - d);
+    }
+  }
+  const discountLabel = d > 0 && dv > 0 ? 'Descuento de contado' : dv > 0 ? 'Descuento en bolívares' : 'Descuento por divisa';
   // Lo que el cliente realmente paga (neto = lista − descuento) y lo realmente
   // recibido en efectivo (Bs a USD + USD), para no mostrar "pagado 90$" cuando el
   // descuento hace que se cobren menos. Cuando está cubierto, recibido == a pagar.
@@ -407,15 +418,15 @@ export default function Orders() {
     }
     // Restante en USD (lista) sin contar lo ya escrito en este método.
     const cur = parseAmt(payments[m.id]);
-    const creditOfThis = isForeignCash(m)
-      ? (d > 0 ? cur / (1 - d) : cur)
-      : (m.currency === 'USD' ? cur : (rate.value ? round2(cur / rate.value) : 0));
+    // Descuento que le toca a este método: divisa d, Bs dv, Cashea ninguno.
+    const dm = isCashea(m) ? 0 : isForeignCash(m) ? d : dv;
+    const curUsd = toUsd(m, cur);
+    const creditOfThis = dm > 0 ? curUsd / (1 - dm) : curUsd;
     const remaining = totalUsd - (paidUsd - creditOfThis);
     if (remaining <= 0) return;
-    // En divisa se cobra el saldo con descuento: remaining*(1-d). En Bs y en
-    // Cashea, sin descuento.
-    const amount = isForeignCash(m) ? remaining * (1 - d)
-      : (m.currency === 'USD' ? remaining : remaining * rate.value);
+    // Se cobra el saldo con el descuento del método: remaining*(1-dm).
+    const net = remaining * (1 - dm);
+    const amount = m.currency === 'USD' ? net : net * rate.value;
     setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
   };
 
@@ -831,7 +842,7 @@ export default function Orders() {
                 {stage === 'pay' && discountUsd > 0.005 ? (
                   <>
                     <div className="totals-row"><span>Total lista</span><span>{usd(totalUsd)}</span></div>
-                    <div className="totals-row ok"><span>Descuento por divisa</span><span>−{usd(discountUsd)}</span></div>
+                    <div className="totals-row ok"><span>{discountLabel}</span><span>−{usd(discountUsd)}</span></div>
                     <div className="totals-row grand"><span>A pagar</span><span>{usd(netTotalUsd)}</span></div>
                     <div className="totals-row"><span className="muted">A pagar en Bs</span><span className="muted">{bs(netTotalUsd * rate.value)}</span></div>
                   </>
