@@ -451,6 +451,11 @@ export async function updateBusinessSettings({ foreignDiscountPercent, lowStockP
   }));
 }
 
+// Inicial de Cashea que trae el POS por defecto (%).
+export async function setCasheaInitialPercent(percent) {
+  return unwrap(await supabase.rpc('set_cashea_initial_percent', { p_percent: Number(percent) }));
+}
+
 // ---------- Personal del negocio (roles) ----------
 
 export async function fetchStaff() {

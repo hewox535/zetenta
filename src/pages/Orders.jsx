@@ -139,7 +139,9 @@ function payOptionsFromAccounts(accounts) {
         account_id: a.id, method_id: null, account_name: a.name, method_name: '' });
     } else {
       for (const m of ms) {
-        opts.push({ id: `m:${m.id}`, name: `${a.name} · ${m.name}`, currency: a.currency,
+        // Cashea es un método especial (una sola cuenta por negocio): se
+        // muestra solo como "Cashea", no "Cuenta · Método".
+        opts.push({ id: `m:${m.id}`, name: m.kind === 'cashea' ? 'Cashea' : `${a.name} · ${m.name}`, currency: a.currency,
           kind: m.kind || 'normal',
           account_id: a.id, method_id: m.id, account_name: a.name, method_name: m.name });
       }
@@ -195,6 +197,43 @@ function PayAmountRow({
   const initialUsd = splitOk ? round2(totalUsd * (pct / 100)) : 0;
   const financedUsd = splitOk ? round2(totalUsd - initialUsd) : 0;
 
+  // Cashea: solo el % de inicial y el reparto. Lo financiado no se escribe ni
+  // tiene "Exacto": sale del % y del total.
+  if (cashea) {
+    const financedMain = splitOk ? (isVes ? financedUsd * rate : financedUsd) : 0;
+    return (
+      <div className="pay-input-row pay-row-cashea">
+        <div className="pay-cashea-head">
+          <span className="pay-input-name">{m.name}</span>
+          <label className="pay-pct">
+            <span>Inicial</span>
+            <span className="pay-pct-field">
+              <input inputMode="decimal" placeholder="40" value={initialPct}
+                onChange={(e) => onInitialPct(e.target.value)} aria-label="Porcentaje de inicial" />
+              <span className="pay-pct-sign">%</span>
+            </span>
+          </label>
+        </div>
+        {splitOk ? (
+          <div className="pay-cashea-split">
+            <div>
+              <span>Paga hoy el cliente</span>
+              <strong>{usd(initialUsd)}</strong>
+              {rate > 0 && <em>{bs(initialUsd * rate)}</em>}
+            </div>
+            <div>
+              <span>Financia Cashea</span>
+              <strong>{usd(financedUsd)}</strong>
+              {isVes && <em>{bs(financedMain)}</em>}
+            </div>
+          </div>
+        ) : (
+          <span className="pay-split muted">Escribe el % de inicial que indica la app de Cashea.</span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`pay-input-row${cashea ? ' pay-row-cashea' : ''}`}>
       <div className="pay-input-label">
@@ -204,25 +243,6 @@ function PayAmountRow({
           Exacto
         </button>
       </div>
-      {onInitialPct && (
-        <div className="pay-cashea">
-          <label className="pay-pct">
-            <span>Inicial</span>
-            <span className="pay-pct-field">
-              <input inputMode="decimal" placeholder="30" value={initialPct}
-                onChange={(e) => onInitialPct(e.target.value)} aria-label="Porcentaje de inicial" />
-              <span className="pay-pct-sign">%</span>
-            </span>
-          </label>
-          {splitOk ? (
-            <span className="pay-split">
-              Cliente <strong>${initialUsd.toFixed(2)}</strong> · Cashea <strong>${financedUsd.toFixed(2)}</strong>
-            </span>
-          ) : (
-            <span className="pay-split muted">% que paga el cliente hoy</span>
-          )}
-        </div>
-      )}
       <div className={`pay-dual${isVes ? '' : ' single'}`}>
         <label className="pay-amt main">
           <span className="pay-amt-cur">{isVes ? 'Bs' : '$'}</span>
@@ -277,6 +297,8 @@ export default function Orders() {
   const [selectedMethods, setSelectedMethods] = useState([]); // ids de métodos activos
   const [payments, setPayments] = useState({});        // { methodId: 'monto' }
   const [initialPct, setInitialPct] = useState({});    // { methodId: '% inicial' } en Cashea
+  // Inicial de Cashea por defecto (estándar 40%; el negocio la cambia en Ventas).
+  const casheaDefault = Number(business?.cashea_initial_percent) || 40;
   const [busy, setBusy] = useState(false);
   const [finished, setFinished] = useState(null);      // pedido guardado (con ítems/pagos)
 
@@ -428,8 +450,9 @@ export default function Orders() {
     // método —con o sin descuento por divisa— sin tener que pulsar "Exacto".
     // Cashea se rellena con su % de inicial aunque sea el primero, para que al
     // volver a seleccionarlo no quede el % puesto y el monto vacío.
-    const pct = parseAmt(initialPct[m.id]);
-    if (isCashea(m) && pct > 0 && pct < 100) setCasheaPct(m, initialPct[m.id]);
+    // Cashea entra con la inicial ya puesta (la del negocio, 40% por defecto,
+    // o la que se escribió antes en esta venta).
+    if (isCashea(m)) setCasheaPct(m, initialPct[m.id] || String(casheaDefault));
     else if (selectedMethods.length >= 1) fillExact(m);
     setSelectedMethods((prev) => [...prev, m.id]);
   };
@@ -454,12 +477,26 @@ export default function Orders() {
     setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
   };
 
+  // Lo que financia Cashea no se escribe: sale del % y del total. Si cambia el
+  // total o la tasa, se recalcula solo.
+  useEffect(() => {
+    selectedMethods.forEach((id) => {
+      const m = methods.find((x) => x.id === id);
+      if (!isCashea(m)) return;
+      const pct = parseAmt(initialPct[id]);
+      if (!(pct > 0 && pct < 100)) return;
+      const fin = totalUsd * (1 - pct / 100);
+      const amount = (m.currency === 'USD' ? fin : fin * rate.value).toFixed(2);
+      setPayments((prev) => (prev[id] === amount ? prev : { ...prev, [id]: amount }));
+    });
+  }, [totalUsd, rate.value]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Reparte la venta con el % de inicial que escribe la vendedora: la inicial
   // la cobra la tienda con sus métodos y el resto queda financiado por Cashea.
   const setCasheaPct = (m, value) => {
     setInitialPct((prev) => ({ ...prev, [m.id]: value }));
     const pct = parseAmt(value);
-    if (!(pct > 0 && pct < 100)) return;
+    if (!(pct > 0 && pct < 100)) { setPayments((prev) => ({ ...prev, [m.id]: '' })); return; }
     const financedUsd = totalUsd * (1 - pct / 100);
     const amount = m.currency === 'USD' ? financedUsd : financedUsd * rate.value;
     // Si hay un solo método más, ese cobra la inicial (a precio de lista: con

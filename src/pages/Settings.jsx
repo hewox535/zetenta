@@ -9,7 +9,7 @@ import {
   uploadStamp, setStampUrl,
   createPaymentMethod, updatePaymentMethod, deletePaymentMethod,
   setCancelPin, hasCancelPin,
-  updateOrderSettings, updateBusinessSettings, updateCustomerConfig,
+  updateOrderSettings, updateBusinessSettings, updateCustomerConfig, setCasheaInitialPercent,
   fetchBranches, createBranch, updateBranch, deleteBranch,
   fetchUserBranches, setUserBranches,
   fetchStaff, createStaff, deleteStaff, setStaffRole, setStaffPermissions,
@@ -690,6 +690,8 @@ function OrdersSection({ business, refreshBusiness }) {
         </button>
       </section>
 
+      <CasheaSection business={business} refreshBusiness={refreshBusiness} />
+
       <CancelPinSection />
 
       <section className="card vsection">
@@ -725,6 +727,48 @@ function OrdersSection({ business, refreshBusiness }) {
 }
 
 // ---------- PIN de seguridad: autoriza cancelar una venta ----------
+// Cashea: inicial que trae el POS al elegirlo. Solo aparece si el negocio
+// tiene un método de pago Cashea configurado en sus cuentas.
+function CasheaSection({ business, refreshBusiness }) {
+  const [hasCashea, setHasCashea] = useState(false);
+  const [pct, setPct] = useState(String(business.cashea_initial_percent ?? 40));
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchBankAccounts()
+      .then((a) => setHasCashea(a.some((x) => (x.payment_methods || []).some((m) => m.kind === 'cashea'))))
+      .catch(() => {});
+  }, []);
+  if (!hasCashea) return null;
+
+  async function save() {
+    setBusy(true); setError(null); setSaved(false);
+    try { await setCasheaInitialPercent(pct); await refreshBusiness(); setSaved(true); }
+    catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <section className="card vsection">
+      <h2>Cashea</h2>
+      <p className="hint">
+        Inicial que aparece ya puesta al elegir Cashea en una venta. El estándar de Cashea es 40%;
+        en cada venta se puede cambiar si la app de Cashea indica otro porcentaje.
+      </p>
+      <label className="short">
+        Inicial por defecto (%)
+        <input type="number" min="1" max="99" step="1" value={pct} onChange={(e) => setPct(e.target.value)} />
+      </label>
+      {error && <div className="form-error">{error}</div>}
+      {saved && <div className="form-ok">Inicial guardada.</div>}
+      <button type="button" className="btn primary" disabled={busy || !(Number(pct) > 0 && Number(pct) < 100)} onClick={save}>
+        {busy ? 'Guardando…' : 'Guardar inicial'}
+      </button>
+    </section>
+  );
+}
+
 function CancelPinSection() {
   const [has, setHas] = useState(null);
   const [pin, setPin] = useState('');

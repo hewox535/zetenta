@@ -1179,6 +1179,15 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .acct-method-kind input { width: 16px; height: 16px; }
 .acct-method-name .badge { margin-left: 8px; }
 /* Cashea: % y reparto en una sola línea */
+.pay-cashea-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13.5px; font-weight: 600; }
+.pay-cashea-split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pay-cashea-split > div {
+  display: flex; flex-direction: column; gap: 1px; padding: 9px 11px; border-radius: var(--radius-sm); background: var(--bg);
+  font-variant-numeric: tabular-nums;
+}
+.pay-cashea-split span { font-size: 11.5px; font-weight: 600; color: var(--text-2); }
+.pay-cashea-split strong { font-size: 16px; }
+.pay-cashea-split em { font-style: normal; font-size: 12px; color: var(--text-2); }
 .pay-cashea { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .pay-split { font-size: 12.5px; color: var(--text-2); }
 .pay-split strong { color: var(--text); font-variant-numeric: tabular-nums; }
