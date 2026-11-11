@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { fetchProfile, fetchBusiness } from '../lib/api';
+import { fetchProfile, fetchBusiness, isSessionAlive } from '../lib/api';
 
 const AuthContext = createContext(null);
 
@@ -21,6 +21,27 @@ export function AuthProvider({ children }) {
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Si un administrador cerró esta sesión desde «Sesiones», el token sigue
+  // valiendo hasta vencer: se comprueba cada minuto y al volver a la pestaña
+  // para sacar al usuario de inmediato.
+  const userId = session?.user?.id;
+  useEffect(() => {
+    if (!userId) return undefined;
+    let stop = false;
+    const check = async () => {
+      if (stop || document.visibilityState === 'hidden') return;
+      if (!(await isSessionAlive()) && !stop) supabase.auth.signOut({ scope: 'local' });
+    };
+    const id = setInterval(check, 60000);
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('focus', check);
+    return () => {
+      stop = true; clearInterval(id);
+      document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('focus', check);
+    };
+  }, [userId]);
 
   const loadAccount = useCallback(async (userId) => {
     const p = await fetchProfile(userId);

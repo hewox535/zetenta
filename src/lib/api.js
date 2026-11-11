@@ -499,6 +499,28 @@ export async function setStaffPermissions(userId, permissions) {
   return unwrap(await supabase.rpc('set_staff_permissions', { p_user: userId, p_permissions: permissions }));
 }
 
+// ---------- Sesiones abiertas del negocio (solo administrador) ----------
+
+export async function fetchBusinessSessions() {
+  return unwrap(await supabase.rpc('list_business_sessions'));
+}
+
+export async function revokeBusinessSession(sessionId) {
+  return unwrap(await supabase.rpc('revoke_business_session', { p_session: sessionId }));
+}
+
+// userId null → todas las del negocio (menos la sesión actual).
+export async function revokeBusinessSessions(userId = null) {
+  return unwrap(await supabase.rpc('revoke_business_sessions', { p_user: userId }));
+}
+
+// false si el administrador cerró esta sesión desde otro dispositivo.
+export async function isSessionAlive() {
+  const { data, error } = await supabase.rpc('session_alive');
+  if (error) return true; // ante un error de red no se cierra nada
+  return data !== false;
+}
+
 // ---------- Clientes ----------
 
 export async function fetchCustomers() {
