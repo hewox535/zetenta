@@ -198,8 +198,11 @@ function PayAmountRow({
   return (
     <div className={`pay-input-row${cashea ? ' pay-row-cashea' : ''}`}>
       <div className="pay-input-label">
-        <span>{m.name}</span>
-        <span className="muted">{mainCur}</span>
+        <span className="pay-input-name">{m.name}</span>
+        <button type="button" className="pay-exact" onClick={onExact}
+          title={cashea ? 'Lo que financia Cashea según el % de inicial' : 'Lo que falta por cobrar, en este método'}>
+          Exacto
+        </button>
       </div>
       {onInitialPct && (
         <div className="pay-cashea">
@@ -207,39 +210,36 @@ function PayAmountRow({
             <span>Inicial</span>
             <span className="pay-pct-field">
               <input inputMode="decimal" placeholder="30" value={initialPct}
-                onChange={(e) => onInitialPct(e.target.value)} />
+                onChange={(e) => onInitialPct(e.target.value)} aria-label="Porcentaje de inicial" />
               <span className="pay-pct-sign">%</span>
             </span>
           </label>
           {splitOk ? (
             <span className="pay-split">
-              cliente <strong>${initialUsd.toFixed(2)}</strong> · Cashea <strong>${financedUsd.toFixed(2)}</strong>
+              Cliente <strong>${initialUsd.toFixed(2)}</strong> · Cashea <strong>${financedUsd.toFixed(2)}</strong>
             </span>
           ) : (
             <span className="pay-split muted">% que paga el cliente hoy</span>
           )}
         </div>
       )}
-      <div className="pay-input-controls">
-        <div className="pay-dual">
-          <label className="pay-amt main">
-            <span className="pay-amt-cur">{mainCur}</span>
-            <input inputMode="decimal" placeholder="0,00" value={mainVal}
-              onFocus={() => { setFocus('main'); setDraft(amount ?? ''); }}
+      <div className={`pay-dual${isVes ? '' : ' single'}`}>
+        <label className="pay-amt main">
+          <span className="pay-amt-cur">{isVes ? 'Bs' : '$'}</span>
+          <input inputMode="decimal" placeholder="0,00" value={mainVal} aria-label={`Monto en ${mainCur}`}
+            onFocus={() => { setFocus('main'); setDraft(amount ?? ''); }}
+            onBlur={() => setFocus(null)}
+            onChange={(e) => { setDraft(e.target.value); onAmount(e.target.value); }} />
+        </label>
+        {isVes && (
+          <label className="pay-amt alt" title="Equivalente en dólares">
+            <span className="pay-amt-cur">$</span>
+            <input inputMode="decimal" placeholder="0,00" value={altVal} aria-label={`Equivalente en ${altCur}`}
+              onFocus={() => { setFocus('alt'); setDraft(toAlt(amount)); }}
               onBlur={() => setFocus(null)}
-              onChange={(e) => { setDraft(e.target.value); onAmount(e.target.value); }} />
+              onChange={(e) => { setDraft(e.target.value); onAmount(toCanon(e.target.value)); }} />
           </label>
-          {isVes && (
-            <label className="pay-amt alt">
-              <span className="pay-amt-cur">{altCur}</span>
-              <input inputMode="decimal" placeholder="0,00" value={altVal}
-                onFocus={() => { setFocus('alt'); setDraft(toAlt(amount)); }}
-                onBlur={() => setFocus(null)}
-                onChange={(e) => { setDraft(e.target.value); onAmount(toCanon(e.target.value)); }} />
-            </label>
-          )}
-        </div>
-        <button type="button" className="btn ghost sm" onClick={onExact}>Exacto</button>
+        )}
       </div>
     </div>
   );
@@ -462,7 +462,18 @@ export default function Orders() {
     if (!(pct > 0 && pct < 100)) return;
     const financedUsd = totalUsd * (1 - pct / 100);
     const amount = m.currency === 'USD' ? financedUsd : financedUsd * rate.value;
-    setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
+    // Si hay un solo método más, ese cobra la inicial (a precio de lista: con
+    // Cashea no hay descuento de contado).
+    const others = selectedMethods.filter((id) => id !== m.id && !isCashea(methods.find((x) => x.id === id)));
+    const initialUsd = totalUsd - financedUsd;
+    setPayments((prev) => {
+      const n = { ...prev, [m.id]: amount.toFixed(2) };
+      if (others.length === 1) {
+        const om = methods.find((x) => x.id === others[0]);
+        n[om.id] = (om.currency === 'USD' ? initialUsd : initialUsd * rate.value).toFixed(2);
+      }
+      return n;
+    });
   };
 
   // ------- cliente -------
@@ -824,7 +835,8 @@ export default function Orders() {
                           </div>
                         )}
                         <div className="pay-pills">
-                          {methods.map((m) => (
+                          {/* Cashea primero: es la forma de pago que cambia la venta (precio de lista) */}
+                          {[...methods].sort((x, y) => Number(isCashea(y)) - Number(isCashea(x))).map((m) => (
                             <button type="button" key={m.id}
                               className={`pay-pill${selectedMethods.includes(m.id) ? ' active' : ''}`}
                               onClick={() => toggleMethod(m)}>
