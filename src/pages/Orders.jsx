@@ -12,7 +12,7 @@ import { usd, bs, money, variantLabel, offerPrice, hasOffer, offerTag } from '..
 import OrderReceipt from '../components/OrderReceipt';
 import OpenCashModal from '../components/OpenCashModal';
 import { CASH_EVENT, notifyCashChanged } from '../lib/cashEvents';
-import { addDays, localISO } from '../lib/finance';
+import { FinModal } from '../components/FinUI';
 
 const EMPTY_CUST = { name: '', document: '', phone: '', email: '' };
 
@@ -313,8 +313,13 @@ export default function Orders() {
   }, [puedeCaja, branchId]);
 
   // Venta a crédito: lo que no se cobre queda como cuenta por cobrar del cliente.
-  const [creditOn, setCreditOn] = useState(false);
-  const [creditDue, setCreditDue] = useState(() => addDays(localISO(), 15));
+  // Descuentos de contado de ESTA venta: arrancan con los del negocio y la
+  // vendedora puede desmarcarlos o cambiar el % en el cobro.
+  const [discCfg, setDiscCfg] = useState(() => ({
+    usd: { on: true, pct: String(Number(business?.foreign_discount_percent) || 0) },
+    ves: { on: true, pct: String(Number(business?.local_discount_percent) || 0) },
+  }));
+  const [itemsOpen, setItemsOpen] = useState(false);   // modal con los artículos de la venta
 
   useEffect(() => {
     Promise.all([fetchProducts(), fetchTaxonomies(), fetchBankAccounts(), fetchCustomers()])
@@ -377,8 +382,11 @@ export default function Orders() {
   // Con Cashea elegido la venta va a precio de lista, desde el momento en que
   // se toca el método (aunque todavía no tenga monto). El servidor mira lo mismo.
   const clampPct = (v) => Math.min(0.99, Math.max(0, (Number(v) || 0) / 100));
-  const baseD = clampPct(business?.foreign_discount_percent);
-  const baseDv = clampPct(business?.local_discount_percent);
+  const baseD = discCfg.usd.on ? clampPct(discCfg.usd.pct) : 0;
+  const baseDv = discCfg.ves.on ? clampPct(discCfg.ves.pct) : 0;
+  // El negocio usa descuentos de contado (si no, no se muestra la sección).
+  const bizD = clampPct(business?.foreign_discount_percent);
+  const bizDv = clampPct(business?.local_discount_percent);
   const casheaSelected = selectedMethods.some((id) => isCashea(methods.find((x) => x.id === id)));
   const d = casheaSelected ? 0 : baseD;
   const dv = casheaSelected ? 0 : baseDv;
@@ -435,13 +443,6 @@ export default function Orders() {
     return n;
   });
 
-  // Pagos escritos, para el ticket (Cashea primero).
-  const ticketPays = selectedMethods
-    .map((id) => methods.find((x) => x.id === id))
-    .filter(Boolean)
-    .sort((x, y) => Number(isCashea(y)) - Number(isCashea(x)))
-    .map((m) => ({ id: m.id, name: m.name, currency: m.currency, cashea: isCashea(m), amount: parseAmt(payments[m.id]) }))
-    .filter((x) => x.amount > 0);
   // Estado del cobro, al lado del botón de finalizar.
   const payStatus = cashedUsd <= PAY_EPS && casheaUsd <= PAY_EPS
     ? { tone: 'idle', label: 'A pagar', usd: netTotalUsd }
@@ -450,6 +451,44 @@ export default function Orders() {
       : changeNet > PAY_EPS
         ? { tone: 'change', label: 'Vuelto', usd: changeNet }
         : { tone: 'ok', label: 'Cobro completo', usd: netTotalUsd };
+
+  // Cambiar el descuento (marcar/desmarcar o el %) reescribe los montos ya
+  // escritos en esa moneda para que sigan cubriendo la misma parte de la venta.
+  const changeDisc = (kind, patch) => {
+    const cur = discCfg[kind];
+    const next = { ...cur, ...patch };
+    const pctOf = (c) => (c.on ? clampPct(c.pct) : 0);
+    const oldD = pctOf(cur); const newD = pctOf(next);
+    setDiscCfg((x) => ({ ...x, [kind]: next }));
+    if (casheaSelected || oldD === newD || newD >= 1) return;
+    setPayments((prev) => {
+      const n = { ...prev };
+      selectedMethods.forEach((id) => {
+        const om = methods.find((x) => x.id === id);
+        if (!om || isCashea(om) || !n[id]) return;
+        if ((kind === 'usd') !== isForeignCash(om)) return;
+        n[id] = ((parseAmt(n[id]) * (1 - newD)) / (1 - oldD)).toFixed(2);
+      });
+      return n;
+    });
+  };
+  const hasUsdCash = selectedMethods.some((id) => isForeignCash(methods.find((x) => x.id === id)));
+  const hasBsCash = selectedMethods.some((id) => {
+    const m = methods.find((x) => x.id === id);
+    return m && !isCashea(m) && !isForeignCash(m);
+  });
+  const discRows = casheaSelected ? [] : [
+    hasUsdCash && bizD > 0 && { kind: 'usd', label: 'Descuento en divisa' },
+    hasBsCash && bizDv > 0 && { kind: 'ves', label: 'Descuento en bolívares' },
+  ].filter(Boolean);
+
+  // Imagen de un artículo del carrito (la de su variante o la del producto).
+  const cartImg = (c) => {
+    const p = (products || []).find((x) => x.id === c.productId);
+    if (!p) return null;
+    const v = (p.product_variants || []).find((x) => x.id === c.id);
+    return v ? variantImg(p, v) : productImg(p);
+  };
 
   const toggleMethod = (m) => {
     if (selectedMethods.includes(m.id)) {
@@ -486,7 +525,7 @@ export default function Orders() {
     const curUsd = toUsd(m, cur);
     const creditOfThis = dm > 0 ? curUsd / (1 - dm) : curUsd;
     const remaining = totalUsd - (paidUsd - creditOfThis);
-    if (remaining <= 0) return;
+    if (remaining <= PAY_EPS) return;
     // Se cobra el saldo con el descuento del método: remaining*(1-dm).
     const net = remaining * (1 - dm);
     const amount = m.currency === 'USD' ? net : net * rate.value;
@@ -539,10 +578,6 @@ export default function Orders() {
 
   const pickCustomer = (c) => { setSelectedCustomer(c); setCustSearch(''); setShowNewCust(false); };
   const setNew = (k) => (e) => setNewCust((f) => ({ ...f, [k]: e.target.value }));
-  // Vender a crédito: el negocio tiene el módulo de cuentas (no hace falta que la
-  // vendedora tenga permiso para verlo; la cuenta se crea con la venta).
-  const canCredit = !!capabilities.accounts;
-  const hasCustomer = !!selectedCustomer || (showNewCust && !!newCust.name.trim());
   const resetCustomer = () => { setSelectedCustomer(null); setCustSearch(''); setShowNewCust(false); setNewCust(EMPTY_CUST); };
 
   // Configuración del negocio: cliente obligatorio y qué datos exige al
@@ -621,17 +656,16 @@ export default function Orders() {
           currency: x.m.currency, amount: x.amount,
         }));
 
-      const asCredit = creditOn && !isCovered;
-      if (asCredit && !customerId) { setError('Para vender a crédito elige o crea el cliente.'); setBusy(false); return; }
       const created = await createOrder({
         items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName, branchId,
-        creditDue: asCredit ? creditDue : null,
+        foreignDiscount: Math.round(baseD * 10000) / 100,
+        localDiscount: Math.round(baseDv * 10000) / 100,
       });
       notifySale(created.id); // push a los admins del negocio (fuego y olvido)
       const full = await fetchOrder(created.id);
       setFinished(full);
       setStage('done');
-      setCart([]); setPayments({}); setSelectedMethods([]); resetCustomer(); setPanelOpen(false); setCreditOn(false);
+      setCart([]); setPayments({}); setSelectedMethods([]); resetCustomer(); setPanelOpen(false);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -798,59 +832,63 @@ export default function Orders() {
             <div className="pos-ticket-col">
               <div className="pos-ticket">
                 <div className="pos-ticket-head">
-                  <div>
-                    <span className="pos-ticket-eyebrow">Resumen de la venta</span>
-                    <strong>{cartCount} {cartCount === 1 ? 'artículo' : 'artículos'}</strong>
-                  </div>
+                  <span className="pos-ticket-eyebrow">Resumen de la venta</span>
                   <button className="btn ghost sm" onClick={() => setStage('shop')}>← Seguir agregando</button>
                 </div>
 
-                <div className="pos-ticket-items">
-                  {cart.map((c) => (
-                    <div className="pos-ticket-line" key={c.id}>
-                      <span className="pos-ticket-name">
-                        {c.name}{c.label && <span className="muted"> · {c.label}</span>}
-                        <small>{c.qty} × {usd(c.price)}</small>
-                      </span>
-                      <span className="pos-ticket-amt">
-                        {usd(c.price * c.qty)}
-                        <small>{bs(c.price * c.qty * rate.value)}</small>
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                {/* Artículos: contador y miniaturas; el detalle, en un modal */}
+                <button type="button" className="pos-items-row" onClick={() => setItemsOpen(true)}>
+                  <span className="pos-items-thumbs" aria-hidden="true">
+                    {cart.slice(0, 4).map((c) => {
+                      const img = cartImg(c);
+                      return (
+                        <span className="pos-items-thumb" key={c.id}>
+                          {img ? <img src={img} alt="" loading="lazy" /> : <span>{c.name.slice(0, 1)}</span>}
+                        </span>
+                      );
+                    })}
+                    {cart.length > 4 && <span className="pos-items-thumb more">+{cart.length - 4}</span>}
+                  </span>
+                  <span className="pos-items-text">
+                    <strong>{cartCount} {cartCount === 1 ? 'artículo' : 'artículos'}</strong>
+                    <span>Ver detalle</span>
+                  </span>
+                  <span className="pos-items-total">{usd(totalUsd)}</span>
+                  <svg className="pos-items-chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
 
-                <div className="pos-ticket-totals">
+                {/* Desglose de totales: una línea por concepto, como en el panel */}
+                <div className="pos-ticket-sum totals">
                   {discountUsd > 0.005 ? (
                     <>
-                      <div className="pos-ticket-row"><span>Total lista</span><span>{usd(totalUsd)}</span></div>
-                      <div className="pos-ticket-row ok"><span>{discountLabel}</span><span>−{usd(discountUsd)}</span></div>
+                      <div className="totals-row"><span>Total lista</span><span>{usd(totalUsd)}</span></div>
+                      <div className="totals-row ok"><span>{discountLabel}</span><span>−{usd(discountUsd)}</span></div>
+                      <div className="totals-row grand"><span>A pagar</span><span>{usd(netTotalUsd)}</span></div>
+                      <div className="totals-row"><span className="muted">A pagar en Bs</span><span className="muted">{bs(netTotalUsd * rate.value)}</span></div>
                     </>
-                  ) : casheaSelected ? (
-                    <div className="pos-ticket-row muted"><span>Precio de lista (venta con Cashea)</span><span /></div>
-                  ) : null}
-                  <div className="pos-ticket-row grand"><span>A pagar</span><span>{usd(netTotalUsd)}</span></div>
-                  <div className="pos-ticket-row muted"><span>En bolívares</span><span>{bs(netTotalUsd * rate.value)}</span></div>
-                </div>
-
-                {ticketPays.length > 0 && (
-                  <div className="pos-ticket-pays">
-                    {ticketPays.map((x) => (
-                      <div className={`pos-ticket-row${x.cashea ? ' muted' : ''}`} key={x.id}>
-                        <span>{x.cashea ? 'Financia Cashea' : x.name}</span>
-                        <span>{x.currency === 'USD' ? usd(x.amount) : bs(x.amount)}</span>
+                  ) : (
+                    <>
+                      <div className="totals-row grand"><span>Total</span><span>{usd(totalUsd)}</span></div>
+                      <div className="totals-row"><span>Total Bs</span><span>{bs(totalVes)}</span></div>
+                    </>
+                  )}
+                  {casheaUsd > PAY_EPS ? (
+                    <>
+                      <div className="totals-row"><span>Cobrado ahora</span><span>{usd(cashedUsd)}</span></div>
+                      <div className="totals-row"><span className="muted">Financia Cashea</span><span className="muted">{usd(casheaUsd)}</span></div>
+                    </>
+                  ) : (
+                    <div className="totals-row"><span>Pagado</span><span>{usd(receivedUsd)}</span></div>
+                  )}
+                  {!isCovered
+                    ? (
+                      <div className="totals-row warn">
+                        <span>{casheaUsd > PAY_EPS ? 'Falta cobrar la inicial' : 'Restante'}</span>
+                        <span>{usd(remainingNet)}</span>
                       </div>
-                    ))}
-                    <div className="pos-ticket-row strong">
-                      <span>{casheaUsd > PAY_EPS ? 'Cobrado hoy' : 'Cobrado'}</span><span>{usd(cashedUsd)}</span>
-                    </div>
-                    {!isCovered ? (
-                      <div className="pos-ticket-row warn"><span>{casheaUsd > PAY_EPS ? 'Falta la inicial' : 'Falta'}</span><span>{usd(remainingNet)}</span></div>
-                    ) : changeNet > PAY_EPS && (
-                      <div className="pos-ticket-row ok"><span>Vuelto</span><span>{usd(changeNet)}</span></div>
-                    )}
-                  </div>
-                )}
+                    )
+                    : changeNet > PAY_EPS && <div className="totals-row ok"><span>Vuelto</span><span>{usd(changeNet)}</span></div>}
+                </div>
               </div>
 
               {/* -------- Cliente: elegir existente o crear nuevo -------- */}
@@ -912,6 +950,14 @@ export default function Orders() {
                     <>
                       {/* Métodos como pills: se pueden seleccionar varios */}
                       <div className="pay-block">
+                        {/* Con Cashea elegido falta cobrar la inicial: el aviso
+                            manda al cajero a los métodos de aquí abajo. */}
+                        {casheaUsd > PAY_EPS && !isCovered && (
+                          <div className="pay-warn">
+                            Cobra la inicial <strong>{usd(remainingNet)}</strong>
+                            {rate.value ? ` · ${bs(remainingNet * rate.value)}` : ''} — elige el método.
+                          </div>
+                        )}
                         <div className="pay-pills">
                           {/* Cashea primero: es la forma de pago que cambia la venta (precio de lista) */}
                           {[...methods].sort((x, y) => Number(isCashea(y)) - Number(isCashea(x))).map((m) => (
@@ -927,6 +973,30 @@ export default function Orders() {
                           <div className="pay-hint">Selecciona uno o varios métodos de pago.</div>
                         )}
                       </div>
+
+                      {/* Descuento de contado que se está aplicando: se puede quitar o cambiar el % */}
+                      {discRows.length > 0 && (
+                        <div className="pay-disc">
+                          {discRows.map((r) => {
+                            const cfg = discCfg[r.kind];
+                            return (
+                              <div className={`pay-disc-row${cfg.on ? '' : ' off'}`} key={r.kind}>
+                                <label className="pay-disc-check">
+                                  <input type="checkbox" checked={cfg.on}
+                                    onChange={(e) => changeDisc(r.kind, { on: e.target.checked })} />
+                                  <span>{r.label}</span>
+                                </label>
+                                <span className="pay-pct-field">
+                                  <input inputMode="decimal" value={cfg.pct} disabled={!cfg.on}
+                                    aria-label={`${r.label} (%)`}
+                                    onChange={(e) => changeDisc(r.kind, { pct: e.target.value })} />
+                                  <span className="pay-pct-sign">%</span>
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* Un input por cada método seleccionado, con su equivalente en la otra moneda */}
                       {selectedMethods.length > 0 && (
@@ -974,22 +1044,6 @@ export default function Orders() {
                   </span>
                 </div>
               )}
-              {stage === 'pay' && canCredit && !isCovered && cart.length > 0 && (
-                <div className={`pos-credit${creditOn ? ' on' : ''}`}>
-                  <label className="pos-credit-toggle">
-                    <input type="checkbox" checked={creditOn} onChange={(e) => setCreditOn(e.target.checked)} />
-                    <span>Dejar <strong>{usd(Math.max(0, rawRemaining))}</strong> a crédito</span>
-                  </label>
-                  {creditOn && (
-                    <>
-                      <label className="pos-credit-due">Vence
-                        <input type="date" value={creditDue} min={localISO()} onChange={(e) => setCreditDue(e.target.value)} />
-                      </label>
-                      {!hasCustomer && <span className="pos-credit-warn">Elige o crea el cliente que queda debiendo.</span>}
-                    </>
-                  )}
-                </div>
-              )}
               {stage === 'shop' ? (
                 <button className="btn primary lg block" disabled={cart.length === 0}
                   onClick={() => { setStage('pay'); setPanelOpen(true); }}>
@@ -997,15 +1051,49 @@ export default function Orders() {
                 </button>
               ) : (
                 <button className="btn primary lg block"
-                  disabled={busy || !(isCovered || (creditOn && canCredit && hasCustomer && creditDue))}
+                  disabled={busy || !isCovered}
                   onClick={onFinish}>
-                  {busy ? 'Guardando…' : !isCovered && creditOn ? 'Finalizar venta a crédito' : 'Finalizar venta'}
+                  {busy ? 'Guardando…' : 'Finalizar venta'}
                 </button>
               )}
             </div>
           </div>
         </aside>
       </div>
+
+      {/* -------- Artículos de la venta (desde el ticket) -------- */}
+      {itemsOpen && (
+        <FinModal title={`${cartCount} ${cartCount === 1 ? 'artículo' : 'artículos'}`} sub="Detalle de la venta"
+          onClose={() => setItemsOpen(false)}
+          footer={(
+            <>
+              <span className="fm-foot-note">Total {usd(totalUsd)} · {bs(totalVes)}</span>
+              <button type="button" className="btn ghost" onClick={() => { setItemsOpen(false); setStage('shop'); }}>Editar artículos</button>
+              <button type="button" className="btn primary" onClick={() => setItemsOpen(false)}>Listo</button>
+            </>
+          )}>
+          <div className="pos-items-list">
+            {cart.map((c) => {
+              const img = cartImg(c);
+              return (
+                <div className="pos-items-line" key={c.id}>
+                  <span className="pos-items-thumb lg">
+                    {img ? <img src={img} alt="" loading="lazy" /> : <span>{c.name.slice(0, 1)}</span>}
+                  </span>
+                  <span className="pos-items-info">
+                    <strong>{c.name}</strong>
+                    <span>{[c.label, `${c.qty} × ${usd(c.price)}`].filter(Boolean).join(' · ')}</span>
+                  </span>
+                  <span className="pos-items-amt">
+                    <strong>{usd(c.price * c.qty)}</strong>
+                    <span>{bs(c.price * c.qty * rate.value)}</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </FinModal>
+      )}
 
       {/* -------- Selector de variante (color + talla) -------- */}
       {picker && (
