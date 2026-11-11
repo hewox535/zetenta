@@ -435,6 +435,22 @@ export default function Orders() {
     return n;
   });
 
+  // Pagos escritos, para el ticket (Cashea primero).
+  const ticketPays = selectedMethods
+    .map((id) => methods.find((x) => x.id === id))
+    .filter(Boolean)
+    .sort((x, y) => Number(isCashea(y)) - Number(isCashea(x)))
+    .map((m) => ({ id: m.id, name: m.name, currency: m.currency, cashea: isCashea(m), amount: parseAmt(payments[m.id]) }))
+    .filter((x) => x.amount > 0);
+  // Estado del cobro, al lado del botón de finalizar.
+  const payStatus = cashedUsd <= PAY_EPS && casheaUsd <= PAY_EPS
+    ? { tone: 'idle', label: 'A pagar', usd: netTotalUsd }
+    : !isCovered
+      ? { tone: 'warn', label: casheaUsd > PAY_EPS ? 'Falta cobrar la inicial' : 'Falta por cobrar', usd: remainingNet }
+      : changeNet > PAY_EPS
+        ? { tone: 'change', label: 'Vuelto', usd: changeNet }
+        : { tone: 'ok', label: 'Cobro completo', usd: netTotalUsd };
+
   const toggleMethod = (m) => {
     if (selectedMethods.includes(m.id)) {
       const rest = selectedMethods.filter((x) => x !== m.id);
@@ -778,31 +794,69 @@ export default function Orders() {
               )}
             </>
           ) : (
-            /* -------- Resumen del pedido (etapa de pago) -------- */
-            <div className="card order-summary">
-              <div className="order-summary-head">
-                <h2>Resumen de la venta</h2>
-                <button className="btn ghost sm" onClick={() => setStage('shop')}>← Seguir agregando</button>
-              </div>
-              <table className="list">
-                <tbody>
+            /* -------- Etapa de pago: ticket con todo el desglose -------- */
+            <div className="pos-ticket-col">
+              <div className="pos-ticket">
+                <div className="pos-ticket-head">
+                  <div>
+                    <span className="pos-ticket-eyebrow">Resumen de la venta</span>
+                    <strong>{cartCount} {cartCount === 1 ? 'artículo' : 'artículos'}</strong>
+                  </div>
+                  <button className="btn ghost sm" onClick={() => setStage('shop')}>← Seguir agregando</button>
+                </div>
+
+                <div className="pos-ticket-items">
                   {cart.map((c) => (
-                    <tr key={c.id}>
-                      <td>
+                    <div className="pos-ticket-line" key={c.id}>
+                      <span className="pos-ticket-name">
                         {c.name}{c.label && <span className="muted"> · {c.label}</span>}
-                        <div className="muted">{c.qty} × {usd(c.price)}</div>
-                      </td>
-                      <td className="num">
-                        <div>{usd(c.price * c.qty)}</div>
-                        <div className="muted">{bs(c.price * c.qty * rate.value)}</div>
-                      </td>
-                    </tr>
+                        <small>{c.qty} × {usd(c.price)}</small>
+                      </span>
+                      <span className="pos-ticket-amt">
+                        {usd(c.price * c.qty)}
+                        <small>{bs(c.price * c.qty * rate.value)}</small>
+                      </span>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+
+                <div className="pos-ticket-totals">
+                  {discountUsd > 0.005 ? (
+                    <>
+                      <div className="pos-ticket-row"><span>Total lista</span><span>{usd(totalUsd)}</span></div>
+                      <div className="pos-ticket-row ok"><span>{discountLabel}</span><span>−{usd(discountUsd)}</span></div>
+                    </>
+                  ) : casheaSelected ? (
+                    <div className="pos-ticket-row muted"><span>Precio de lista (venta con Cashea)</span><span /></div>
+                  ) : null}
+                  <div className="pos-ticket-row grand"><span>A pagar</span><span>{usd(netTotalUsd)}</span></div>
+                  <div className="pos-ticket-row muted"><span>En bolívares</span><span>{bs(netTotalUsd * rate.value)}</span></div>
+                </div>
+
+                {ticketPays.length > 0 && (
+                  <div className="pos-ticket-pays">
+                    {ticketPays.map((x) => (
+                      <div className={`pos-ticket-row${x.cashea ? ' muted' : ''}`} key={x.id}>
+                        <span>{x.cashea ? 'Financia Cashea' : x.name}</span>
+                        <span>{x.currency === 'USD' ? usd(x.amount) : bs(x.amount)}</span>
+                      </div>
+                    ))}
+                    <div className="pos-ticket-row strong">
+                      <span>{casheaUsd > PAY_EPS ? 'Cobrado hoy' : 'Cobrado'}</span><span>{usd(cashedUsd)}</span>
+                    </div>
+                    {!isCovered ? (
+                      <div className="pos-ticket-row warn"><span>{casheaUsd > PAY_EPS ? 'Falta la inicial' : 'Falta'}</span><span>{usd(remainingNet)}</span></div>
+                    ) : changeNet > PAY_EPS && (
+                      <div className="pos-ticket-row ok"><span>Vuelto</span><span>{usd(changeNet)}</span></div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* -------- Cliente: elegir existente o crear nuevo -------- */}
-              <CustomerBlock desktop {...customerBlockProps} />
+              <div className="card pos-ticket-customer">
+                <CustomerBlock desktop {...customerBlockProps} />
+              </div>
             </div>
           )}
         </section>
@@ -858,19 +912,6 @@ export default function Orders() {
                     <>
                       {/* Métodos como pills: se pueden seleccionar varios */}
                       <div className="pay-block">
-                        {/* Con Cashea elegido falta cobrar la inicial: el aviso
-                            manda al cajero a los métodos de aquí abajo. */}
-                        {casheaUsd > PAY_EPS && !isCovered && (
-                          <div className="pay-warn">
-                            Cobra la inicial <strong>{usd(remainingNet)}</strong>
-                            {rate.value ? ` · ${bs(remainingNet * rate.value)}` : ''} — elige el método.
-                          </div>
-                        )}
-                        {casheaSelected && (baseD > 0 || baseDv > 0) && (
-                          <div className="pay-note">
-                            Venta con Cashea: va a precio de lista, sin descuento de contado.
-                          </div>
-                        )}
                         <div className="pay-pills">
                           {/* Cashea primero: es la forma de pago que cambia la venta (precio de lista) */}
                           {[...methods].sort((x, y) => Number(isCashea(y)) - Number(isCashea(x))).map((m) => (
@@ -917,41 +958,22 @@ export default function Orders() {
             {/* Totales y acción (fijos abajo) */}
             <div className="pos-panel-foot">
               {error && stage === 'pay' && <div className="form-error">{error}</div>}
-              <div className="totals">
-                {stage === 'pay' && discountUsd > 0.005 ? (
-                  <>
-                    <div className="totals-row"><span>Total lista</span><span>{usd(totalUsd)}</span></div>
-                    <div className="totals-row ok"><span>{discountLabel}</span><span>−{usd(discountUsd)}</span></div>
-                    <div className="totals-row grand"><span>A pagar</span><span>{usd(netTotalUsd)}</span></div>
-                    <div className="totals-row"><span className="muted">A pagar en Bs</span><span className="muted">{bs(netTotalUsd * rate.value)}</span></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="totals-row grand"><span>Total</span><span>{usd(totalUsd)}</span></div>
-                    <div className="totals-row"><span>Total Bs</span><span>{bs(totalVes)}</span></div>
-                  </>
-                )}
-                {stage === 'pay' && (
-                  <>
-                    {casheaUsd > PAY_EPS ? (
-                      <>
-                        <div className="totals-row"><span>Cobrado ahora</span><span>{usd(cashedUsd)}</span></div>
-                        <div className="totals-row"><span className="muted">Financia Cashea</span><span className="muted">{usd(casheaUsd)}</span></div>
-                      </>
-                    ) : (
-                      <div className="totals-row"><span>Pagado</span><span>{usd(receivedUsd)}</span></div>
-                    )}
-                    {!isCovered
-                      ? (
-                        <div className="totals-row warn">
-                          <span>{casheaUsd > PAY_EPS ? 'Falta cobrar la inicial' : 'Restante'}</span>
-                          <span>{usd(remainingNet)}</span>
-                        </div>
-                      )
-                      : changeNet > PAY_EPS && <div className="totals-row ok"><span>Vuelto</span><span>{usd(changeNet)}</span></div>}
-                  </>
-                )}
-              </div>
+              {stage === 'shop' ? (
+                <div className="totals">
+                  <div className="totals-row grand"><span>Total</span><span>{usd(totalUsd)}</span></div>
+                  <div className="totals-row"><span>Total Bs</span><span>{bs(totalVes)}</span></div>
+                </div>
+              ) : (
+                /* Lo único que hace falta mirar mientras se cobra: cuánto falta o
+                   cuánto hay que dar de vuelto. El desglose está en el ticket. */
+                <div className={`pay-status ${payStatus.tone}`} role="status" aria-live="polite">
+                  <span className="pay-status-label">{payStatus.label}</span>
+                  <span className="pay-status-amt">
+                    <strong>{usd(payStatus.usd)}</strong>
+                    {rate.value > 0 && <small>{bs(payStatus.usd * rate.value)}</small>}
+                  </span>
+                </div>
+              )}
               {stage === 'pay' && canCredit && !isCovered && cart.length > 0 && (
                 <div className={`pos-credit${creditOn ? ' on' : ''}`}>
                   <label className="pos-credit-toggle">
