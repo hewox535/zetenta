@@ -352,10 +352,14 @@ export default function Orders() {
     return m && pred(m) ? acc + toUsd(m, parseAmt(payments[id])) : acc;
   }, 0);
   const listUsd = sumBy((m) => isCashea(m));
-  // Con un monto en Cashea, la venta va a precio de lista (el servidor mira lo mismo).
+  // Con Cashea elegido la venta va a precio de lista, desde el momento en que
+  // se toca el método (aunque todavía no tenga monto). El servidor mira lo mismo.
   const clampPct = (v) => Math.min(0.99, Math.max(0, (Number(v) || 0) / 100));
-  const d = listUsd > 0 ? 0 : clampPct(business?.foreign_discount_percent);
-  const dv = listUsd > 0 ? 0 : clampPct(business?.local_discount_percent);
+  const baseD = clampPct(business?.foreign_discount_percent);
+  const baseDv = clampPct(business?.local_discount_percent);
+  const casheaSelected = selectedMethods.some((id) => isCashea(methods.find((x) => x.id === id)));
+  const d = casheaSelected ? 0 : baseD;
+  const dv = casheaSelected ? 0 : baseDv;
   const bsUsd = sumBy((m) => !isCashea(m) && !isForeignCash(m));
   const usdPaid = sumBy((m) => isForeignCash(m));
   const vesCredit = listUsd + bsUsd;   // todo lo que no es divisa (para los totales)
@@ -393,12 +397,32 @@ export default function Orders() {
   const remainingNet = Math.max(0, netTotalUsd - receivedUsd);
   const changeNet = Math.max(0, receivedUsd - netTotalUsd);
 
+  // Al entrar o salir Cashea cambian los descuentos de contado: los montos ya
+  // escritos en los otros métodos se reescriben para cubrir la misma parte de
+  // la venta (con descuento → a precio de lista, o al revés).
+  const rescaleForCashea = (on, keepIds) => setPayments((prev) => {
+    const n = { ...prev };
+    keepIds.forEach((id) => {
+      const om = methods.find((x) => x.id === id);
+      if (!om || isCashea(om) || !n[id]) return;
+      const dm = isForeignCash(om) ? baseD : baseDv;
+      if (!dm) return;
+      const amt = parseAmt(n[id]);
+      n[id] = (on ? amt / (1 - dm) : amt * (1 - dm)).toFixed(2);
+    });
+    return n;
+  });
+
   const toggleMethod = (m) => {
     if (selectedMethods.includes(m.id)) {
+      const rest = selectedMethods.filter((x) => x !== m.id);
       setPayments((p) => { const n = { ...p }; delete n[m.id]; return n; });
-      setSelectedMethods((prev) => prev.filter((x) => x !== m.id));
+      setSelectedMethods(rest);
+      // Se quitó el último Cashea: vuelven los descuentos de contado.
+      if (isCashea(m) && !rest.some((id) => isCashea(methods.find((x) => x.id === id)))) rescaleForCashea(false, rest);
       return;
     }
+    if (isCashea(m) && !casheaSelected) rescaleForCashea(true, selectedMethods);
     // Al agregar un método adicional (ya hay al menos uno seleccionado),
     // autocompleta su input con el saldo exacto pendiente en la moneda del
     // método —con o sin descuento por divisa— sin tener que pulsar "Exacto".
@@ -525,7 +549,8 @@ export default function Orders() {
         .map((id) => methods.find((x) => x.id === id))
         .filter(Boolean)
         .map((m) => ({ m, amount: parseAmt(payments[m.id]) }))
-        .filter((x) => x.amount > 0)
+        // Cashea va aunque no tenga monto: le avisa al servidor que no hay descuentos.
+        .filter((x) => x.amount > 0 || isCashea(x.m))
         .map((x) => ({
           account_id: x.m.account_id, method_id: x.m.method_id,
           account_name: x.m.account_name, method_name: x.m.method_name,
@@ -791,6 +816,11 @@ export default function Orders() {
                           <div className="pay-warn">
                             Cobra la inicial <strong>{usd(remainingNet)}</strong>
                             {rate.value ? ` · ${bs(remainingNet * rate.value)}` : ''} — elige el método.
+                          </div>
+                        )}
+                        {casheaSelected && (baseD > 0 || baseDv > 0) && (
+                          <div className="pay-note">
+                            Venta con Cashea: va a precio de lista, sin descuento de contado.
                           </div>
                         )}
                         <div className="pay-pills">
