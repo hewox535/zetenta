@@ -19,6 +19,7 @@ import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/pu
 import { fetchBcvRates } from '../lib/rates';
 import { money } from '../lib/calc';
 import { useConfirm } from '../components/Confirm';
+import SessionsSection from '../components/SessionsSection';
 
 // Iconos limpios para acciones (editar, eliminar, agregar).
 const ICON = {
@@ -43,6 +44,7 @@ export default function Settings() {
     { key: 'branches', label: 'Sucursales' },
     capabilities?.orders && { key: 'orders', label: 'Ventas' },
     { key: 'staff', label: 'Personal' },
+    { key: 'sessions', label: 'Sesiones' },
     { key: 'notifications', label: 'Notificaciones' },
   ].filter(Boolean);
 
@@ -69,6 +71,7 @@ export default function Settings() {
       {section === 'branches' && <BranchesSection business={business} />}
       {section === 'orders' && <OrdersSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'staff' && <StaffSection profile={profile} />}
+      {section === 'sessions' && <SessionsSection />}
       {section === 'notifications' && <NotificationsSection />}
     </div>
   );
