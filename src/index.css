@@ -993,21 +993,34 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .pay-input-row { display: flex; flex-direction: column; gap: 6px; }
 /* Cashea: el %, el reparto y el monto se leen como un solo método */
 .pay-row-cashea {
-  gap: 8px; padding: 10px 12px; border: 1px solid var(--accent-line);
-  border-radius: var(--radius); background: var(--accent-soft);
+  gap: 10px; padding: 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.04);
 }
-.pay-row-cashea .pay-amt, .pay-row-cashea .pay-pct-field input { background: var(--surface); }
-.pay-input-label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
-.pay-input-controls { display: flex; gap: 8px; align-items: center; }
-.pay-input-controls input { font-variant-numeric: tabular-nums; }
-/* Dos montos sincronizados: principal (moneda del método, más ancho) + equivalente */
-.pay-dual { display: flex; gap: 8px; flex: 1; min-width: 0; }
-.pay-amt { position: relative; display: flex; align-items: center; min-width: 0; }
-.pay-amt.main { flex: 1.7 1 0; }
-.pay-amt.alt { flex: 1 1 0; }
-.pay-amt-cur { position: absolute; left: 10px; font-size: 11px; font-weight: 700; color: var(--text-2); pointer-events: none; }
-.pay-amt input { width: 100%; min-width: 0; padding-left: 32px; font-variant-numeric: tabular-nums; }
-.pay-amt.alt input { background: var(--accent-soft); color: var(--text-2); }
+.pay-input-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 600; }
+.pay-input-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pay-exact {
+  flex: none; padding: 2px 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent);
+}
+.pay-exact:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* Montos como grupo de input: la moneda es un prefijo dentro del borde (no
+   flota encima del texto), así el número usa todo el ancho disponible. */
+.pay-dual { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 8px; }
+.pay-dual.single { grid-template-columns: minmax(0, 1fr); }
+.pay-amt {
+  display: flex; flex-direction: row !important; align-items: center; gap: 0 !important; min-width: 0; height: 44px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  overflow: hidden; cursor: text; transition: border-color .15s ease, box-shadow .15s ease;
+}
+.pay-amt:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3.5px var(--accent-ring); }
+.pay-amt-cur { flex: none; padding: 0 0 0 12px; font-size: 13px; font-weight: 700; color: var(--text-2); }
+.pay-amt input {
+  flex: 1; width: 100%; min-width: 0; height: 100%; padding: 0 12px 0 8px;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none !important;
+  font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.pay-amt.alt { background: var(--bg); }
+.pay-amt.alt input { font-weight: 500; color: var(--text-2); }
 
 .pos-panel-foot { flex: 0 0 auto; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); }
 .pos-panel-foot .totals { margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column; }
@@ -1167,16 +1180,25 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .acct-method-name .badge { margin-left: 8px; }
 /* Cashea: % y reparto en una sola línea */
 .pay-cashea { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.pay-split { font-size: 12.5px; }
-.pay-pct { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+.pay-split { font-size: 12.5px; color: var(--text-2); }
+.pay-split strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.pay-pct { display: flex; flex-direction: row; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; }
 /* Falta cobrar la inicial de Cashea: aviso sobre los métodos */
 .pay-warn {
   margin-bottom: 10px; padding: 8px 12px; border-radius: var(--radius);
   background: var(--danger-bg); color: var(--danger); font-size: 13px; font-weight: 600;
 }
-.pay-pct-field { position: relative; display: inline-flex; align-items: center; }
-.pay-pct-field input { width: 64px; padding: 6px 24px 6px 10px; text-align: right; }
-.pay-pct-sign { position: absolute; right: 10px; color: var(--text-2); font-size: 13px; pointer-events: none; }
+.pay-pct-field {
+  display: inline-flex; flex-direction: row; align-items: center; height: 36px; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.pay-pct-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3.5px var(--accent-ring); }
+.pay-pct-field input {
+  width: 48px; height: 100%; padding: 0 2px 0 10px; border: 0; border-radius: 0; background: transparent;
+  box-shadow: none !important; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.pay-pct-sign { padding: 0 10px 0 2px; color: var(--text-2); font-size: 13px; font-weight: 600; }
 .acct-method-name { font-size: 14px; font-weight: 600; }
 .acct-method-actions { display: flex; gap: 6px; }
 .acct-method.editing { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
