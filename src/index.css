@@ -366,7 +366,7 @@ a.icon-btn { text-decoration: none; }
 /* Desglose de totales: igual que en el panel, en su propio recuadro */
 .pos-ticket-sum {
   display: flex; flex-direction: column; gap: 8px; padding: 14px 16px;
-  border: 1px dashed var(--border); border-radius: var(--radius-sm); background: var(--bg);
+  border: 1.5px dashed #c9ccd6; border-radius: var(--radius-sm); background: #fafafc;
 }
 .pos-ticket-sum .totals-row.grand { margin-top: 2px; }
 .pos-ticket-sum .totals-row.grand:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
@@ -1129,6 +1129,25 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .oc-results button:first-child { border-top: none; }
 .oc-results button:hover { background: var(--accent-soft); }
 .oc-new { display: flex; flex-direction: column; gap: 8px; }
+/* Documento: tipo (V/J/E) + número, como un solo campo */
+.oc-doc {
+  display: flex; align-items: stretch; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); overflow: hidden; transition: border-color .15s ease, box-shadow .15s ease;
+}
+.oc-doc:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3.5px var(--accent-ring); }
+.oc-doc select {
+  flex: 0 0 auto; width: auto; padding: 0 26px 0 12px; border: 0; border-right: 1px solid var(--border);
+  border-radius: 0; background-color: var(--bg); font-weight: 700; box-shadow: none !important;
+}
+.oc-doc input { flex: 1; min-width: 0; border: 0; border-radius: 0; box-shadow: none !important; }
+.oc-invalid { border-color: var(--danger) !important; }
+.oc-field-error { margin-top: -4px; font-size: 12px; color: var(--danger); }
+.oc-new-btn { align-self: center; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.oc-new-btn:hover { background: var(--accent-ring); }
+.oc-issue {
+  padding: 9px 12px; border-radius: var(--radius-sm); background: var(--danger-bg); color: var(--danger);
+  font-size: 13px; font-weight: 600;
+}
 
 /* Campo de contraseña con ojito */
 .pw-field { position: relative; width: 100%; }

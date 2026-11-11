@@ -14,13 +14,18 @@ import OpenCashModal from '../components/OpenCashModal';
 import { CASH_EVENT, notifyCashChanged } from '../lib/cashEvents';
 import { FinModal } from '../components/FinUI';
 
-const EMPTY_CUST = { name: '', document: '', phone: '', email: '' };
+const EMPTY_CUST = { name: '', docType: 'V', document: '', phone: '', email: '' };
+// Cédula/RIF: V (venezolano), J (jurídico), E (extranjero) + solo números.
+const DOC_TYPES = [['V', 'Venezolano'], ['J', 'Jurídico'], ['E', 'Extranjero']];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const docOf = (c) => (c.document.trim() ? `${c.docType}-${c.document.trim()}` : '');
 
 // Bloque de cliente de la venta: buscar existente o crear nuevo. Se monta dos
 // veces (resumen desktop y hoja de pago móvil) compartiendo el mismo estado.
 function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCustomer,
   showNewCust, setShowNewCust, newCust, setNew, setNewCust, custSearch, setCustSearch,
-  custMatches, pickCustomer }) {
+  custMatches, pickCustomer, issue }) {
+  const emailBad = !!newCust.email.trim() && !EMAIL_RE.test(newCust.email.trim());
   return (
     <div className={`order-customer-block${desktop ? '' : ' oc-mobile'}`}>
       <div className="oc-label">Cliente{required ? '' : ' (opcional)'}</div>
@@ -35,11 +40,20 @@ function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCus
       ) : showNewCust ? (
         <div className="oc-new">
           <input placeholder="Nombre" value={newCust.name} onChange={setNew('name')} autoFocus={desktop} />
-          <input placeholder={`Documento${fieldReq('document') ? '' : ' (opcional)'}`}
-            value={newCust.document} onChange={setNew('document')} />
+          <div className="oc-doc">
+            <select value={newCust.docType} aria-label="Tipo de documento"
+              onChange={(e) => setNewCust((f) => ({ ...f, docType: e.target.value }))}>
+              {DOC_TYPES.map(([k, l]) => <option key={k} value={k} title={l}>{k}</option>)}
+            </select>
+            <input placeholder={`Cédula o RIF${fieldReq('document') ? '' : ' (opcional)'}`} inputMode="numeric"
+              value={newCust.document} aria-label="Número de documento"
+              onChange={(e) => setNewCust((f) => ({ ...f, document: e.target.value.replace(/\D/g, '') }))} />
+          </div>
           <input placeholder={`Teléfono${fieldReq('phone') ? '' : ' (opcional)'}`}
             value={newCust.phone} onChange={setNew('phone')} inputMode="tel" />
-          <input placeholder="Correo (opcional)" value={newCust.email} onChange={setNew('email')} type="email" />
+          <input placeholder="Correo (opcional)" value={newCust.email} onChange={setNew('email')} type="email"
+            className={emailBad ? 'oc-invalid' : ''} aria-invalid={emailBad} />
+          {emailBad && <span className="oc-field-error">Escribe un correo válido, por ejemplo nombre@correo.com</span>}
           <button type="button" className="btn ghost sm" onClick={() => { setShowNewCust(false); setNewCust(EMPTY_CUST); }}>
             Cancelar
           </button>
@@ -57,9 +71,10 @@ function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCus
               ))}
             </div>
           )}
-          <button type="button" className="btn ghost sm" onClick={() => setShowNewCust(true)}>+ Nuevo cliente</button>
+          <button type="button" className="btn sm oc-new-btn" onClick={() => setShowNewCust(true)}>+ Nuevo cliente</button>
         </>
       )}
+      {issue && <div className="oc-issue" role="alert">{issue}</div>}
     </div>
   );
 }
@@ -586,6 +601,22 @@ export default function Orders() {
   const custRequired = !!custCfg.required;
   const custFieldReq = (k) => !!custCfg.fields?.[k];
 
+  // Qué le falta al cliente para poder finalizar (se muestra en rojo debajo del
+  // bloque antes de tocar "Finalizar venta", que queda deshabilitado).
+  const creatingCustNow = !selectedCustomer && showNewCust && !!newCust.name.trim();
+  const custIssue = (() => {
+    if (!selectedCustomer && showNewCust) {
+      const anyTyped = newCust.name.trim() || newCust.document.trim() || newCust.phone.trim() || newCust.email.trim();
+      if (!newCust.name.trim()) return custRequired || anyTyped ? 'Escribe el nombre del cliente.' : null;
+      if (custFieldReq('document') && !newCust.document.trim()) return 'El documento del cliente es obligatorio.';
+      if (custFieldReq('phone') && !newCust.phone.trim()) return 'El teléfono del cliente es obligatorio.';
+      if (newCust.email.trim() && !EMAIL_RE.test(newCust.email.trim())) return 'El correo no es válido.';
+      return null;
+    }
+    if (custRequired && !selectedCustomer) return 'Este negocio requiere el cliente: búscalo o toca «Nuevo cliente» para registrarlo.';
+    return null;
+  })();
+
   // Props compartidas del bloque de cliente: se renderiza en el resumen
   // (desktop) y dentro de la hoja de pago (móvil, donde el resumen queda
   // tapado por la hoja).
@@ -593,6 +624,7 @@ export default function Orders() {
     required: custRequired, fieldReq: custFieldReq,
     selectedCustomer, resetCustomer, showNewCust, setShowNewCust,
     newCust, setNew, setNewCust, custSearch, setCustSearch, custMatches, pickCustomer,
+    issue: stage === 'pay' ? custIssue : null,
   };
 
   // ------- categorías / filtros -------
@@ -620,23 +652,15 @@ export default function Orders() {
     setError(null);
     if (!rate.value) { setError('No hay tasa de cambio disponible. Configúrala en Negocio → Ventas.'); return; }
     // Validación del cliente según la configuración del negocio.
-    const creatingCust = !selectedCustomer && showNewCust && newCust.name.trim();
-    if (custRequired && !selectedCustomer && !creatingCust) {
-      setError('Este negocio requiere registrar el cliente: búscalo o créalo antes de finalizar.');
-      return;
-    }
-    if (creatingCust) {
-      if (custFieldReq('document') && !newCust.document.trim()) { setError('El documento del cliente es obligatorio.'); return; }
-      if (custFieldReq('phone') && !newCust.phone.trim()) { setError('El teléfono del cliente es obligatorio.'); return; }
-    }
+    if (custIssue) { setError(custIssue); return; }
     setBusy(true);
     try {
       // Resuelve el cliente: existente, nuevo (se crea) o ninguno.
       let customerId = selectedCustomer?.id || null;
       let customerName = selectedCustomer?.name || '';
-      if (!selectedCustomer && showNewCust && newCust.name.trim()) {
+      if (creatingCustNow) {
         const created = await createCustomer(business.id, {
-          name: newCust.name.trim(), document: newCust.document.trim(),
+          name: newCust.name.trim(), document: docOf(newCust),
           phone: newCust.phone.trim(), email: newCust.email.trim(),
         });
         setCustomers((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
@@ -778,7 +802,7 @@ export default function Orders() {
                     const inCartLine = dv ? cart.find((c) => c.id === dv.id) : null;
                     return (
                       <div key={p.id} className={`product-card${qty ? ' in-cart' : ''}`}
-                        onClick={() => { if (!(simple && inCartLine)) onTapProduct(p); }}
+                        onClick={() => (simple && inCartLine ? setQty(dv.id, 0) : onTapProduct(p))}
                         role="button" tabIndex={0}>
                         {qty > 0 && <span className="product-qty-badge">{qty}</span>}
                         <div className="product-card-thumb">
@@ -1051,7 +1075,7 @@ export default function Orders() {
                 </button>
               ) : (
                 <button className="btn primary lg block"
-                  disabled={busy || !isCovered}
+                  disabled={busy || !isCovered || !!custIssue}
                   onClick={onFinish}>
                   {busy ? 'Guardando…' : 'Finalizar venta'}
                 </button>
@@ -1113,7 +1137,7 @@ export default function Orders() {
                 return (
                   <div key={v.id} className={`variant-pick${inCart ? ' in-cart' : ''}`}
                     role="button" tabIndex={0}
-                    onClick={() => { if (!inCart) addVariant(picker, v); }}>
+                    onClick={() => (inCart ? setQty(v.id, 0) : addVariant(picker, v))}>
                     {inCart && <span className="product-qty-badge">{inCart.qty}</span>}
                     <div className="product-card-thumb sm">
                       {img ? <img src={img} alt="" loading="lazy" /> : <span className="thumb-ph">{(variantLabel(v.attributes) || picker.name).slice(0, 1)}</span>}
