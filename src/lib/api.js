@@ -505,8 +505,17 @@ export async function fetchCustomers() {
   return unwrap(await supabase.from('customers').select('*').order('name'));
 }
 
+// El documento es único por negocio (índice customers_business_document_key):
+// el error de duplicado de Postgres se traduce a un mensaje claro.
+function customerResult(res) {
+  if (res.error?.code === '23505') {
+    throw new Error('Ya existe un cliente registrado con ese documento.');
+  }
+  return unwrap(res);
+}
+
 export async function createCustomer(businessId, { name, document, phone, email }) {
-  return unwrap(await supabase.from('customers')
+  return customerResult(await supabase.from('customers')
     .insert({ business_id: businessId, name, document: document || '', phone: phone || '', email: email || '' })
     .select().single());
 }
@@ -514,7 +523,7 @@ export async function createCustomer(businessId, { name, document, phone, email 
 // Alta masiva (importación CSV). rows: [{ name, document, phone, email }]
 export async function createCustomersBulk(businessId, rows) {
   if (!rows.length) return [];
-  return unwrap(await supabase.from('customers')
+  return customerResult(await supabase.from('customers')
     .insert(rows.map((r) => ({
       business_id: businessId, name: r.name,
       document: r.document || '', phone: r.phone || '', email: r.email || '',
@@ -523,7 +532,7 @@ export async function createCustomersBulk(businessId, rows) {
 }
 
 export async function updateCustomer(id, patch) {
-  return unwrap(await supabase.from('customers')
+  return customerResult(await supabase.from('customers')
     .update(patch).eq('id', id).select().single());
 }
 
