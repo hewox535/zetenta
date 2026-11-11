@@ -517,6 +517,24 @@ export default function Orders() {
   // ajusta solo con lo que falta (cada uno con su descuento).
   const onAmountChange = (m, val) => {
     const cashIds = selectedMethods.filter((id) => !isCashea(methods.find((x) => x.id === id)));
+    // Cashea + un solo método de contado: lo que paga el cliente ES la inicial.
+    // Al cambiarlo se recalculan el % de inicial y lo que financia Cashea.
+    const casheaM = methods.find((x) => selectedMethods.includes(x.id) && isCashea(x));
+    if (casheaM && !isCashea(m) && cashIds.length === 1 && rate.value && totalUsd > 0) {
+      const amt = parseAmt(val);
+      const initialUsd = m.currency === 'USD' ? amt : amt / rate.value;
+      if (initialUsd > 0 && initialUsd < totalUsd - PAY_EPS) {
+        const financedUsd = totalUsd - initialUsd;
+        const pct = Math.round((initialUsd / totalUsd) * 10000) / 100;
+        setInitialPct((prev) => ({ ...prev, [casheaM.id]: String(pct) }));
+        setPayments((prev) => ({
+          ...prev,
+          [m.id]: val,
+          [casheaM.id]: (casheaM.currency === 'USD' ? financedUsd : financedUsd * rate.value).toFixed(2),
+        }));
+        return;
+      }
+    }
     if (isCashea(m) || cashIds.length !== 2) {
       setPayments((prev) => ({ ...prev, [m.id]: val }));
       return;
