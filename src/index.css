@@ -1136,8 +1136,11 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 }
 .oc-doc:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3.5px var(--accent-ring); }
 .oc-doc select {
-  flex: 0 0 auto; width: auto; padding: 0 26px 0 12px; border: 0; border-right: 1px solid var(--border);
-  border-radius: 0; background-color: var(--bg); font-weight: 700; box-shadow: none !important;
+  flex: 0 0 auto; width: auto; padding: 0 30px 0 14px; border: 0; border-right: 1px solid var(--border);
+  border-radius: 0; font-weight: 700; box-shadow: none !important; cursor: pointer;
+  /* Chevron propio, con aire a la derecha (el nativo queda pegado al borde) */
+  -webkit-appearance: none; appearance: none;
+  background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' fill='none' stroke='%236e6e73' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 11px center;
 }
 .oc-doc input { flex: 1; min-width: 0; border: 0; border-radius: 0; box-shadow: none !important; }
 .oc-invalid { border-color: var(--danger) !important; }

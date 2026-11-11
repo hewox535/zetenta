@@ -505,13 +505,49 @@ export default function Orders() {
     return v ? variantImg(p, v) : productImg(p);
   };
 
+  // Monto que cubre TODA la venta con un método (con su descuento de contado,
+  // salvo que haya Cashea), en la moneda del método.
+  const fullAmountFor = (om, withCashea) => {
+    const dm = withCashea ? 0 : (isForeignCash(om) ? baseD : baseDv);
+    const net = totalUsd * (1 - dm);
+    return (om.currency === 'USD' ? net : net * rate.value).toFixed(2);
+  };
+
+  // Al escribir un monto con dos métodos de contado elegidos, el otro se
+  // ajusta solo con lo que falta (cada uno con su descuento).
+  const onAmountChange = (m, val) => {
+    const cashIds = selectedMethods.filter((id) => !isCashea(methods.find((x) => x.id === id)));
+    if (isCashea(m) || cashIds.length !== 2) {
+      setPayments((prev) => ({ ...prev, [m.id]: val }));
+      return;
+    }
+    const other = methods.find((x) => x.id === cashIds.find((id) => id !== m.id));
+    const dmOf = (om) => (casheaSelected ? 0 : isForeignCash(om) ? baseD : baseDv);
+    const dm = dmOf(m); const dOther = dmOf(other);
+    const thisUsd = toUsd(m, parseAmt(val));
+    const covered = dm > 0 ? thisUsd / (1 - dm) : thisUsd;
+    const left = Math.max(0, totalUsd - listUsd - covered);
+    const otherNet = left * (1 - dOther);
+    const otherAmt = left > PAY_EPS ? (other.currency === 'USD' ? otherNet : otherNet * rate.value).toFixed(2) : '';
+    setPayments((prev) => ({ ...prev, [m.id]: val, [other.id]: otherAmt }));
+  };
+
   const toggleMethod = (m) => {
     if (selectedMethods.includes(m.id)) {
       const rest = selectedMethods.filter((x) => x !== m.id);
-      setPayments((p) => { const n = { ...p }; delete n[m.id]; return n; });
+      const restCashea = rest.some((id) => isCashea(methods.find((x) => x.id === id)));
+      const restCash = rest.filter((id) => !isCashea(methods.find((x) => x.id === id)));
       setSelectedMethods(rest);
-      // Se quitó el último Cashea: vuelven los descuentos de contado.
-      if (isCashea(m) && !rest.some((id) => isCashea(methods.find((x) => x.id === id)))) rescaleForCashea(false, rest);
+      // Si queda un solo método de contado (y no hay Cashea), queda como si se
+      // hubiera elegido de primero: cubre toda la venta con su descuento.
+      if (!restCashea && restCash.length === 1) {
+        const om = methods.find((x) => x.id === restCash[0]);
+        setPayments((p) => { const n = { ...p }; delete n[m.id]; n[om.id] = fullAmountFor(om, false); return n; });
+        return;
+      }
+      setPayments((p) => { const n = { ...p }; delete n[m.id]; return n; });
+      // Se quitó el último Cashea con varios métodos: vuelven los descuentos.
+      if (isCashea(m) && !restCashea) rescaleForCashea(false, rest);
       return;
     }
     if (isCashea(m) && !casheaSelected) rescaleForCashea(true, selectedMethods);
@@ -522,8 +558,10 @@ export default function Orders() {
     // volver a seleccionarlo no quede el % puesto y el monto vacío.
     // Cashea entra con la inicial ya puesta (la del negocio, 40% por defecto,
     // o la que se escribió antes en esta venta).
+    // Cualquier otro método se llena con lo que falta: el primero, con toda la
+    // venta (no hace falta tocar "Exacto").
     if (isCashea(m)) setCasheaPct(m, initialPct[m.id] || String(casheaDefault));
-    else if (selectedMethods.length >= 1) fillExact(m);
+    else fillExact(m);
     setSelectedMethods((prev) => [...prev, m.id]);
   };
 
@@ -1032,7 +1070,7 @@ export default function Orders() {
                             .map((m) => (
                               <PayAmountRow key={m.id} m={m} rate={rate.value}
                                 amount={payments[m.id] || ''}
-                                onAmount={(val) => setPayments((prev) => ({ ...prev, [m.id]: val }))}
+                                onAmount={(val) => onAmountChange(m, val)}
                                 onExact={() => fillExact(m)}
                                 initialPct={isCashea(m) ? (initialPct[m.id] ?? '') : null}
                                 onInitialPct={isCashea(m) ? (val) => setCasheaPct(m, val) : null}
