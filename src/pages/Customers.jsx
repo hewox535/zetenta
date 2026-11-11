@@ -4,6 +4,7 @@ import {
   fetchCustomers, createCustomer, createCustomersBulk, updateCustomer, deleteCustomer,
 } from '../lib/api';
 import { useConfirm } from '../components/Confirm';
+import { normalizeDoc, findByDoc } from '../lib/customerDoc';
 
 const EMPTY = { name: '', document: '', phone: '', email: '' };
 
@@ -135,9 +136,16 @@ export default function Customers() {
     e.preventDefault();
     setError(null); setBusy(true);
     const patch = {
-      name: form.name.trim(), document: form.document.trim(),
+      name: form.name.trim(), document: normalizeDoc(form.document),
       phone: form.phone.trim(), email: form.email.trim(),
     };
+    // El documento es único por negocio.
+    const dup = findByDoc(rows, patch.document, editing);
+    if (dup) {
+      setBusy(false);
+      setError(`Ya existe un cliente con el documento ${dup.document}: ${dup.name}.`);
+      return;
+    }
     try {
       if (editing) {
         const updated = await updateCustomer(editing, patch);
@@ -174,13 +182,16 @@ export default function Customers() {
       const text = await file.text();
       const parsed = customersFromCSV(text);
       const existing = new Set((rows || []).map(dedupeKey));
+      // El documento es único: también se omite si ya está (en la lista o en el archivo).
+      const docs = new Set((rows || []).map((c) => normalizeDoc(c.document)).filter(Boolean));
       const seen = new Set();
       const toAdd = [];
       let skipped = 0;
-      for (const c of parsed) {
+      for (const raw of parsed) {
+        const c = { ...raw, document: normalizeDoc(raw.document) };
         const k = dedupeKey(c);
-        if (existing.has(k) || seen.has(k)) { skipped++; continue; }
-        seen.add(k); toAdd.push(c);
+        if (existing.has(k) || seen.has(k) || (c.document && docs.has(c.document))) { skipped++; continue; }
+        seen.add(k); if (c.document) docs.add(c.document); toAdd.push(c);
       }
       if (!toAdd.length) {
         setImportMsg(`No se agregó nada: ${parsed.length} fila(s) leída(s), todas vacías o duplicadas.`);

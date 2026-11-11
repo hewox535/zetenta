@@ -13,6 +13,7 @@ import OrderReceipt from '../components/OrderReceipt';
 import OpenCashModal from '../components/OpenCashModal';
 import { CASH_EVENT, notifyCashChanged } from '../lib/cashEvents';
 import { FinModal } from '../components/FinUI';
+import { findByDoc } from '../lib/customerDoc';
 
 const EMPTY_CUST = { name: '', docType: 'V', document: '', phone: '', email: '' };
 // Cédula/RIF: V (venezolano), J (jurídico), E (extranjero) + solo números.
@@ -24,7 +25,7 @@ const docOf = (c) => (c.document.trim() ? `${c.docType}-${c.document.trim()}` : 
 // veces (resumen desktop y hoja de pago móvil) compartiendo el mismo estado.
 function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCustomer,
   showNewCust, setShowNewCust, newCust, setNew, setNewCust, custSearch, setCustSearch,
-  custMatches, pickCustomer, issue }) {
+  custMatches, pickCustomer, issue, dupCustomer }) {
   const emailBad = !!newCust.email.trim() && !EMAIL_RE.test(newCust.email.trim());
   return (
     <div className={`order-customer-block${desktop ? '' : ' oc-mobile'}`}>
@@ -54,6 +55,12 @@ function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCus
           <input placeholder="Correo (opcional)" value={newCust.email} onChange={setNew('email')} type="email"
             className={emailBad ? 'oc-invalid' : ''} aria-invalid={emailBad} />
           {emailBad && <span className="oc-field-error">Escribe un correo válido, por ejemplo nombre@correo.com</span>}
+          {dupCustomer && (
+            <div className="oc-dup" role="alert">
+              <span>Ya está registrado: <strong>{dupCustomer.name}</strong> · {dupCustomer.document}</span>
+              <button type="button" className="btn sm" onClick={() => pickCustomer(dupCustomer)}>Usar este cliente</button>
+            </div>
+          )}
           <button type="button" className="btn ghost sm" onClick={() => { setShowNewCust(false); setNewCust(EMPTY_CUST); }}>
             Cancelar
           </button>
@@ -74,7 +81,7 @@ function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCus
           <button type="button" className="btn sm oc-new-btn" onClick={() => setShowNewCust(true)}>+ Nuevo cliente</button>
         </>
       )}
-      {issue && <div className="oc-issue" role="alert">{issue}</div>}
+      {issue && !dupCustomer && <div className="oc-issue" role="alert">{issue}</div>}
     </div>
   );
 }
@@ -625,7 +632,9 @@ export default function Orders() {
   const custMatches = custSearch.trim()
     ? customers.filter((c) => {
         const q = custSearch.trim().toLowerCase();
-        return c.name.toLowerCase().includes(q) || (c.document || '').toLowerCase().includes(q);
+        const qd = q.replace(/[^a-z0-9]/g, '');
+        return c.name.toLowerCase().includes(q)
+          || (qd && (c.document || '').toLowerCase().replace(/[^a-z0-9]/g, '').includes(qd));
       }).slice(0, 6)
     : [];
 
@@ -642,9 +651,13 @@ export default function Orders() {
   // Qué le falta al cliente para poder finalizar (se muestra en rojo debajo del
   // bloque antes de tocar "Finalizar venta", que queda deshabilitado).
   const creatingCustNow = !selectedCustomer && showNewCust && !!newCust.name.trim();
+  // El documento es único: si ya hay un cliente con esa cédula/RIF, se ofrece
+  // usarlo en vez de registrarlo otra vez.
+  const dupCustomer = !selectedCustomer && showNewCust ? findByDoc(customers, docOf(newCust)) : null;
   const custIssue = (() => {
     if (!selectedCustomer && showNewCust) {
       const anyTyped = newCust.name.trim() || newCust.document.trim() || newCust.phone.trim() || newCust.email.trim();
+      if (dupCustomer) return `Ya existe un cliente con el documento ${dupCustomer.document}: toca «Usar este cliente».`;
       if (!newCust.name.trim()) return custRequired || anyTyped ? 'Escribe el nombre del cliente.' : null;
       if (custFieldReq('document') && !newCust.document.trim()) return 'El documento del cliente es obligatorio.';
       if (custFieldReq('phone') && !newCust.phone.trim()) return 'El teléfono del cliente es obligatorio.';
@@ -661,7 +674,7 @@ export default function Orders() {
   const customerBlockProps = {
     required: custRequired, fieldReq: custFieldReq,
     selectedCustomer, resetCustomer, showNewCust, setShowNewCust,
-    newCust, setNew, setNewCust, custSearch, setCustSearch, custMatches, pickCustomer,
+    newCust, setNew, setNewCust, custSearch, setCustSearch, custMatches, pickCustomer, dupCustomer,
     issue: stage === 'pay' ? custIssue : null,
   };
 
@@ -702,6 +715,8 @@ export default function Orders() {
           phone: newCust.phone.trim(), email: newCust.email.trim(),
         });
         setCustomers((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+        // Queda seleccionado: si la venta falla y se reintenta, no se vuelve a crear.
+        setSelectedCustomer(created); setShowNewCust(false); setNewCust(EMPTY_CUST);
         customerId = created.id; customerName = created.name;
       }
 
