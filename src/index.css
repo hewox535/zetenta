@@ -321,6 +321,7 @@ a.icon-btn { text-decoration: none; }
   background: var(--danger-bg); color: var(--danger);
   border-radius: var(--radius-sm); padding: 11px 14px; font-size: 14px; margin: 10px 0;
 }
+.pay-note { margin: 0 0 10px; padding: 9px 12px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 500; }
 .disc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: 14px; }
 @media (max-width: 560px) { .disc-grid { grid-template-columns: 1fr; } }
 .form-ok {
