@@ -47,7 +47,7 @@ export default function OrderReceipt({ business, order }) {
 
       <div className="receipt-totals">
         <div className={`receipt-total-row${discount > 0.005 ? '' : ' grand'}`}>
-          <span>Total</span>
+          <span>{discount > 0.005 ? 'Subtotal' : 'Total'}</span>
           <span>{usd(order.total_usd)}</span>
         </div>
         {discount > 0.005 && (
@@ -64,7 +64,7 @@ export default function OrderReceipt({ business, order }) {
         )}
         <div className="receipt-total-row grand bs">
           <span>Total Bs</span>
-          <span>{bs(order.total_ves)}</span>
+          <span>{bs(rate > 0 ? effectiveTotal * rate : order.total_ves)}</span>
         </div>
         <div className="receipt-total-row receipt-muted">
           <span>Tasa aplicada</span>

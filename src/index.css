@@ -242,6 +242,15 @@ table.list .centro, table.list th.centro { text-align: center; }
    columnas); los botones se separan con márgenes. */
 /* Venta cancelada: se ve apagada pero sigue en el historial */
 .row-cancelled td { opacity: .6; }
+/* Historial de ventas: total cobrado, descuento y crédito */
+.oh-amount { font-variant-numeric: tabular-nums; }
+td.oh-amount { display: table-cell; }
+td.oh-amount > * { display: block; }
+.oh-total { font-weight: 600; color: var(--text); }
+.oh-disc { font-size: 12px; color: var(--ok); font-weight: 600; white-space: nowrap; }
+.oh-disc s { color: var(--text-2); font-weight: 400; margin-right: 4px; }
+.oh-ves { font-size: 12.5px; }
+.oh-credit { font-size: 12px; font-weight: 600; color: #a35400; white-space: nowrap; }
 .row-actions { text-align: right; white-space: nowrap; }
 .row-actions > * { vertical-align: middle; }
 .row-actions > * + * { margin-left: 6px; }

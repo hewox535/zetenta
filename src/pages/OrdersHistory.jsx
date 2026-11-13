@@ -3,6 +3,34 @@ import { Link } from 'react-router-dom';
 import { fetchOrders, fetchStaff, cancelOrder } from '../lib/api';
 import { usd, bs, formatDate } from '../lib/calc';
 
+// Montos reales de una venta: total_usd es a precio de lista y el descuento
+// (de contado o en divisa) se guarda aparte en discount_usd.
+function amounts(o) {
+  const list = Number(o.total_usd) || 0;
+  const discount = Number(o.discount_usd) || 0;
+  const total = list - discount;
+  const rate = Number(o.rate) || (list > 0 ? (Number(o.total_ves) || 0) / list : 0);
+  return { list, discount, total, totalVes: total * rate, credit: Number(o.credit_usd) || 0 };
+}
+
+// Total con su descuento: "$90,00 · −$10,00 de descuento" y el equivalente en Bs.
+function Amount({ o, mobile = false }) {
+  const a = amounts(o);
+  const Main = mobile ? 'strong' : 'div';
+  return (
+    <>
+      <Main className="oh-total">{usd(a.total)}</Main>
+      {a.discount > 0.005 && (
+        <span className="oh-disc" title={`Precio de lista ${usd(a.list)}`}>
+          <s>{usd(a.list)}</s> −{usd(a.discount)}
+        </span>
+      )}
+      <span className="muted oh-ves">{bs(a.totalVes)}</span>
+      {a.credit > 0.005 && <span className="oh-credit">{usd(a.credit)} a crédito</span>}
+    </>
+  );
+}
+
 export default function OrdersHistory() {
   const [orders, setOrders] = useState(null);
   const [staff, setStaff] = useState([]);
@@ -74,9 +102,8 @@ export default function OrdersHistory() {
                   <td className="muted">
                     {(o.order_payments || []).map((p) => p.method_name || p.account_name).filter(Boolean).join(', ') || '—'}
                   </td>
-                  <td className="num">
-                    <div>{usd(o.total_usd)}</div>
-                    <div className="muted">{bs(o.total_ves)}</div>
+                  <td className="num oh-amount">
+                    <Amount o={o} />
                   </td>
                   <td className="row-actions">
                     <Link to={`/orders/${o.id}`} className="btn ghost sm">Ver</Link>
@@ -106,9 +133,8 @@ export default function OrdersHistory() {
                 </span>
                 <span className="muted">{(o.order_payments || []).map((p) => p.method_name || p.account_name).filter(Boolean).join(', ') || '—'}</span>
               </div>
-              <div className="mcard-amount">
-                <strong>{usd(o.total_usd)}</strong>
-                <span className="muted">{bs(o.total_ves)}</span>
+              <div className="mcard-amount oh-amount">
+                <Amount o={o} mobile />
               </div>
               <span className="mcard-chev" aria-hidden="true">›</span>
             </Link>
