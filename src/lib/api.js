@@ -623,6 +623,17 @@ export async function fetchOrdersForStats(fromISO, toISO) {
   return unwrap(await q);
 }
 
+// Cobros de cuentas por cobrar (abonos de ventas a crédito y otras deudas a
+// favor) hechos en el período. Requiere el permiso de Cuentas (RLS).
+export async function fetchReceivablePayments(fromISO, toISO) {
+  let q = supabase.from('debt_payments')
+    .select('amount_usd, created_at, debts!inner(kind, branch_id, order_id)')
+    .eq('debts.kind', 'receivable');
+  if (fromISO) q = q.gte('created_at', fromISO);
+  if (toISO) q = q.lte('created_at', toISO);
+  return unwrap(await q);
+}
+
 // ---------- Administración de la plataforma ----------
 
 export async function fetchBusinesses() {
