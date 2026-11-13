@@ -17,7 +17,10 @@ import { useConfirm } from '../components/Confirm';
 import { RowMenu, SortHead } from '../components/FinUI';
 import './finance.css';
 import './inventory.css';
-import VariantBuilder, { VariationDialog, emptyVariations, sigOf, labelOf } from '../components/VariantBuilder';
+import { VariationDialog, emptyVariations, sigOf, labelOf } from '../components/VariantBuilder';
+import { GenerateDialog, VariantTable } from '../components/VariantTable';
+
+const newKey = () => Math.random().toString(36).slice(2);
 
 // Stock de una variante en una sucursal concreta (0 si no tiene fila).
 const branchStock = (v, branchId) => {
@@ -186,6 +189,7 @@ export default function Inventory() {
   const [modal, setModal] = useState(null);   // modal crear/editar producto
   const [viewer, setViewer] = useState(null); // visor de fotos: { p, i } (índice en mediaOf(p))
   const [editVar, setEditVar] = useState(null);   // variación existente que se está editando
+  const [genVar, setGenVar] = useState(null);     // modal "Agregar variaciones": ejes al abrirlo (para deshacer)
   const [photo, setPhoto] = useState(null);       // foto del modal abierta en grande
 
   // Ofertas: filtro "En oferta" y modo selección para aplicar/quitar en lote
@@ -304,7 +308,7 @@ export default function Inventory() {
     setError(null);
     setModal({
       mode: 'create', name: '', price: '', cost: '', sku: '', unit: 'und', note: '', categories: {},
-      cmode: 'simple', simpleStock: '', axisIds: [], vb: emptyVariations(), stagedFiles: [],
+      simpleStock: '', axisIds: [], vb: emptyVariations(), stagedFiles: [],
     });
   }
   function openEdit(p) {
@@ -364,7 +368,7 @@ export default function Inventory() {
       // Producto simple: además de categorías, lleva propiedades de variación
       // (Talla, Color…) como dato del producto. Con variaciones, esos valores
       // van en los atributos de cada variante, no aquí.
-      const simpleNow = modal.mode === 'create' ? modal.cmode === 'simple' : modal.simple;
+      const simpleNow = modal.mode === 'create' ? modal.vb.length === 0 : modal.axes.length === 0;
       const categories = {};
       for (const t of [...catTax, ...(simpleNow ? varTax : [])]) {
         const val = (modal.categories[t.id] || '').trim();
@@ -374,14 +378,23 @@ export default function Inventory() {
       if (modal.mode === 'create') {
         let variants; let variantAxes = [];
         let built = [];
-        if (modal.cmode === 'simple') {
+        if (modal.vb.length === 0) {
           variants = [{ attributes: {}, stock: Number(modal.simpleStock) || 0 }];
         } else {
           const axes = varTax.filter((t) => modal.axisIds.includes(t.id));
-          if (axes.length === 0) throw new Error('Elige al menos un eje de variación (Color, Talla…).');
+          if (axes.length === 0) throw new Error('Elige en qué varía el producto (talla, color…).');
           variantAxes = axes.map((t) => t.name);
           built = modal.vb;
-          if (built.length === 0) throw new Error('Agrega al menos una variación.');
+          const incompletas = built.filter((v) => variantAxes.some((a) => !v.attributes?.[a]));
+          if (incompletas.length) {
+            throw new Error(`Completa ${variantAxes.filter((a) => incompletas.some((v) => !v.attributes?.[a])).join(' y ').toLowerCase()} en ${incompletas.length === 1 ? 'una variación' : `${incompletas.length} variaciones`}.`);
+          }
+          const sigs = new Set();
+          for (const v of built) {
+            const sig = sigOf(variantAxes, v.attributes);
+            if (sigs.has(sig)) throw new Error(`La variación ${labelOf(variantAxes, v.attributes)} está repetida.`);
+            sigs.add(sig);
+          }
           variants = built.map((v) => ({
             attributes: v.attributes, stock: Number(v.stock) || 0, sku: (v.sku || '').trim(),
             price: v.price === '' || v.price == null ? null : Number(v.price),
@@ -416,8 +429,7 @@ export default function Inventory() {
         if (sinValor.length > 0) {
           const faltan = modal.axes.filter((ax) => sinValor.some((v) => !v.attributes?.[ax]));
           throw new Error(
-            `Falta ${faltan.join(' y ').toLowerCase()} en ${sinValor.length === 1 ? 'una variación' : `${sinValor.length} variaciones`}`
-            + `: usa “editar variación” para ${sinValor.length === 1 ? 'completarla' : 'completarlas'}.`,
+            `Completa ${faltan.join(' y ').toLowerCase()} en ${sinValor.length === 1 ? 'una variación' : `${sinValor.length} variaciones`} (en la tabla de variaciones).`,
           );
         }
         if (canInfo && modal.axes.join('|') !== modal.origAxes.join('|')) {
@@ -629,27 +641,6 @@ export default function Inventory() {
     await findOrCreateTerm(tax.id, value);
   }
 
-  // "Reemplazar" sobre una variación que YA existe en el producto: se le
-  // aplican los datos escritos (y su foto, si cargó una) en vez de agregar
-  // otra fila con la misma combinación, que la base rechazaría.
-  async function onReplaceExistingVariant(sig, row) {
-    setM({
-      variants: modal.variants.map((v) => (sigOf(modal.axes, v.attributes) === sig ? {
-        ...v,
-        stock: row.stock !== '' && row.stock != null ? String(row.stock) : v.stock,
-        price: row.price ?? v.price,
-        cost: row.cost ?? v.cost,
-        sku: row.sku || v.sku,
-      } : v)),
-    });
-    const target = modal.variants.find((v) => sigOf(modal.axes, v.attributes) === sig);
-    if (row.file && target) {
-      const old = (modal.media || []).find((m) => m.variant_id === target.id);
-      await onUploadImage(row.file, target.id);
-      if (old) await onRemoveImage(old);
-    }
-  }
-
   // Marcar o desmarcar un eje desde el submodal: manda la casilla, sin pasos
   // intermedios. Solo cambia el estado del modal; se persiste al guardar.
   async function onToggleAxis(name, on) {
@@ -693,6 +684,117 @@ export default function Inventory() {
   const lockPrice = editing && !canPrice;
   const lockStock = editing && !canStock;
   const lockMedia = editing && !canMedia;
+
+  // ---------- Variaciones en el modal (tabla + "Agregar variaciones") ----------
+  // Al crear, las filas son modal.vb. Al editar, las que ya existen
+  // (modal.variants) más las nuevas (modal.vbNew). Un producto simple ya
+  // guardado no muestra filas: su cantidad va en su propio bloque.
+  const simpleEdit = modal?.mode === 'edit' && modal.axes.length === 0 && modal.variants.length <= 1;
+  const varAxes = !modal ? [] : modal.mode === 'create' ? axisTaxOfModal().map((t) => t.name) : modal.axes;
+  const varRows = !modal ? [] : modal.mode === 'create'
+    ? modal.vb.map((r) => ({ ...r, isNew: true }))
+    : simpleEdit ? [] : [
+      ...modal.variants.map((v) => ({ ...v, key: v.id, isNew: false })),
+      ...modal.vbNew.map((r) => ({ ...r, isNew: true })),
+    ];
+  const canAddVar = modal?.mode === 'create' || (canCreate && (canInfo || modal?.axes.length > 0));
+  const colorAxisOf = (axes) => axes.find((a) => /^colou?r$/i.test(a.trim())) || null;
+
+  function openGen() {
+    setGenVar({ axisIds: modal.axisIds, axes: modal.axes });
+  }
+  // Cerrar sin crear: se deshacen los ejes marcados en el modal.
+  function closeGen() {
+    if (genVar) setModal((m) => (m.mode === 'create' ? { ...m, axisIds: genVar.axisIds } : { ...m, axes: genVar.axes }));
+    setGenVar(null);
+  }
+  function onGenerateVariants(list) {
+    const blank = (attributes) => ({ key: newKey(), attributes, stock: '', price: '', cost: '', sku: '', file: null });
+    setModal((m) => {
+      if (m.mode === 'create') return { ...m, vb: [...m.vb, ...list.map(blank)] };
+      // Producto simple que pasa a tener variaciones: la variante que ya existe
+      // toma la primera combinación (conserva su stock e historial).
+      const converting = m.origAxes.length === 0 && m.variants.length === 1
+        && Object.keys(m.variants[0].attributes || {}).length === 0;
+      if (converting) {
+        const [first, ...rest] = list;
+        return {
+          ...m,
+          variants: [{ ...m.variants[0], attributes: first }],
+          vbNew: [...m.vbNew, ...rest.map(blank)],
+        };
+      }
+      return { ...m, vbNew: [...m.vbNew, ...list.map(blank)] };
+    });
+    setGenVar(null);
+  }
+  function patchVarRow(key, patch) {
+    setModal((m) => {
+      if (m.mode === 'create') return { ...m, vb: m.vb.map((r) => (r.key === key ? { ...r, ...patch } : r)) };
+      return {
+        ...m,
+        variants: m.variants.map((v) => (v.id === key ? { ...v, ...patch } : v)),
+        vbNew: m.vbNew.map((r) => (r.key === key ? { ...r, ...patch } : r)),
+      };
+    });
+  }
+  function bulkVarRows(patch) {
+    const p = { ...patch };
+    if (lockStock) delete p.stock;
+    if (lockPrice) { delete p.price; delete p.cost; }
+    setModal((m) => (m.mode === 'create'
+      ? { ...m, vb: m.vb.map((r) => ({ ...r, ...p })) }
+      : { ...m, variants: m.variants.map((v) => ({ ...v, ...p })), vbNew: m.vbNew.map((r) => ({ ...r, ...p })) }));
+  }
+  function removeVarRow(row) {
+    setModal((m) => (m.mode === 'create'
+      ? { ...m, vb: m.vb.filter((r) => r.key !== row.key) }
+      : { ...m, vbNew: m.vbNew.filter((r) => r.key !== row.key) }));
+  }
+  const varMediaOf = (id) => (modal?.media || []).find((m) => m.variant_id === id);
+  const varPhotoOf = (r) => (r.isNew
+    ? (r.file ? URL.createObjectURL(r.file) : null)
+    : (varMediaOf(r.id) ? mediaUrl(varMediaOf(r.id)) : null));
+  // Foto de una variación. Si el producto varía por color, se aplica también
+  // a las variaciones del mismo color que aún no tienen foto.
+  async function onVarPhoto(row, file) {
+    const color = colorAxisOf(varAxes);
+    const same = color && row.attributes?.[color]
+      ? varRows.filter((r) => r.key !== row.key && r.attributes?.[color] === row.attributes[color] && !varPhotoOf(r))
+      : [];
+    for (const r of [row, ...same]) {
+      if (r.isNew) { patchVarRow(r.key, { file }); continue; }
+      const old = varMediaOf(r.id);
+      await onUploadImage(file, r.id);
+      if (old && r.key === row.key) await onRemoveImage(old);
+    }
+  }
+  async function onDeleteVariantInModal(v) {
+    if (modal.variants.length <= 1) { setError('Un producto debe tener al menos una variación.'); return; }
+    const label = labelOf(modal.axes, v.attributes) || 'estándar';
+    if (!await ask({ title: `¿Eliminar la variación ${label}?`, message: `Se quita de ${modal.name} junto con su stock.`, confirmLabel: 'Eliminar variación' })) return;
+    try {
+      await deleteVariant(v.id);
+      setM({ variants: modal.variants.filter((x) => x.id !== v.id) });
+      await reload();
+    } catch (e) { setError(e.message); }
+  }
+  const varMenu = (r) => {
+    const v = modal.variants.find((x) => x.id === r.id);
+    if (!v) return [];
+    const label = labelOf(modal.axes, v.attributes) || 'Estándar';
+    const photo = varMediaOf(v.id);
+    return [
+      { label: 'Registrar entrada', hidden: !canStock, onClick: () => setMove({ productId: modal.id, variantId: v.id, label, type: 'in', quantity: '', note: '' }) },
+      { label: 'Registrar salida', hidden: !canStock, onClick: () => setMove({ productId: modal.id, variantId: v.id, label, type: 'out', quantity: '', note: '' }) },
+      { label: 'Trasladar a otra sucursal', hidden: !canStock || !multiBranch, onClick: () => setTransfer({ productId: modal.id, variantId: v.id, label, to: '', quantity: '' }) },
+      { label: 'Cambiar características', hidden: !canInfo || modal.axes.length === 0, onClick: () => setEditVar(v) },
+      { label: 'Ver foto', hidden: !photo, onClick: () => setPhoto({ src: mediaUrl(photo), media: photo }) },
+      { label: 'Quitar foto', hidden: !photo || lockMedia, onClick: () => onRemoveImage(photo) },
+      { label: 'Eliminar variación', danger: true, hidden: !canDelete || modal.variants.length <= 1, onClick: () => onDeleteVariantInModal(v) },
+    ];
+  };
+
 
   // ---------- Lista: resumen, filtros agrupados y orden ----------
   const stockOf = (p) => variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0);
@@ -1204,7 +1306,7 @@ export default function Inventory() {
       {/* ============ Modal crear / editar producto ============ */}
       {modal && (
         <div className="modal-backdrop" onClick={() => setModal(null)}>
-          <div className="modal card modal-wide" onClick={(e) => e.stopPropagation()}>
+          <div className="modal card modal-wide np-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h2>{modal.mode === 'create' ? 'Nuevo producto' : 'Editar producto'}</h2>
               <button className="btn ghost sm" onClick={() => setModal(null)}>Cerrar</button>
@@ -1214,24 +1316,6 @@ export default function Inventory() {
                 <p className="hint">
                   Los campos en gris no los puedes cambiar con tus permisos actuales.
                 </p>
-              )}
-              {modal.mode === 'create' && (
-                <div className="mode-pills" role="radiogroup" aria-label="Tipo de producto">
-                  {[
-                    ['simple', 'Producto simple', 'Un solo artículo con su stock'],
-                    ['variants', 'Con variaciones', 'Talla, color u otros ejes'],
-                  ].map(([key, label, sub]) => (
-                    <button type="button" key={key} role="radio" aria-checked={modal.cmode === key}
-                      className={`mode-pill${modal.cmode === key ? ' active' : ''}`}
-                      onClick={() => setM({ cmode: key })}>
-                      <span className="mode-radio" aria-hidden="true" />
-                      <span className="mode-pill-text">
-                        <span className="mode-pill-label">{label}</span>
-                        <span className="mode-pill-sub">{sub}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
               )}
               <div className="np-grid">
                 <label className="np-name">Nombre
@@ -1246,7 +1330,7 @@ export default function Inventory() {
                 <label>SKU
                   <input value={modal.sku} onChange={(e) => setM({ sku: e.target.value })} placeholder="CAM-OXF" disabled={lockInfo} />
                 </label>
-                {modal.mode === 'create' && modal.cmode === 'simple' && (
+                {modal.mode === 'create' && modal.vb.length === 0 && (
                   <label>Cantidad
                     <input type="number" step="1" min="0" value={modal.simpleStock}
                       onChange={(e) => setM({ simpleStock: e.target.value })} placeholder="0" />
@@ -1264,7 +1348,7 @@ export default function Inventory() {
                 // Producto simple: también puede fijar Talla, Color, etc. como
                 // dato del producto (sin crear variaciones); alimenta los
                 // filtros del POS y del inventario igual que las categorías.
-                const simpleNow = modal.mode === 'create' ? modal.cmode === 'simple' : modal.simple;
+                const simpleNow = modal.mode === 'create' ? modal.vb.length === 0 : modal.axes.length === 0;
                 const tagTax = [...catTax, ...(simpleNow ? varTax : [])];
                 if (tagTax.length === 0) return null;
                 return (
@@ -1280,7 +1364,7 @@ export default function Inventory() {
                       ))}
                     </div>
                     {simpleNow && varTax.length > 0 && (
-                      <p className="hint">Talla, color, etc. de un producto sin variaciones. Si el producto varía por esos ejes, usa “Con variaciones”.</p>
+                      <p className="hint">Talla, color, etc. de un producto que viene en una sola versión. Si lo vendes en varias, usa Variaciones más abajo.</p>
                     )}
                   </div>
                 );
@@ -1320,145 +1404,74 @@ export default function Inventory() {
                 </div>
               </div>
 
-              {/* -------- Variaciones (la cantidad del simple va arriba, junto
-                   a los datos básicos) -------- */}
-              {modal.mode === 'create' ? (
-                modal.cmode === 'simple' ? null : (
+              {/* -------- Cantidad de un producto simple ya guardado -------- */}
+              {editing && simpleEdit && (
                 <div className="np-block">
-                  <div className="np-variants">
-                    <div className="oc-label">Variaciones</div>
-                    <p className="hint">
-                      En cada variación eliges en qué varía (talla, color…) y cargas su foto y su cantidad.
-                    </p>
-                    <VariantBuilder
-                      axes={axisTaxOfModal().map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
-                      availableAxes={varTax.filter((t) => !modal.axisIds.includes(t.id))
-                        .map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
-                      onToggleAxis={onToggleAxis}
-                      rows={modal.vb}
-                      onChange={(vb) => setM({ vb })}
-                      disabled={busy}
-                    />
-                  </div>
-                </div>
-                )
-              ) : (
-                /* -------- Editar: variantes existentes + agregar -------- */
-                modal.simple && modal.axes.length === 0 ? (
-                  <div className="np-block">
-                    <div className="oc-label">Cantidad</div>
-                    {modal.variants.map((v, i) => {
-                      const patch = (p) => setM({ variants: modal.variants.map((x, j) => (j === i ? { ...x, ...p } : x)) });
-                      return (
-                        <div key={v.id}>
-                          <div className="vb-fields">
-                            <label className="vb-field">Cantidad
-                              <input type="number" min="0" step="1" value={v.stock} disabled={lockStock}
-                                onChange={(e) => patch({ stock: e.target.value })} />
-                            </label>
-                          </div>
-                          {stockButtons(v)}
+                  <div className="oc-label">Cantidad</div>
+                  {modal.variants.map((v, i) => {
+                    const patch = (p) => setM({ variants: modal.variants.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+                    return (
+                      <div key={v.id}>
+                        <div className="vb-fields">
+                          <label className="vb-field">Cantidad
+                            <input type="number" min="0" step="1" value={v.stock} disabled={lockStock}
+                              onChange={(e) => patch({ stock: e.target.value })} />
+                          </label>
                         </div>
-                      );
-                    })}
-                    {!lockStock && (
-                      <p className="hint">
-                        Cambiar la cantidad aquí registra un ajuste. Para dejar constancia de una entrada
-                        o salida (con su nota) usa los botones de arriba.
-                      </p>
-                    )}
-                    {canCreate && (
-                      <button type="button" className="btn ghost sm vb-add" disabled={busy}
-                        onClick={() => setEditVar({ ...modal.variants[0], asNew: true })}>
-                        ＋ Nueva variación
-                      </button>
+                        {stockButtons(v)}
+                      </div>
+                    );
+                  })}
+                  {!lockStock && (
+                    <p className="hint">
+                      Cambiar la cantidad aquí registra un ajuste. Para dejar constancia de una entrada
+                      o salida (con su nota) usa los botones de arriba.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* -------- Variaciones: siempre visibles; sin filas, el producto es simple -------- */}
+              <div className="np-block">
+                <div className="np-var-head">
+                  <div className="oc-label">Variaciones</div>
+                  {varRows.length > 0 && canAddVar && (
+                    <button type="button" className="btn ghost sm" disabled={busy} onClick={openGen}>＋ Agregar variaciones</button>
+                  )}
+                </div>
+                {varRows.length === 0 ? (
+                  <div className="np-var-empty">
+                    <div>
+                      <p className="np-var-empty-title">Este producto no tiene variaciones</p>
+                      <p className="muted">Agrégalas si lo vendes en varias tallas, colores u otra característica.</p>
+                    </div>
+                    {canAddVar && (
+                      <button type="button" className="btn ghost" disabled={busy} onClick={openGen}>＋ Agregar variaciones</button>
                     )}
                   </div>
                 ) : (
-                <div className="np-block">
-                  <div className="oc-label">Variaciones de este producto</div>
-                  <div className="vb-list">
-                    {modal.variants.map((v, i) => {
-                      const vm = (modal.media || []).find((m) => m.variant_id === v.id);
-                      const patch = (p) => setM({ variants: modal.variants.map((x, j) => (j === i ? { ...x, ...p } : x)) });
-                      return (
-                        <div className="vb-card" key={v.id}>
-                          {vm ? (
-                            <button type="button" className="vb-photo" title="Ver en grande"
-                              onClick={() => setPhoto({ src: mediaUrl(vm), media: vm })}>
-                              <img src={mediaUrl(vm)} alt="" />
-                            </button>
-                          ) : (
-                            <label className="vb-photo" title={`Foto de ${v.label || 'la variación'}`}>
-                              <span className="thumb-ph">{lockMedia ? '' : '＋'}</span>
-                              <input type="file" accept="image/*" hidden disabled={busy || lockMedia}
-                                onChange={async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; await onUploadImage(f, v.id); }} />
-                            </label>
-                          )}
-                          <div className="vb-card-body">
-                            <div className="vb-card-head">
-                              <span className="vb-label">{labelOf(modal.axes, v.attributes) || v.label || 'Estándar'}</span>
-                              {vm && !lockMedia && (
-                                <button type="button" className="linklike" onClick={() => onRemoveImage(vm)}>quitar foto</button>
-                              )}
-                              {canInfo && modal.axes.length > 0 && (
-                                <button type="button" className="linklike vb-edit"
-                                  onClick={() => setEditVar(v)}>editar variación</button>
-                              )}
-                            </div>
-                            <div className="vb-fields">
-                              <label className="vb-field">Cantidad
-                                <input type="number" min="0" step="1" value={v.stock} disabled={lockStock}
-                                  onChange={(e) => patch({ stock: e.target.value })} />
-                              </label>
-                              <label className="vb-field">Precio
-                                <input type="number" min="0" step="0.01" value={v.price} placeholder="hereda" disabled={lockPrice}
-                                  onChange={(e) => patch({ price: e.target.value })} />
-                              </label>
-                              <label className="vb-field">Costo
-                                <input type="number" min="0" step="0.01" value={v.cost} placeholder="hereda" disabled={lockPrice}
-                                  onChange={(e) => patch({ cost: e.target.value })} />
-                              </label>
-                              <label className="vb-field">SKU
-                                <input value={v.sku} placeholder="—" disabled={lockInfo}
-                                  onChange={(e) => patch({ sku: e.target.value })} />
-                              </label>
-                              <label className="vb-field">Stock objetivo
-                                <input type="number" min="0" step="1" value={v.target} placeholder="—" disabled={lockStock}
-                                  onChange={(e) => patch({ target: e.target.value })} />
-                              </label>
-                            </div>
-                            {stockButtons(v)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {!lockStock && (
-                    <p className="hint">Cambiar la cantidad aquí registra un ajuste. Para dejar constancia de una entrada o salida (con su nota) usa los botones de cada variación.</p>
-                  )}
-
-                  {canCreate && (
-                    <div className="np-subblock">
-                      <VariantBuilder
-                        axes={modal.axes.map((name) => ({ id: name, name, terms: axisTermsByName(name) }))}
-                        availableAxes={varTax.filter((t) => !modal.axes.includes(t.name))
-                          .map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
-                        onToggleAxis={canInfo ? onToggleAxis : null}
-                        lockedAxes={modal.origAxes}
-                        showEmptyHint={false}
-                        rows={modal.vbNew}
-                        onChange={(vbNew) => setM({ vbNew })}
-                        existingSigs={new Set(modal.variants.map((v) => sigOf(modal.axes, v.attributes)))}
-                        onReplaceExisting={onReplaceExistingVariant}
-                        disabled={busy}
-                        addLabel="＋ Nueva variación"
-                      />
-                    </div>
-                  )}
-                </div>
-                )
-              )}
+                  <>
+                    <VariantTable
+                      axes={varAxes}
+                      rows={varRows}
+                      termsOf={(a) => axisTermsByName(a).map((t) => t.name)}
+                      onPatch={patchVarRow}
+                      onBulk={bulkVarRows}
+                      onRemove={removeVarRow}
+                      onPhoto={onVarPhoto}
+                      photoOf={varPhotoOf}
+                      menuFor={varMenu}
+                      lock={{ stock: lockStock, price: lockPrice, info: lockInfo, media: lockMedia }}
+                      showTarget={editing}
+                      disabled={busy}
+                      photoHint={colorAxisOf(varAxes) && varAxes.length > 1 ? `La foto se aplica a todas las variaciones del mismo ${colorAxisOf(varAxes).toLowerCase()}.` : null}
+                    />
+                    {editing && !lockStock && (
+                      <p className="hint">Cambiar la cantidad registra un ajuste. Para una entrada o salida con su nota, usa ⋯ en la variación.</p>
+                    )}
+                  </>
+                )}
+              </div>
 
               {error && <div className="form-error">{error}</div>}
               <div className="inline-form-actions">
@@ -1557,12 +1570,10 @@ export default function Inventory() {
           axes={modal.axes.map((name) => ({ id: name, name, terms: axisTermsByName(name) }))}
           availableAxes={varTax.filter((t) => !modal.axes.includes(t.name))
             .map((t) => ({ id: t.id, name: t.name, terms: t.taxonomy_terms }))}
-          onToggleAxis={canInfo ? onToggleAxis : null}
-          lockedAxes={modal.origAxes}
+          onToggleAxis={null}
           busy={busy}
           taken={new Set(modal.variants.filter((x) => x.id !== editVar.id)
             .map((x) => sigOf(modal.axes, x.attributes)))}
-          title={editVar.asNew ? 'Nueva variación' : undefined}
           initial={{
             key: editVar.id, values: editVar.attributes, stock: editVar.stock,
             price: editVar.price, cost: editVar.cost, sku: editVar.sku,
@@ -1574,6 +1585,22 @@ export default function Inventory() {
             } : x)),
           })}
           onClose={() => setEditVar(null)}
+        />
+      )}
+
+      {/* ===== Modal: agregar variaciones (todas las combinaciones de una vez) ===== */}
+      {genVar && modal && (
+        <GenerateDialog
+          allAxes={varTax.map((t) => ({ name: t.name, terms: t.taxonomy_terms }))}
+          selected={varAxes}
+          lockedAxes={varAxes.filter((a) => (editing && modal.origAxes.includes(a)) || varRows.some((r) => r.attributes?.[a]))}
+          usedValues={Object.fromEntries(varAxes.map((a) => [a, [...new Set(varRows.map((r) => r.attributes?.[a]).filter(Boolean))]]))}
+          taken={new Set(varRows.map((r) => sigOf(varAxes, r.attributes)))}
+          existingCount={varRows.length}
+          onToggleAxis={onToggleAxis}
+          onGenerate={onGenerateVariants}
+          onClose={closeGen}
+          busy={busy}
         />
       )}
 
