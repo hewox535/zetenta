@@ -1,13 +1,13 @@
 // Variaciones de un producto, en dos piezas:
 //
-// - GenerateDialog: "¿En qué varía?" (Talla, Color, + Otra característica) y,
-//   por cada eje, los valores como chips. Crea de una vez todas las
-//   combinaciones (4 tallas × 3 colores = 12 variaciones).
+// - GenerateDialog: "Varía por" con casillas (Talla, Color, + Otra) y, por
+//   cada eje, un desplegable donde se marcan sus valores. Crea de una vez todas
+//   las combinaciones (4 tallas × 3 colores = 12 variaciones).
 // - VariantTable: las variaciones en una tabla editable (cantidad, precio,
 //   costo, SKU, foto) con "Para todas" para llenar en bloque.
 //
 // Una fila: { key, id?, attributes, stock, price, cost, sku, target?, file?, isNew }
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RowMenu } from './FinUI';
 import { sigOf, labelOf } from './VariantBuilder';
 
@@ -24,7 +24,6 @@ function combos(axes, picks) {
 const norm = (s) => s.trim().toLowerCase();
 
 const PLUS = <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>;
-const CHECK = <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M5 12.5l4.2 4L19 7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 const TRASH = (
   <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
     <path d="M5 7h14M10 7V5h4v2M6 7l1 12a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9L18 7"
@@ -33,7 +32,7 @@ const TRASH = (
 );
 
 // Campo corto que aparece al tocar "+ agregar": Enter confirma, Esc cancela.
-function InlineAdd({ label, placeholder, onAdd, busy, closeOnAdd = false }) {
+function InlineAdd({ label, placeholder, onAdd, busy, closeOnAdd = false, className = 'gv-chip add' }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const commit = async () => {
@@ -45,7 +44,7 @@ function InlineAdd({ label, placeholder, onAdd, busy, closeOnAdd = false }) {
   };
   if (!open) {
     return (
-      <button type="button" className="gv-chip add" disabled={busy} onClick={() => setOpen(true)}>
+      <button type="button" className={className} disabled={busy} onClick={() => setOpen(true)}>
         {PLUS}{label}
       </button>
     );
@@ -61,6 +60,61 @@ function InlineAdd({ label, placeholder, onAdd, busy, closeOnAdd = false }) {
         onBlur={() => { if (!text.trim()) setOpen(false); }} />
       <button type="button" className="btn primary sm" disabled={busy || !text.trim()} onClick={commit}>Agregar</button>
     </span>
+  );
+}
+
+// Desplegable con casillas: se ven los elegidos ("S, M, L") y al abrirlo se
+// marcan los valores; abajo "＋ Otro…" para escribir uno que no esté.
+function MultiValueSelect({ axis, options, value, onToggle, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState('');
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const off = (e) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setAdding(false); } };
+    document.addEventListener('mousedown', off);
+    return () => document.removeEventListener('mousedown', off);
+  }, [open]);
+  const commit = () => {
+    const v = text.trim();
+    if (v) onAdd(v);
+    setText(''); setAdding(false);
+    // Sin lista todavía: el campo sigue abierto para escribir el siguiente.
+  };
+  const label = value.length ? value.join(', ') : `Elegir ${axis.toLowerCase()}…`;
+  return (
+    <div className={`mvs${open ? ' open' : ''}`} ref={ref}
+      onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); setAdding(false); } }}>
+      <button type="button" className={`mvs-trigger${value.length ? '' : ' is-empty'}`} aria-haspopup="listbox"
+        aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className="mvs-text">{label}</span>
+        {value.length > 1 && <span className="gv-count">{value.length}</span>}
+      </button>
+      {open && (
+        <div className="mvs-pop" role="listbox" aria-multiselectable="true">
+          {options.map((v) => (
+            <label key={v} className="mvs-opt">
+              <input type="checkbox" checked={value.includes(v)} onChange={() => onToggle(v)} />
+              {v}
+            </label>
+          ))}
+          {adding || !options.length ? (
+            <div className="mvs-new">
+              <input autoFocus value={text} placeholder={`Nuevo ${axis.toLowerCase()}`}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                  if (e.key === 'Escape') { e.stopPropagation(); setAdding(false); setText(''); }
+                }} />
+              <button type="button" className="btn primary sm" disabled={!text.trim()} onClick={commit}>Agregar</button>
+            </div>
+          ) : (
+            <button type="button" className="mvs-other" onClick={() => setAdding(true)}>＋ Otro…</button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -133,55 +187,43 @@ export function GenerateDialog({
           <button type="button" className="btn ghost sm" onClick={onClose}>Cerrar</button>
         </div>
 
-        <div className="gv-step">
-          <div className="gv-step-label">¿En qué varía?</div>
-          <div className="gv-chips">
-            {[...axes, ...offAxes.map((a) => a.name)].map((name) => {
-              const on = axes.includes(name);
-              const locked = on && lockedAxes.includes(name);
-              return (
-                <button type="button" key={name} aria-pressed={on}
-                  className={`gv-chip axis${on ? ' on' : ''}${locked ? ' locked' : ''}`}
-                  disabled={busy || axisBusy || locked}
-                  title={locked ? 'Lo usan las variaciones que ya tiene el producto' : undefined}
-                  onClick={() => toggleAxis(name, !on)}>
-                  {on && CHECK}{name}
-                </button>
-              );
-            })}
-            <InlineAdd label="Otra característica" placeholder="Lado, Material, Sabor…" busy={busy || axisBusy} closeOnAdd
-              onAdd={(name) => {
-                const known = allAxes.find((a) => norm(a.name) === norm(name));
-                if (known && axes.includes(known.name)) return undefined;
-                return toggleAxis(known ? known.name : name, true);
-              }} />
-          </div>
+        <div className="vd-axis-picks">
+          <span className="muted">Varía por:</span>
+          {[...axes, ...offAxes.map((a) => a.name)].map((name) => {
+            const on = axes.includes(name);
+            const locked = on && lockedAxes.includes(name);
+            return (
+              <label className={`vd-axis-pick${locked ? ' locked' : ''}`} key={name}
+                title={locked ? 'Lo usan las variaciones que ya tiene el producto' : undefined}>
+                <input type="checkbox" checked={on} disabled={busy || axisBusy || locked}
+                  onChange={(e) => toggleAxis(name, e.target.checked)} />
+                {name}
+              </label>
+            );
+          })}
+          <InlineAdd label="Otra característica" placeholder="Lado, Material, Sabor…" busy={busy || axisBusy} closeOnAdd
+            className="gv-other"
+            onAdd={(name) => {
+              const known = allAxes.find((a) => norm(a.name) === norm(name));
+              if (known && axes.includes(known.name)) return undefined;
+              return toggleAxis(known ? known.name : name, true);
+            }} />
         </div>
 
-        {axes.map((a) => (
-          <div className="gv-step" key={a}>
-            <div className="gv-step-label">
-              {a}
-              {(picks[a] || []).length > 0 && <span className="gv-count">{picks[a].length}</span>}
-            </div>
-            <div className="gv-chips">
-              {valuesOf(a).map((v) => {
-                const on = (picks[a] || []).includes(v);
-                return (
-                  <button type="button" key={v} aria-pressed={on} className={`gv-chip${on ? ' on' : ''}`}
-                    onClick={() => toggleValue(a, v)}>
-                    {on && CHECK}{v}
-                  </button>
-                );
-              })}
-              <InlineAdd label={valuesOf(a).length ? 'Agregar' : `Escribe ${a.toLowerCase()}`}
-                placeholder={`Nuevo valor de ${a.toLowerCase()}`} onAdd={(v) => addValue(a, v)} />
-            </div>
+        {axes.length > 0 && (
+          <div className="vd-axes">
+            {axes.map((a) => (
+              <div className="vb-field gv-field" key={a}>
+                <span className="gv-field-label">{a}</span>
+                <MultiValueSelect axis={a} options={valuesOf(a)} value={picks[a] || []}
+                  onToggle={(v) => toggleValue(a, v)} onAdd={(v) => addValue(a, v)} />
+              </div>
+            ))}
           </div>
-        ))}
+        )}
 
         {axes.length === 0 && (
-          <p className="hint gv-empty">Toca una característica (o crea la tuya) para elegir sus valores.</p>
+          <p className="hint gv-empty">Marca en qué varía este producto (talla, color…) o agrega otra característica.</p>
         )}
 
         {newAxisForExisting && (
