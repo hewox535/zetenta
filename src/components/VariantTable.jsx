@@ -9,7 +9,7 @@
 // Una fila: { key, id?, attributes, stock, price, cost, sku, target?, file?, isNew }
 import { useEffect, useRef, useState } from 'react';
 import { RowMenu } from './FinUI';
-import { sigOf, labelOf } from './VariantBuilder';
+import { sigOf, labelOf, skuFor } from './VariantBuilder';
 
 // Todas las combinaciones de los valores elegidos: [{Talla:'S',Color:'Negro'}, …]
 function combos(axes, picks) {
@@ -22,6 +22,7 @@ function combos(axes, picks) {
 }
 
 const norm = (s) => s.trim().toLowerCase();
+
 
 const PLUS = <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>;
 const TRASH = (
@@ -73,8 +74,10 @@ function MultiValueSelect({ axis, options, value, onToggle, onAdd }) {
   useEffect(() => {
     if (!open) return undefined;
     const off = (e) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setAdding(false); } };
-    document.addEventListener('mousedown', off);
-    return () => document.removeEventListener('mousedown', off);
+    // En "click" (fase de captura) y no en mousedown: en celular la lista empuja
+    // el contenido, y si se cerrara al presionar, el toque caería en otro lado.
+    document.addEventListener('click', off, true);
+    return () => document.removeEventListener('click', off, true);
   }, [open]);
   const commit = () => {
     const v = text.trim();
@@ -129,8 +132,11 @@ function MultiValueSelect({ axis, options, value, onToggle, onAdd }) {
 // onToggleAxis(name, on): marca/desmarca o crea un eje (async)
 export function GenerateDialog({
   allAxes, selected, lockedAxes = [], usedValues = {}, taken, existingCount = 0,
-  onToggleAxis, onGenerate, onClose, busy = false,
+  onToggleAxis, onGenerate, onClose, busy = false, canStock = true, canPrice = true,
 }) {
+  // Datos que reciben todas las variaciones nuevas (luego se ajustan en la tabla).
+  const [data, setData] = useState({ stock: '', price: '', cost: '', sku: '', file: null });
+  const setField = (k, v) => setData((d) => ({ ...d, [k]: v }));
   const [picks, setPicks] = useState({});        // { Talla: ['S','M'] }
   const [extra, setExtra] = useState({});        // valores escritos a mano por eje
   const [error, setError] = useState(null);
@@ -172,7 +178,7 @@ export function GenerateDialog({
     if (!axes.length) { setError('Elige en qué varía el producto.'); return; }
     if (missing.length) { setError(`Elige al menos un valor de ${missing[0].toLowerCase()}.`); return; }
     if (!fresh.length) { setError('Esas variaciones ya existen.'); return; }
-    onGenerate(fresh);
+    onGenerate(fresh, data);
   }
 
   const offAxes = allAxes.filter((a) => !axes.includes(a.name));
@@ -224,6 +230,53 @@ export function GenerateDialog({
 
         {axes.length === 0 && (
           <p className="hint gv-empty">Marca en qué varía este producto (talla, color…) o agrega otra característica.</p>
+        )}
+
+        {axes.length > 0 && (
+          <div className="gv-data">
+            <div className="gv-data-head">
+              <strong>{fresh.length > 1 ? 'Datos para todas' : 'Datos de la variación'}</strong>
+              {fresh.length > 1 && <span className="muted">Luego puedes cambiar cada una en la tabla.</span>}
+            </div>
+            <div className="vd-data">
+              <label className="vd-photo-slot">
+                <span className="vd-photo">
+                  {data.file ? <img src={URL.createObjectURL(data.file)} alt="" /> : <span className="thumb-ph">＋</span>}
+                </span>
+                <span className="vd-photo-text">{data.file ? 'Cambiar foto' : 'Foto'}</span>
+                <input type="file" accept="image/*" hidden
+                  onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) setField('file', f); }} />
+              </label>
+              <div className="vd-fields">
+                {canStock && (
+                  <label className="vb-field">{fresh.length > 1 ? 'Cantidad c/u' : 'Cantidad'}
+                    <input type="number" min="0" step="1" placeholder="0"
+                      value={data.stock} onChange={(e) => setField('stock', e.target.value)} />
+                  </label>
+                )}
+                {canPrice && (
+                  <>
+                    <label className="vb-field">Precio
+                      <input type="number" min="0" step="0.01" placeholder="hereda"
+                        value={data.price} onChange={(e) => setField('price', e.target.value)} />
+                    </label>
+                    <label className="vb-field">Costo
+                      <input type="number" min="0" step="0.01" placeholder="hereda"
+                        value={data.cost} onChange={(e) => setField('cost', e.target.value)} />
+                    </label>
+                  </>
+                )}
+                <label className="vb-field">SKU
+                  <input placeholder="opcional" value={data.sku} onChange={(e) => setField('sku', e.target.value)} />
+                </label>
+              </div>
+            </div>
+            {fresh.length > 1 && data.sku.trim() && (
+              <p className="hint gv-sku-hint">
+                Cada una lleva su sufijo: {skuFor(data.sku, axes, fresh[0])}, {skuFor(data.sku, axes, fresh[1])}…
+              </p>
+            )}
+          </div>
         )}
 
         {newAxisForExisting && (

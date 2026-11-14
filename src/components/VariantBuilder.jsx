@@ -12,6 +12,12 @@ export const sigOf = (axisNames, attrs) => axisNames.map((a) => attrs[a] ?? '').
 
 export const labelOf = (axisNames, attrs) => axisNames.map((a) => attrs[a]).filter(Boolean).join(' · ');
 
+// SKU base + valores de la variación: CAM-01 → CAM-01-M-NEGRO
+export function skuFor(base, axes, attrs) {
+  const parts = axes.map((a) => String(attrs[a] || '').trim().toUpperCase().replace(/\s+/g, '')).filter(Boolean);
+  return [base.trim(), ...parts].join('-');
+}
+
 const newKey = () => Math.random().toString(36).slice(2);
 
 // Desplegable con los valores del eje (Talla: S, M, L…) y "＋ Otro…" para
