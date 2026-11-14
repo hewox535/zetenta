@@ -17,7 +17,7 @@ import { useConfirm } from '../components/Confirm';
 import { RowMenu, SortHead } from '../components/FinUI';
 import './finance.css';
 import './inventory.css';
-import { VariationDialog, emptyVariations, sigOf, labelOf } from '../components/VariantBuilder';
+import { VariationDialog, emptyVariations, sigOf, labelOf, skuFor } from '../components/VariantBuilder';
 import { GenerateDialog, VariantTable } from '../components/VariantTable';
 
 const newKey = () => Math.random().toString(36).slice(2);
@@ -708,8 +708,15 @@ export default function Inventory() {
     if (genVar) setModal((m) => (m.mode === 'create' ? { ...m, axisIds: genVar.axisIds } : { ...m, axes: genVar.axes }));
     setGenVar(null);
   }
-  function onGenerateVariants(list) {
-    const blank = (attributes) => ({ key: newKey(), attributes, stock: '', price: '', cost: '', sku: '', file: null });
+  function onGenerateVariants(list, data = {}) {
+    const many = list.length > 1;
+    const sku = (data.sku || '').trim();
+    const blank = (attributes) => ({
+      key: newKey(), attributes,
+      stock: data.stock ?? '', price: data.price ?? '', cost: data.cost ?? '',
+      sku: sku ? (many ? skuFor(sku, Object.keys(attributes), attributes) : sku) : '',
+      file: data.file || null,
+    });
     setModal((m) => {
       if (m.mode === 'create') return { ...m, vb: [...m.vb, ...list.map(blank)] };
       // Producto simple que pasa a tener variaciones: la variante que ya existe
@@ -718,9 +725,17 @@ export default function Inventory() {
         && Object.keys(m.variants[0].attributes || {}).length === 0;
       if (converting) {
         const [first, ...rest] = list;
+        // Conserva su stock; toma precio/costo/foto si se escribieron.
+        const keep = m.variants[0];
+        const b = blank(first);
         return {
           ...m,
-          variants: [{ ...m.variants[0], attributes: first }],
+          variants: [{
+            ...keep, attributes: first,
+            price: data.price !== '' && data.price != null ? data.price : keep.price,
+            cost: data.cost !== '' && data.cost != null ? data.cost : keep.cost,
+            sku: b.sku || keep.sku,
+          }],
           vbNew: [...m.vbNew, ...rest.map(blank)],
         };
       }
@@ -1601,6 +1616,8 @@ export default function Inventory() {
           onGenerate={onGenerateVariants}
           onClose={closeGen}
           busy={busy}
+          canStock={!lockStock}
+          canPrice={!lockPrice}
         />
       )}
 

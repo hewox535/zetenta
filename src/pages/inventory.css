@@ -263,6 +263,11 @@
 .gv-add { display: inline-flex; align-items: center; gap: 6px; }
 .gv-add input { width: 190px; height: 34px; padding: 0 12px; border-radius: 999px; font-size: 13.5px; }
 .gv-empty { margin: 4px 0 8px; }
+.gv-data { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.gv-data-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 10px; font-size: 13.5px; }
+.gv-data-head .muted { font-size: 12.5px; }
+.gv-data .vd-data { margin-top: 0; padding-top: 0; border-top: 0; }
+.gv-sku-hint { margin: 8px 0 0; font-size: 12.5px; }
 .gv-modal .vd-axis-picks { margin-bottom: 16px; }
 .gv-other {
   display: inline-flex; align-items: center; gap: 4px; padding: 4px 2px; border: 0; background: none;
@@ -333,5 +338,8 @@
   .gv-foot .btn { flex: 1; }
   .gv-add input { width: 150px; }
   .mvs-pop { position: static; margin-top: 6px; box-shadow: none; max-height: none; }
+  .gv-modal { overflow-y: auto; }
+  .gv-data .vd-photo-slot { flex-direction: row; width: auto; gap: 10px; }
+  .gv-data .vd-photo { width: 56px; height: 56px; }
 }
 .gv-foot .btn { white-space: nowrap; }
