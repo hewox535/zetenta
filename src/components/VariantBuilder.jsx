@@ -1,12 +1,9 @@
-// Variaciones de un producto: una lista de tarjetas (foto, cantidad, precio,
-// costo, SKU) y un botón que abre un submodal para armar la siguiente.
+// Ayudantes de variaciones y el diálogo para cambiar UNA variación que ya
+// existe (sus características y datos). Para agregar variaciones se usa
+// GenerateDialog (VariantTable.jsx), que crea todas las combinaciones de una vez.
 //
-// El submodal configura UNA variación completa: un valor por eje (Talla: M,
-// Color: Negro), su foto y sus datos. "Guardar y crear otra" deja el submodal
-// abierto para seguir cargando, que es lo común al dar de alta un producto.
-//
-// El estado vive en el padre como un arreglo:
-//   [{ key, attributes: { Talla: 'M', Color: 'Negro' }, stock, price, cost, sku, file }]
+// Una variación en el estado del formulario:
+//   { key, attributes: { Talla: 'M', Color: 'Negro' }, stock, price, cost, sku, file }
 import { useState } from 'react';
 
 export const emptyVariations = () => [];
@@ -16,13 +13,6 @@ export const sigOf = (axisNames, attrs) => axisNames.map((a) => attrs[a] ?? '').
 export const labelOf = (axisNames, attrs) => axisNames.map((a) => attrs[a]).filter(Boolean).join(' · ');
 
 const newKey = () => Math.random().toString(36).slice(2);
-
-const TRASH = (
-  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-    <path d="M5 7h14M10 7V5h4v2M6 7l1 12a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9L18 7"
-      fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
 
 // Desplegable con los valores del eje (Talla: S, M, L…) y "＋ Otro…" para
 // escribir uno que no esté en la lista.
@@ -221,116 +211,6 @@ export function VariationDialog({
           <button type="button" className="linklike" onClick={onClose}>Cancelar</button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ---------- Lista de variaciones + botón para agregar ----------
-export default function VariantBuilder({
-  axes, rows, onChange, existingSigs = new Set(), disabled = false, addLabel = '＋ Agregar variación',
-  availableAxes = [], onToggleAxis = null, lockedAxes = [], onReplaceExisting = null,
-  showEmptyHint = true,
-}) {
-  const axisNames = axes.map((a) => a.name);
-  const [open, setOpen] = useState(false);
-  const [bulk, setBulk] = useState({ stock: '', price: '' });
-
-  const taken = new Set([...existingSigs, ...rows.map((r) => sigOf(axisNames, r.attributes))]);
-  const patch = (key, p) => onChange(rows.map((r) => (r.key === key ? { ...r, ...p } : r)));
-
-  function applyBulk() {
-    onChange(rows.map((r) => ({
-      ...r,
-      stock: bulk.stock !== '' ? bulk.stock : r.stock,
-      price: bulk.price !== '' ? bulk.price : r.price,
-    })));
-    setBulk({ stock: '', price: '' });
-  }
-
-  return (
-    <div className="vb">
-      {rows.length === 0 ? (
-        showEmptyHint
-          ? <p className="hint">Aún no has agregado variaciones. Usa <strong>{addLabel}</strong> para armar la primera.</p>
-          : null
-      ) : (
-        <>
-          {rows.length > 1 && (
-            <div className="vb-bar">
-              <strong>{rows.length} {rows.length === 1 ? 'variación' : 'variaciones'}</strong>
-              <span className="vb-bar-gap" />
-              <span className="muted">Para todas:</span>
-              <input type="number" min="0" step="1" placeholder="cantidad" className="vb-bulk"
-                value={bulk.stock} onChange={(e) => setBulk((b) => ({ ...b, stock: e.target.value }))} />
-              <input type="number" min="0" step="0.01" placeholder="precio" className="vb-bulk"
-                value={bulk.price} onChange={(e) => setBulk((b) => ({ ...b, price: e.target.value }))} />
-              <button type="button" className="btn ghost sm"
-                disabled={disabled || (bulk.stock === '' && bulk.price === '')}
-                onClick={applyBulk}>Aplicar</button>
-            </div>
-          )}
-
-          <div className="vb-list">
-            {rows.map((r) => (
-              <div className="vb-card" key={r.key}>
-                <label className="vb-photo" title={`Foto de ${labelOf(axisNames, r.attributes)}`}>
-                  {r.file ? <img src={URL.createObjectURL(r.file)} alt="" /> : <span className="thumb-ph">＋</span>}
-                  <input type="file" accept="image/*" hidden disabled={disabled}
-                    onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; if (f) patch(r.key, { file: f }); }} />
-                </label>
-                <div className="vb-card-body">
-                  <div className="vb-card-head">
-                    <span className="vb-label">{labelOf(axisNames, r.attributes)}</span>
-                    {r.file && (
-                      <button type="button" className="linklike" onClick={() => patch(r.key, { file: null })}>quitar foto</button>
-                    )}
-                    <button type="button" className="vb-del" title="Quitar esta variación"
-                      aria-label={`Quitar ${labelOf(axisNames, r.attributes)}`}
-                      onClick={() => onChange(rows.filter((x) => x.key !== r.key))}>{TRASH}</button>
-                  </div>
-                  <div className="vb-fields">
-                    <label className="vb-field">Cantidad
-                      <input type="number" min="0" step="1" placeholder="0" disabled={disabled}
-                        value={r.stock} onChange={(e) => patch(r.key, { stock: e.target.value })} />
-                    </label>
-                    <label className="vb-field">Precio
-                      <input type="number" min="0" step="0.01" placeholder="hereda" disabled={disabled}
-                        value={r.price} onChange={(e) => patch(r.key, { price: e.target.value })} />
-                    </label>
-                    <label className="vb-field">Costo
-                      <input type="number" min="0" step="0.01" placeholder="hereda" disabled={disabled}
-                        value={r.cost} onChange={(e) => patch(r.key, { cost: e.target.value })} />
-                    </label>
-                    <label className="vb-field">SKU
-                      <input placeholder="opcional" disabled={disabled}
-                        value={r.sku} onChange={(e) => patch(r.key, { sku: e.target.value })} />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      <button type="button" className="btn ghost vb-add" disabled={disabled}
-        onClick={() => setOpen(true)}>{addLabel}</button>
-
-      {open && (
-        <VariationDialog axes={axes} taken={taken}
-          availableAxes={availableAxes} onToggleAxis={onToggleAxis}
-          lockedAxes={lockedAxes} busy={disabled}
-          onAdd={(row) => onChange([...rows, row])}
-          onReplace={(row) => {
-            const sig = sigOf(axisNames, row.attributes);
-            const i = rows.findIndex((r) => sigOf(axisNames, r.attributes) === sig);
-            // En la lista de nuevas se pisa la fila; si la repetida ya es una
-            // variación del producto, se actualiza esa (lo hace el padre).
-            if (i >= 0) onChange(rows.map((r, j) => (j === i ? { ...row, key: r.key } : r)));
-            else if (onReplaceExisting) onReplaceExisting(sig, row);
-          }}
-          onClose={() => setOpen(false)} />
-      )}
     </div>
   );
 }
