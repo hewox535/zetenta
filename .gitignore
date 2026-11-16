@@ -26,3 +26,6 @@ dist-ssr
 .envrc
 
 supabase/.temp
+
+# Entregas a clientes (credenciales y material de marca): fuera de git
+entregas/

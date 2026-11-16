@@ -8,9 +8,7 @@
   --fin-warn: #a35400;
   --fin-warn-bg: #fff3e0;
   --fin-row-pad: 18px;
-  max-width: 1180px;
 }
-.shell.sidebar-collapsed .fin-page { max-width: 1280px; }
 
 /* ---------- Resumen ---------- */
 .fin-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 24px; }
