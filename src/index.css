@@ -23,6 +23,9 @@
   --ok: #248a3d;
   --ok-bg: #eefaf1;
   --radius: 14px;
+  /* Ancho único del contenido de todos los módulos (Ventas, Inventario,
+     Negocio…): mismos bordes en todas las páginas. Sube con el sidebar contraído. */
+  --page-max: 1240px;
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -197,14 +200,13 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
 
 /* ---------- Páginas ---------- */
 
-.page { max-width: 980px; margin: 0 auto; }
+/* Todas las páginas comparten el mismo ancho (--page-max): el título, los
+   filtros y las tablas arrancan y terminan en el mismo borde en cada módulo.
+   Sidebar contraído: el tope sube y el grid del POS agrega columnas solo.
+   .narrow queda solo para formularios de documento (nueva retención). */
+.page { width: 100%; max-width: var(--page-max); margin: 0 auto; }
 .page.narrow { max-width: 640px; }
-/* Sidebar contraído: el contenido aprovecha el ancho liberado (los topes
-   suben; el grid de productos del POS agrega columnas solo). Las páginas
-   narrow (formularios) conservan su ancho de lectura. */
-.shell.sidebar-collapsed .page { max-width: 1200px; }
-.shell.sidebar-collapsed .page.narrow { max-width: 640px; }
-.shell.sidebar-collapsed .pos-page { max-width: 1440px; }
+.shell.sidebar-collapsed { --page-max: 1440px; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
 .page-sub { color: var(--text-2); margin: 4px 0 0; }
 .page-actions { display: flex; gap: 8px; }
@@ -645,7 +647,6 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
    Pedidos (POS)
    ============================================================ */
 
-.pos-page { max-width: 1120px; }
 
 .rate-chip {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1224,13 +1225,60 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
    Settings (secciones)
    ============================================================ */
 
-.settings-nav { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
-.settings-tab {
-  border: none; background: none; cursor: pointer; padding: 10px 14px; margin-bottom: -1px;
-  font-size: 14px; font-weight: 600; color: var(--text-2); border-bottom: 2px solid transparent;
+/* Menú de secciones a la izquierda + contenido: la página usa el mismo ancho
+   que el resto de módulos. En pantallas angostas el menú pasa a pestañas. */
+.settings-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; }
+.settings-nav {
+  position: sticky; top: 24px; display: flex; flex-direction: column; gap: 2px;
+  padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
 }
-.settings-tab:hover { color: var(--text); }
-.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.settings-tab {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px;
+  border: 0; border-radius: var(--radius-sm); background: none; cursor: pointer; text-align: left;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--text-2);
+  transition: background .12s, color .12s;
+}
+.settings-tab svg {
+  width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7;
+  stroke-linecap: round; stroke-linejoin: round; opacity: .85;
+}
+.settings-tab:hover { background: rgba(0,0,0,.04); color: var(--text); }
+.settings-tab.active { background: var(--accent-soft); color: var(--accent); }
+.settings-tab.active svg { opacity: 1; }
+.settings-body { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.settings-body > .vform, .settings-body > div { min-width: 0; }
+/* Con el ancho completo, los controles no se estiran: los campos sueltos y
+   los botones de guardar toman un ancho cómodo y los textos se leen en
+   líneas cortas. Las filas compuestas (cuentas, personal…) sí usan todo. */
+.settings-body .vsection > label:not(.radio-row):not(.switch-row),
+.settings-body .vsection > form > label:not(.radio-row),
+.settings-body .vsection > .field-row,
+.settings-body .vform > .card > label:not(.radio-row) { max-width: 560px; }
+.settings-body .vsection > p,
+.settings-body .vsection .hint { max-width: 72ch; }
+.settings-body .btn.block,
+.settings-body .vsection > .btn.primary,
+.settings-body .vsection > form > .btn.primary { width: auto; align-self: flex-start; min-width: 200px; }
+@media (max-width: 640px) {
+  .settings-body .btn.block, .settings-body .vsection > .btn.primary, .settings-body .vsection > form > .btn.primary { width: 100%; align-self: stretch; }
+}
+
+@media (max-width: 900px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .settings-nav {
+    position: static; flex-direction: row; gap: 4px; padding: 0; overflow-x: auto;
+    background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0;
+    scrollbar-width: none;
+  }
+  .settings-nav::-webkit-scrollbar { display: none; }
+  .settings-tab {
+    width: auto; flex: none; padding: 10px 12px; margin-bottom: -1px; border-radius: 0;
+    border-bottom: 2px solid transparent; white-space: nowrap;
+  }
+  .settings-tab svg { display: none; }
+  .settings-tab:hover { background: none; }
+  .settings-tab.active { background: none; border-bottom-color: var(--accent); }
+}
 
 .radio-row { flex-direction: row; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
 .radio-row input { width: auto; }

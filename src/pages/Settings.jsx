@@ -37,19 +37,19 @@ export default function Settings() {
   }
 
   const tabs = [
-    { key: 'fiscal', label: 'Datos fiscales' },
-    capabilities?.retentions && { key: 'retentions', label: 'Retenciones' },
-    capabilities?.inventory && { key: 'inventory', label: 'Inventario' },
-    capabilities?.inventory && { key: 'catalog', label: 'Catálogo' },
-    { key: 'branches', label: 'Sucursales' },
-    capabilities?.orders && { key: 'orders', label: 'Ventas' },
-    { key: 'staff', label: 'Personal' },
-    { key: 'sessions', label: 'Sesiones' },
-    { key: 'notifications', label: 'Notificaciones' },
+    { key: 'fiscal', label: 'Datos fiscales', icon: 'M4 5h16v14H4zM8 9h8M8 13h5' },
+    capabilities?.retentions && { key: 'retentions', label: 'Retenciones', icon: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6' },
+    capabilities?.inventory && { key: 'inventory', label: 'Inventario', icon: 'M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10' },
+    capabilities?.inventory && { key: 'catalog', label: 'Catálogo', icon: 'M5 4h14v4H5zM5 8v12h14V8M9 12h6' },
+    { key: 'branches', label: 'Sucursales', icon: 'M4 21V9l8-5 8 5v12M9 21v-6h6v6' },
+    capabilities?.orders && { key: 'orders', label: 'Ventas', icon: 'M4 6h2l2 10h10l2-7H7M10 20h.01M17 20h.01' },
+    { key: 'staff', label: 'Personal', icon: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14c2 .8 3 3 3 6' },
+    { key: 'sessions', label: 'Sesiones', icon: 'M4 5h16v11H4zM9 20h6M12 16v4' },
+    { key: 'notifications', label: 'Notificaciones', icon: 'M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 21h4' },
   ].filter(Boolean);
 
   return (
-    <div className="page narrow">
+    <div className="page settings-page">
       <header className="page-head">
         <div>
           <h1>Negocio</h1>
@@ -57,12 +57,19 @@ export default function Settings() {
         </div>
       </header>
 
-      <nav className="settings-nav">
+      <div className="settings-layout">
+      <nav className="settings-nav" aria-label="Secciones de configuración">
         {tabs.map((t) => (
-          <button key={t.key} className={`settings-tab${section === t.key ? ' active' : ''}`}
-            onClick={() => setSection(t.key)}>{t.label}</button>
+          <button key={t.key} type="button" className={`settings-tab${section === t.key ? ' active' : ''}`}
+            aria-current={section === t.key ? 'page' : undefined}
+            onClick={() => setSection(t.key)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d={t.icon} /></svg>
+            {t.label}
+          </button>
         ))}
       </nav>
+
+      <div className="settings-body">
 
       {section === 'fiscal' && <FiscalSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'retentions' && <RetentionSection business={business} refreshBusiness={refreshBusiness} />}
@@ -73,6 +80,8 @@ export default function Settings() {
       {section === 'staff' && <StaffSection profile={profile} />}
       {section === 'sessions' && <SessionsSection />}
       {section === 'notifications' && <NotificationsSection />}
+      </div>
+      </div>
     </div>
   );
 }
