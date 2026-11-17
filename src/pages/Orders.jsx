@@ -1177,12 +1177,19 @@ export default function Orders() {
                           tocarla se abre un modal para elegir otro y aplicarlo. */}
                       {(discounts.length > 0 || hasContado) && (
                         <div className="pay-dsel-wrap">
-                          <button type="button" className={`pay-dsel${choice === 'none' ? ' none' : ''}`}
-                            onClick={() => setDiscPick(choice)} aria-haspopup="dialog" title="Cambiar el descuento de la venta">
-                            <svg className="pay-dsel-icon" viewBox="0 0 24 24" width="17" height="17" aria-label="Descuento"><path d="M3 12V4h8l10 10-8 8zM7.5 8.5h.01" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            <span className="pay-dsel-value">{discSummary.name}</span>
-                            {discSummary.pct && <span className="pay-dsel-pct">{discSummary.pct}</span>}
-                            <svg className="pay-dsel-chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          {/* Vista previa: las opciones como pills en una fila (la
+                              elegida primero y resaltada); toda la fila abre el
+                              selector, por eso la flecha al borde. */}
+                          <button type="button" className="pay-dsel" onClick={() => setDiscPick(choice)}
+                            aria-haspopup="dialog" aria-label={`Descuento: ${discSummary.name}. Cambiar`}>
+                            <span className="pay-dsel-pills">
+                              {[...discOptions].sort((a, b) => Number(b.id === choice) - Number(a.id === choice)).map((o) => (
+                                <span key={o.id} className={`pay-dsel-pill${o.id === choice ? ' on' : ''}`}>
+                                  {o.name}{(o.id === choice ? discSummary.pct : o.pct) && <b>{o.id === choice ? discSummary.pct : o.pct}</b>}
+                                </span>
+                              ))}
+                            </span>
+                            <svg className="pay-dsel-chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                           </button>
                           {discSummary.detail && <p className="pay-disc-detail">{discSummary.detail}</p>}
                         </div>
