@@ -53,6 +53,23 @@
 }
 .ds-pct-input i { font-style: normal; font-size: 18px; font-weight: 700; color: var(--text-2); }
 
+.ds-seg { display: inline-flex; align-self: flex-start; padding: 3px; gap: 2px; border-radius: 999px; background: rgba(0,0,0,.05); }
+.ds-seg-btn {
+  height: 32px; padding: 0 14px; border: 0; border-radius: 999px; background: none; cursor: pointer;
+  font: inherit; font-size: 13.5px; font-weight: 600; color: var(--text-2); white-space: nowrap;
+}
+.ds-seg-btn.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.ds-terms { display: flex; flex-direction: column; gap: 12px; }
+.ds-term-group { display: flex; flex-direction: column; gap: 6px; }
+.ds-term-tax { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); }
+.ds-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ds-chip {
+  height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--text); transition: border-color .12s, background .12s;
+}
+.ds-chip:hover { border-color: var(--accent-line); }
+.ds-chip.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+
 .ds-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .ds-dates label { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
 
@@ -61,6 +78,8 @@
 .ds-del { color: var(--danger) !important; }
 
 @media (max-width: 640px) {
+  .ds-seg { align-self: stretch; }
+  .ds-seg-btn { flex: 1; padding: 0 6px; font-size: 12.5px; }
   .ds-head { flex-direction: column; }
   .ds-head .btn { align-self: stretch; }
   .ds-row { flex-wrap: wrap; gap: 8px 12px; }

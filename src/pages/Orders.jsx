@@ -6,7 +6,7 @@ import {
   fetchProducts, fetchTaxonomies, fetchBankAccounts, fetchCustomers,
   createCustomer, createOrder, fetchOrder, mediaUrl, fetchOpenCashSession, fetchDiscounts,
 } from '../lib/api';
-import { isLive, todayVE } from '../lib/discounts';
+import { discountStatus, todayVE } from '../lib/discounts';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { notifySale } from '../lib/push';
 import { usd, bs, money, variantLabel, offerPrice, hasOffer, offerTag } from '../lib/calc';
@@ -183,6 +183,20 @@ const isCashea = (m) => m?.kind === 'cashea';
 // El contado en bolívares tiene su propio descuento (local_discount_percent).
 const isForeignCash = (m) => m?.currency === 'USD' && !isCashea(m);
 
+// Una opción del radio de descuentos del cobro: nombre, detalle y su %.
+function DiscOption({ on, onPick, name, meta, pct = null, disabled = false }) {
+  return (
+    <label className={`pay-dopt${on ? ' on' : ''}${disabled ? ' dis' : ''}`}>
+      <input type="radio" name="sale-discount" checked={on} disabled={disabled} onChange={onPick} />
+      <span className="pay-dopt-text">
+        <span className="pay-dopt-name">{name}</span>
+        {meta && <span className="pay-dopt-meta">{meta}</span>}
+      </span>
+      {pct != null && <span className="pay-dopt-pct">−{pct}%</span>}
+    </label>
+  );
+}
+
 // Helpers de monto (aceptan coma o punto decimal).
 const parseAmt = (s) => Number(String(s ?? '').replace(',', '.')) || 0;
 const round2 = (x) => Math.round(x * 100) / 100;
@@ -346,7 +360,10 @@ export default function Orders() {
   // Descuentos especiales vigentes (Negocio → Ventas) y el que eligió la
   // cajera para esta venta (uno por venta; queda guardado en la venta).
   const [discounts, setDiscounts] = useState([]);
-  const [promoId, setPromoId] = useState(null);
+  // choice: 'cash' (descuento de contado), 'none' (sin descuento) o el id de
+  // un descuento especial. Es un radio: la cajera elige cuál usa la venta.
+  const [choice, setChoice] = useState('cash');
+  const promoId = choice !== 'cash' && choice !== 'none' ? choice : null;
 
   useEffect(() => {
     Promise.all([fetchProducts(), fetchTaxonomies(), fetchBankAccounts(), fetchCustomers()])
@@ -355,7 +372,8 @@ export default function Orders() {
       })
       .catch((e) => setError(e.message));
     fetchDiscounts()
-      .then((list) => { const t = todayVE(); setDiscounts(list.filter((x) => isLive(x, t))); })
+      // Los vigentes se pueden elegir; los programados se ven atenuados con su fecha.
+      .then((list) => { const t = todayVE(); setDiscounts(list.filter((x) => ['live', 'soon'].includes(discountStatus(x, t)))); })
       .catch(() => {});
     fetchBcvRates().then(setRates).catch((e) => setRateError(e.message));
   }, []);
@@ -412,23 +430,45 @@ export default function Orders() {
   // Con Cashea elegido la venta va a precio de lista, desde el momento en que
   // se toca el método (aunque todavía no tenga monto). El servidor mira lo mismo.
   const clampPct = (v) => Math.min(0.99, Math.max(0, (Number(v) || 0) / 100));
-  const baseD = discCfg.usd.on ? clampPct(discCfg.usd.pct) : 0;
-  const baseDv = discCfg.ves.on ? clampPct(discCfg.ves.pct) : 0;
+  const baseD = choice === 'none' ? 0 : clampPct(discCfg.usd.pct);
+  const baseDv = choice === 'none' ? 0 : clampPct(discCfg.ves.pct);
   // El negocio usa descuentos de contado (si no, no se muestra la sección).
   const bizD = clampPct(business?.foreign_discount_percent);
   const bizDv = clampPct(business?.local_discount_percent);
   const casheaSelected = selectedMethods.some((id) => isCashea(methods.find((x) => x.id === id)));
-  // Descuento especial elegido: de contado sube el descuento de cada moneda
-  // hasta su % (se queda el mayor, no se suman); con Cashea rebaja el precio
-  // de lista con su % de Cashea. dueUsd es lo que hay que cubrir con los pagos.
+  // Descuento especial elegido: aplica a toda la venta o, si tiene
+  // categorías, solo a sus artículos (el resto conserva el de contado). De
+  // contado no se suma al de la moneda: en cada artículo, el mayor. Con Cashea
+  // rebaja el precio de lista con su % de Cashea. Igual que create_order().
   const promoDs = discounts.find((x) => x.id === promoId) || null;
   const promoPct = (ds, cashea) => clampPct(cashea ? ds?.cashea_percent : ds?.cash_percent);
-  const promoFor = (dU, dB, ds = promoDs) => ({ d: Math.max(dU, promoPct(ds, false)), dv: Math.max(dB, promoPct(ds, false)) });
-  const promo = promoFor(baseD, baseDv);
+  const productsById = useMemo(() => new Map((products || []).map((p) => [p.id, p])), [products]);
+  const qualifies = (ds, productId) => {
+    const terms = ds?.term_ids || [];
+    if (!terms.length) return true;
+    return (productsById.get(productId)?.product_terms || []).some((pt) => terms.includes(pt.term_id));
+  };
+  const ratesFor = (dU, dB, ds) => {
+    let tV = 0; let tU = 0; let off = 0; let hits = 0;
+    if (ds) {
+      const pc = promoPct(ds, false); const pk = promoPct(ds, true);
+      cart.forEach((c) => {
+        const amt = c.price * c.qty;
+        const q = qualifies(ds, c.productId);
+        const lp = q ? pc : 0;
+        if (q) { hits += c.qty; off += round2(amt * pk); }
+        tV += amt * (1 - Math.max(lp, dB));
+        tU += amt * (1 - Math.max(lp, dU));
+      });
+    }
+    const eff = (t, base) => (hits && totalUsd > 0 ? Math.min(0.99, Math.max(0, 1 - t / totalUsd)) : base);
+    return { d: eff(tU, dU), dv: eff(tV, dB), casheaOff: off, hits };
+  };
+  const promo = ratesFor(baseD, baseDv, promoDs);
   const effD = promo.d;
   const effDv = promo.dv;
-  const casheaOffFor = (ds) => round2(totalUsd * promoPct(ds, true));
-  const casheaOff = casheaSelected ? casheaOffFor(promoDs) : 0;
+  const casheaOffFor = (ds) => ratesFor(0, 0, ds).casheaOff;
+  const casheaOff = casheaSelected ? promo.casheaOff : 0;
   const dueUsd = totalUsd - casheaOff;
   const d = casheaSelected ? 0 : effD;
   const dv = casheaSelected ? 0 : effDv;
@@ -451,7 +491,7 @@ export default function Orders() {
       discountUsd += usdPaid + PAY_EPS >= round2(pending * (1 - d)) ? pending * d : (usdPaid * d) / (1 - d);
     }
   }
-  const promoOn = promoPct(promoDs, casheaSelected) > 0;
+  const promoOn = promo.hits > 0 && promoPct(promoDs, casheaSelected) > 0;
   const discountLabel = promoOn ? promoDs.name : d > 0 && dv > 0 ? 'Descuento de contado' : dv > 0 ? 'Descuento en bolívares' : 'Descuento por divisa';
   // Lo que el cliente realmente paga (neto = lista − descuento) y lo realmente
   // recibido en efectivo (Bs a USD + USD), para no mostrar "pagado 90$" cuando el
@@ -511,19 +551,24 @@ export default function Orders() {
     });
     return n;
   });
+  // Cambiar el % de contado reescribe los montos ya escritos en esa moneda.
   const changeDisc = (kind, patch) => {
     const nextCfg = { ...discCfg, [kind]: { ...discCfg[kind], ...patch } };
-    const pctOf = (c) => (c.on ? clampPct(c.pct) : 0);
     setDiscCfg(nextCfg);
-    if (!casheaSelected) rescaleCash(promoFor(pctOf(nextCfg.usd), pctOf(nextCfg.ves)));
+    if (!casheaSelected && choice !== 'none') {
+      rescaleCash(ratesFor(clampPct(nextCfg.usd.pct), clampPct(nextCfg.ves.pct), promoDs));
+    }
   };
-  // Elegir (o quitar) el descuento especial de la venta: los montos ya
-  // escritos se ajustan para seguir cubriendo la misma parte de la venta.
-  const pickPromo = (id) => {
-    const next = promoId === id ? null : id;
-    setPromoId(next);
+  // Elegir el descuento de la venta (radio): los montos ya escritos se ajustan
+  // para seguir cubriendo la misma parte de la venta.
+  const pickChoice = (next) => {
+    const ds = discounts.find((x) => x.id === next) || null;
+    const off = next === 'none';
+    setChoice(next);
     // Con Cashea el efecto de abajo recalcula lo financiado y la inicial.
-    if (!casheaSelected) rescaleCash(promoFor(baseD, baseDv, discounts.find((x) => x.id === next)));
+    if (!casheaSelected) {
+      rescaleCash(ratesFor(off ? 0 : clampPct(discCfg.usd.pct), off ? 0 : clampPct(discCfg.ves.pct), ds));
+    }
   };
 
   const hasUsdCash = selectedMethods.some((id) => isForeignCash(methods.find((x) => x.id === id)));
@@ -531,6 +576,15 @@ export default function Orders() {
     const m = methods.find((x) => x.id === id);
     return m && !isCashea(m) && !isForeignCash(m);
   });
+  const termName = useMemo(() => {
+    const m = new Map();
+    taxonomies.forEach((t) => (t.taxonomy_terms || []).forEach((x) => m.set(x.id, x.name)));
+    return m;
+  }, [taxonomies]);
+  const hasContado = bizD > 0 || bizDv > 0;
+  const contadoMeta = [bizD > 0 && `Divisa ${Number(discCfg.usd.pct) || 0}%`, bizDv > 0 && `Bs ${Number(discCfg.ves.pct) || 0}%`].filter(Boolean).join(' · ');
+  const today = todayVE();
+  const fmtDay = (iso) => { const [y, mo, da] = iso.split('-').map(Number); return new Date(y, mo - 1, da).toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }).replace('.', ''); };
   const discRows = casheaSelected ? [] : [
     hasUsdCash && bizD > 0 && { kind: 'usd', label: 'Descuento en divisa' },
     hasBsCash && bizDv > 0 && { kind: 'ves', label: 'Descuento en bolívares' },
@@ -794,7 +848,7 @@ export default function Orders() {
       const full = await fetchOrder(created.id);
       setFinished(full);
       setStage('done');
-      setCart([]); setPayments({}); setSelectedMethods([]); setPromoId(null); resetCustomer(); setPanelOpen(false);
+      setCart([]); setPayments({}); setSelectedMethods([]); setChoice('cash'); resetCustomer(); setPanelOpen(false);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -1103,49 +1157,45 @@ export default function Orders() {
                         )}
                       </div>
 
-                      {/* Descuentos de la venta: el especial lo elige la cajera
-                          (uno por venta) y el de contado va por moneda; este
-                          último se puede quitar o cambiar el %. */}
-                      {(discounts.length > 0 || discRows.length > 0) && (
-                        <div className="pay-disc">
-                          {discounts.length > 0 && (
-                            <div className="pay-promos" role="radiogroup" aria-label="Descuento especial">
-                              <span className="pay-promos-label">Descuento especial</span>
-                              <div className="pay-promos-list">
-                                {discounts.map((ds) => {
-                                  const pct = promoPct(ds, casheaSelected) * 100;
-                                  const on = promoId === ds.id;
-                                  return (
-                                    <button type="button" key={ds.id} role="radio" aria-checked={on}
-                                      className={`pay-promo${on ? ' on' : ''}${pct > 0 ? '' : ' na'}`}
-                                      title={pct > 0 ? undefined : casheaSelected ? 'No aplica con Cashea' : 'Solo aplica con Cashea'}
-                                      onClick={() => pickPromo(ds.id)}>
-                                      <span className="pay-promo-name">{ds.name}</span>
-                                      <span className="pay-promo-pct">{pct > 0 ? `−${Math.round(pct * 100) / 100}%` : '—'}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
+                      {/* Descuento de la venta: la cajera elige uno (radio). El de
+                          contado deja cambiar el %; los especiales muestran su %
+                          de contado o de Cashea según cómo se paga. */}
+                      {(discounts.length > 0 || hasContado) && (
+                        <div className="pay-disc" role="radiogroup" aria-label="Descuento de la venta">
+                          <span className="pay-promos-label">Descuento</span>
+                          {hasContado && (
+                            <>
+                              <DiscOption on={choice === 'cash'} onPick={() => pickChoice('cash')}
+                                name="Descuento de contado"
+                                meta={casheaSelected ? 'No aplica con Cashea' : contadoMeta} />
+                              {choice === 'cash' && discRows.map((r) => (
+                                <div className="pay-disc-row sub" key={r.kind}>
+                                  <span className="pay-disc-sublabel">{r.label}</span>
+                                  <span className="pay-pct-field">
+                                    <input inputMode="decimal" value={discCfg[r.kind].pct} aria-label={`${r.label} (%)`}
+                                      onChange={(e) => changeDisc(r.kind, { pct: e.target.value })} />
+                                    <span className="pay-pct-sign">%</span>
+                                  </span>
+                                </div>
+                              ))}
+                            </>
                           )}
-                          {discRows.map((r) => {
-                            const cfg = discCfg[r.kind];
+                          {discounts.map((ds) => {
+                            const live = discountStatus(ds, today) === 'live';
+                            const pct = promoPct(ds, casheaSelected) * 100;
+                            const terms = (ds.term_ids || []).map((id) => termName.get(id)).filter(Boolean);
+                            const hits = live ? ratesFor(0, 0, ds).hits : 0;
+                            const meta = !live ? `Desde el ${fmtDay(ds.starts_on)}`
+                              : !(pct > 0) ? (casheaSelected ? 'No aplica con Cashea' : 'Solo con Cashea')
+                              : terms.length ? (hits ? `${terms.join(', ')} · ${hits} ${hits === 1 ? 'art.' : 'arts.'}` : `Ningún artículo de ${terms.join(', ')}`)
+                              : 'Toda la venta';
                             return (
-                              <div className={`pay-disc-row${cfg.on ? '' : ' off'}`} key={r.kind}>
-                                <label className="pay-disc-check">
-                                  <input type="checkbox" checked={cfg.on}
-                                    onChange={(e) => changeDisc(r.kind, { on: e.target.checked })} />
-                                  <span>{r.label}</span>
-                                </label>
-                                <span className="pay-pct-field">
-                                  <input inputMode="decimal" value={cfg.pct} disabled={!cfg.on}
-                                    aria-label={`${r.label} (%)`}
-                                    onChange={(e) => changeDisc(r.kind, { pct: e.target.value })} />
-                                  <span className="pay-pct-sign">%</span>
-                                </span>
-                              </div>
+                              <DiscOption key={ds.id} on={choice === ds.id} disabled={!live || (terms.length > 0 && !hits)}
+                                onPick={() => pickChoice(ds.id)} name={ds.name} meta={meta}
+                                pct={pct > 0 ? Math.round(pct * 100) / 100 : null} />
                             );
                           })}
+                          <DiscOption on={choice === 'none'} onPick={() => pickChoice('none')} name="Sin descuento" />
                         </div>
                       )}
 

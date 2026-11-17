@@ -1,11 +1,12 @@
 // Descuentos especiales (Negocio → Ventas): Black Friday, liquidaciones…
 // Cada uno tiene nombre, cuánto si se paga de contado y cuánto con Cashea, y
-// entre qué fechas está disponible. En el cobro la cajera elige cuál aplica a
-// la venta, y la venta guarda cuál fue.
-import { useEffect, useState } from 'react';
+// entre qué fechas está disponible; opcionalmente, unas categorías/marcas a
+// las que se limita. En el cobro la cajera elige cuál aplica a la venta, y la
+// venta guarda cuál fue.
+import { useEffect, useMemo, useState } from 'react';
 import { FinModal } from './FinUI';
 import { useConfirm } from './Confirm';
-import { fetchDiscounts, saveDiscount, deleteDiscount } from '../lib/api';
+import { fetchDiscounts, saveDiscount, deleteDiscount, fetchTaxonomies } from '../lib/api';
 import { discountStatus, todayVE } from '../lib/discounts';
 import { usd } from '../lib/calc';
 import './discounts.css';
@@ -34,10 +35,21 @@ export default function DiscountsManager({ business }) {
   const [list, setList] = useState(null);
   const [editing, setEditing] = useState(null);   // descuento (o {} si es nuevo)
   const [error, setError] = useState(null);
+  const [taxonomies, setTaxonomies] = useState([]);
 
   useEffect(() => {
     fetchDiscounts().then(setList).catch((e) => { setList([]); setError(e.message); });
+    fetchTaxonomies().then(setTaxonomies).catch(() => {});
   }, []);
+  const termName = useMemo(() => {
+    const m = new Map();
+    taxonomies.forEach((t) => (t.taxonomy_terms || []).forEach((x) => m.set(x.id, x.name)));
+    return m;
+  }, [taxonomies]);
+  const scopeText = (ds) => {
+    const names = (ds.term_ids || []).map((id) => termName.get(id)).filter(Boolean);
+    return names.length ? names.join(', ') : 'Toda la venta';
+  };
   async function toggle(ds) {
     const prev = list;
     setList((l) => l.map((x) => (x.id === ds.id ? { ...x, active: !x.active } : x)));
@@ -61,8 +73,8 @@ export default function DiscountsManager({ business }) {
           <h2>Descuentos especiales</h2>
           <p className="hint">
             Para temporadas como Black Friday. Aparecen en el cobro con su nombre y la cajera elige cuál
-            aplica a la venta; queda registrado en la venta y en el historial. No se suma al descuento de
-            contado: se aplica el mayor.
+            usa la venta; queda registrado en la venta y en el historial. Si lo limitas a unas categorías,
+            el resto de la venta conserva el descuento de contado. No se suman: se aplica el mayor.
           </p>
         </div>
         <button type="button" className="btn primary" onClick={() => setEditing({})}>+ Nuevo descuento</button>
@@ -88,7 +100,7 @@ export default function DiscountsManager({ business }) {
                     <span className="ds-name">{ds.name}</span>
                     <span className={`ds-status ${st.tone}`}>{st.label}</span>
                   </span>
-                  <span className="ds-sub">{rangeText(ds)}</span>
+                  <span className="ds-sub">{scopeText(ds)} · {rangeText(ds)}</span>
                 </button>
                 <span className="ds-pcts">
                   {Number(ds.cash_percent) > 0 && <span className="ds-pct"><b>−{Number(ds.cash_percent)}%</b> contado</span>}
@@ -105,7 +117,7 @@ export default function DiscountsManager({ business }) {
       )}
 
       {editing && (
-        <DiscountEditor business={business} initial={editing}
+        <DiscountEditor business={business} initial={editing} taxonomies={taxonomies}
           onClose={() => setEditing(null)}
           onDelete={editing.id ? async () => { if (await remove(editing)) setEditing(null); } : null}
           onSaved={(row) => {
@@ -117,8 +129,13 @@ export default function DiscountsManager({ business }) {
   );
 }
 
-function DiscountEditor({ business, initial, onClose, onSaved, onDelete }) {
+function DiscountEditor({ business, initial, taxonomies, onClose, onSaved, onDelete }) {
   const [name, setName] = useState(initial.name || '');
+  const [terms, setTerms] = useState(() => new Set(initial.term_ids || []));
+  const [limit, setLimit] = useState(() => (initial.term_ids || []).length > 0);
+  // Solo clasificaciones (categoría, marca…), no tallas ni colores.
+  const groups = taxonomies.filter((t) => t.kind !== 'variant' && (t.taxonomy_terms || []).length);
+  const toggleTerm = (id) => { setTerms((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; }); setError(null); };
   const [cash, setCash] = useState(initial.cash_percent != null ? String(Number(initial.cash_percent)) : '');
   const [cashea, setCashea] = useState(initial.cashea_percent != null ? String(Number(initial.cashea_percent)) : '');
   const [from, setFrom] = useState(initial.starts_on || '');
@@ -135,11 +152,13 @@ function DiscountEditor({ business, initial, onClose, onSaved, onDelete }) {
     if (!name.trim()) return setError('Ponle un nombre, p. ej. «Black Friday · Ropa».');
     if (!pctOk(cashN) || !pctOk(casheaN)) return setError('Los porcentajes van de 0 a 99.');
     if (!(cashN > 0) && !(casheaN > 0)) return setError('Escribe el % de contado, el de Cashea o ambos.');
+    if (limit && !terms.size) return setError('Elige al menos una categoría, o marca «Toda la venta».');
     if (from && to && to < from) return setError('La fecha de fin es anterior a la de inicio.');
     setBusy(true); setError(null);
     try {
       const row = await saveDiscount(business.id, {
         id: initial.id, name: name.trim(),
+        term_ids: limit ? [...terms] : [],
         cash_percent: cashN, cashea_percent: casheaN,
         starts_on: from || null, ends_on: to || null,
         active: initial.active ?? true,
@@ -197,6 +216,39 @@ function DiscountEditor({ business, initial, onClose, onSaved, onDelete }) {
           </label>
         </div>
         {sample}
+      </div>
+
+      <div className="ds-field">
+        <span className="ds-label">Aplica a</span>
+        <div className="ds-seg" role="radiogroup" aria-label="Aplica a">
+          <button type="button" role="radio" aria-checked={!limit} className={`ds-seg-btn${!limit ? ' on' : ''}`}
+            onClick={() => { setLimit(false); setError(null); }}>Toda la venta</button>
+          <button type="button" role="radio" aria-checked={limit} className={`ds-seg-btn${limit ? ' on' : ''}`}
+            onClick={() => setLimit(true)}>Solo unas categorías</button>
+        </div>
+        {limit && (
+          <div className="ds-terms">
+            {groups.length === 0 && <p className="hint">No hay categorías. Créalas en Negocio → Catálogo.</p>}
+            {groups.map((t) => (
+              <div className="ds-term-group" key={t.id}>
+                <span className="ds-term-tax">{t.name}</span>
+                <div className="ds-chips">
+                  {t.taxonomy_terms.slice().sort((a, b) => a.name.localeCompare(b.name)).map((x) => (
+                    <button type="button" key={x.id} aria-pressed={terms.has(x.id)}
+                      className={`ds-chip${terms.has(x.id) ? ' on' : ''}`} onClick={() => toggleTerm(x.id)}>
+                      {x.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <span className="field-hint">
+          {limit
+            ? 'Solo los artículos de estas categorías llevan este descuento; el resto de la venta conserva el de contado.'
+            : 'Opcional: puedes limitarlo a unas categorías o marcas.'}
+        </span>
       </div>
 
       <div className="ds-field">
