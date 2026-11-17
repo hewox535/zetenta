@@ -6,7 +6,7 @@ import {
   fetchProducts, fetchTaxonomies, fetchBankAccounts, fetchCustomers,
   createCustomer, createOrder, fetchOrder, mediaUrl, fetchOpenCashSession, fetchDiscounts,
 } from '../lib/api';
-import { applyDiscounts, bestDiscount, isLive, todayVE } from '../lib/discounts';
+import { isLive, todayVE } from '../lib/discounts';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { notifySale } from '../lib/push';
 import { usd, bs, money, variantLabel, offerPrice, hasOffer, offerTag } from '../lib/calc';
@@ -183,14 +183,6 @@ const isCashea = (m) => m?.kind === 'cashea';
 // El contado en bolívares tiene su propio descuento (local_discount_percent).
 const isForeignCash = (m) => m?.currency === 'USD' && !isCashea(m);
 
-// Etiqueta del descuento especial de un artículo (el de contado, o el de
-// Cashea si la venta va con Cashea).
-function PromoTag({ info, cashea }) {
-  const x = cashea ? info?.cashea : info?.cash;
-  if (!x) return null;
-  return <span className="promo-tag" title={x.name}>−{x.pct}% · {x.name}</span>;
-}
-
 // Helpers de monto (aceptan coma o punto decimal).
 const parseAmt = (s) => Number(String(s ?? '').replace(',', '.')) || 0;
 const round2 = (x) => Math.round(x * 100) / 100;
@@ -351,10 +343,10 @@ export default function Orders() {
     ves: { on: true, pct: String(Number(business?.local_discount_percent) || 0) },
   }));
   const [itemsOpen, setItemsOpen] = useState(false);   // modal con los artículos de la venta
-  // Descuentos especiales vigentes (Negocio → Ventas) y los que la vendedora
-  // quitó en esta venta.
+  // Descuentos especiales vigentes (Negocio → Ventas) y el que eligió la
+  // cajera para esta venta (uno por venta; queda guardado en la venta).
   const [discounts, setDiscounts] = useState([]);
-  const [skipDisc, setSkipDisc] = useState([]);
+  const [promoId, setPromoId] = useState(null);
 
   useEffect(() => {
     Promise.all([fetchProducts(), fetchTaxonomies(), fetchBankAccounts(), fetchCustomers()])
@@ -426,16 +418,17 @@ export default function Orders() {
   const bizD = clampPct(business?.foreign_discount_percent);
   const bizDv = clampPct(business?.local_discount_percent);
   const casheaSelected = selectedMethods.some((id) => isCashea(methods.find((x) => x.id === id)));
-  // Descuentos especiales: de contado cambian lo que "rinde" cada moneda
-  // (effD/effDv según la mezcla de productos); con Cashea rebajan el precio de
-  // lista (casheaOff). dueUsd es lo que hay que cubrir con los pagos.
-  const productsById = useMemo(() => new Map((products || []).map((p) => [p.id, p])), [products]);
-  const skipSet = useMemo(() => new Set(skipDisc), [skipDisc]);
-  const promoFor = (dU, dB, skip = skipSet) => applyDiscounts(cart, productsById, discounts, skip, { d: dU, dv: dB });
+  // Descuento especial elegido: de contado sube el descuento de cada moneda
+  // hasta su % (se queda el mayor, no se suman); con Cashea rebaja el precio
+  // de lista con su % de Cashea. dueUsd es lo que hay que cubrir con los pagos.
+  const promoDs = discounts.find((x) => x.id === promoId) || null;
+  const promoPct = (ds, cashea) => clampPct(cashea ? ds?.cashea_percent : ds?.cash_percent);
+  const promoFor = (dU, dB, ds = promoDs) => ({ d: Math.max(dU, promoPct(ds, false)), dv: Math.max(dB, promoPct(ds, false)) });
   const promo = promoFor(baseD, baseDv);
   const effD = promo.d;
   const effDv = promo.dv;
-  const casheaOff = casheaSelected ? promo.casheaOff : 0;
+  const casheaOffFor = (ds) => round2(totalUsd * promoPct(ds, true));
+  const casheaOff = casheaSelected ? casheaOffFor(promoDs) : 0;
   const dueUsd = totalUsd - casheaOff;
   const d = casheaSelected ? 0 : effD;
   const dv = casheaSelected ? 0 : effDv;
@@ -458,10 +451,8 @@ export default function Orders() {
       discountUsd += usdPaid + PAY_EPS >= round2(pending * (1 - d)) ? pending * d : (usdPaid * d) / (1 - d);
     }
   }
-  const promoRows = promo.rows.filter((r) => (casheaSelected ? r.cashea : r.cash) > 0
-    && (skipSet.has(r.id) || (casheaSelected ? r.used.cashea : r.used.cash) > 0));
-  const promoOn = promoRows.some((r) => !skipSet.has(r.id));
-  const discountLabel = promoOn ? 'Descuentos' : d > 0 && dv > 0 ? 'Descuento de contado' : dv > 0 ? 'Descuento en bolívares' : 'Descuento por divisa';
+  const promoOn = promoPct(promoDs, casheaSelected) > 0;
+  const discountLabel = promoOn ? promoDs.name : d > 0 && dv > 0 ? 'Descuento de contado' : dv > 0 ? 'Descuento en bolívares' : 'Descuento por divisa';
   // Lo que el cliente realmente paga (neto = lista − descuento) y lo realmente
   // recibido en efectivo (Bs a USD + USD), para no mostrar "pagado 90$" cuando el
   // descuento hace que se cobren menos. Cuando está cubierto, recibido == a pagar.
@@ -526,13 +517,15 @@ export default function Orders() {
     setDiscCfg(nextCfg);
     if (!casheaSelected) rescaleCash(promoFor(pctOf(nextCfg.usd), pctOf(nextCfg.ves)));
   };
-  const togglePromo = (id) => {
-    const next = new Set(skipSet);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setSkipDisc([...next]);
+  // Elegir (o quitar) el descuento especial de la venta: los montos ya
+  // escritos se ajustan para seguir cubriendo la misma parte de la venta.
+  const pickPromo = (id) => {
+    const next = promoId === id ? null : id;
+    setPromoId(next);
     // Con Cashea el efecto de abajo recalcula lo financiado y la inicial.
-    if (!casheaSelected) rescaleCash(promoFor(baseD, baseDv, next));
+    if (!casheaSelected) rescaleCash(promoFor(baseD, baseDv, discounts.find((x) => x.id === next)));
   };
+
   const hasUsdCash = selectedMethods.some((id) => isForeignCash(methods.find((x) => x.id === id)));
   const hasBsCash = selectedMethods.some((id) => {
     const m = methods.find((x) => x.id === id);
@@ -555,7 +548,7 @@ export default function Orders() {
   // salvo que haya Cashea), en la moneda del método.
   const fullAmountFor = (om, withCashea) => {
     const dm = withCashea ? 0 : (isForeignCash(om) ? effD : effDv);
-    const net = (withCashea ? totalUsd - promo.casheaOff : totalUsd) * (1 - dm);
+    const net = (withCashea ? totalUsd - casheaOffFor(promoDs) : totalUsd) * (1 - dm);
     return (om.currency === 'USD' ? net : net * rate.value).toFixed(2);
   };
 
@@ -795,13 +788,13 @@ export default function Orders() {
         items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName, branchId,
         foreignDiscount: Math.round(baseD * 10000) / 100,
         localDiscount: Math.round(baseDv * 10000) / 100,
-        skipDiscounts: skipDisc,
+        discountId: promoId,
       });
       notifySale(created.id); // push a los admins del negocio (fuego y olvido)
       const full = await fetchOrder(created.id);
       setFinished(full);
       setStage('done');
-      setCart([]); setPayments({}); setSelectedMethods([]); setSkipDisc([]); resetCustomer(); setPanelOpen(false);
+      setCart([]); setPayments({}); setSelectedMethods([]); setPromoId(null); resetCustomer(); setPanelOpen(false);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -935,10 +928,6 @@ export default function Orders() {
                           {!simple && <span className="variant-count">{variantsOf(p).length} variantes</span>}
                         </div>
                         {hasOffer(p) && <span className="offer-flag">🏷 {offerTag(p)}</span>}
-                        {!hasOffer(p) && (() => {
-                          const best = bestDiscount(p, discounts, 'cash');
-                          return best && <span className="offer-flag promo" title={best.name}>−{best.pct}%</span>;
-                        })()}
                         <div className="product-card-prices">
                           {hasOffer(p) ? (
                             <>
@@ -1064,7 +1053,6 @@ export default function Orders() {
                           <div className="cart-line-info">
                             <div className="cart-line-name">{c.name}{c.label && <span className="muted"> · {c.label}</span>}</div>
                             <div className="muted">{usd(c.price)} · {bs(c.price * rate.value)}</div>
-                            <PromoTag info={promo.perLine.get(c.id)} cashea={casheaSelected} />
                           </div>
                           <div className="qty-stepper">
                             <button onClick={() => setQty(c.id, c.qty - 1)} aria-label="Quitar uno">−</button>
@@ -1115,27 +1103,31 @@ export default function Orders() {
                         )}
                       </div>
 
-                      {/* Descuentos de la venta: los especiales que tocan a estos
-                          artículos (una línea cada uno) y el de contado por moneda.
-                          Todos se pueden quitar; el de contado, además, cambiar el %. */}
-                      {(promoRows.length > 0 || discRows.length > 0) && (
+                      {/* Descuentos de la venta: el especial lo elige la cajera
+                          (uno por venta) y el de contado va por moneda; este
+                          último se puede quitar o cambiar el %. */}
+                      {(discounts.length > 0 || discRows.length > 0) && (
                         <div className="pay-disc">
-                          {promoRows.map((r) => {
-                            const on = !skipSet.has(r.id);
-                            const pct = casheaSelected ? r.cashea : r.cash;
-                            return (
-                              <div className={`pay-disc-row promo${on ? '' : ' off'}`} key={r.id}>
-                                <label className="pay-disc-check">
-                                  <input type="checkbox" checked={on} onChange={() => togglePromo(r.id)} />
-                                  <span className="pay-promo-name">{r.name}</span>
-                                </label>
-                                <span className="pay-promo-meta">
-                                  <span className="pay-promo-count">{r.count} {r.count === 1 ? 'art.' : 'arts.'}</span>
-                                  <span className="pay-promo-pct" title={casheaSelected ? 'Con Cashea' : 'De contado'}>−{pct}%</span>
-                                </span>
+                          {discounts.length > 0 && (
+                            <div className="pay-promos" role="radiogroup" aria-label="Descuento especial">
+                              <span className="pay-promos-label">Descuento especial</span>
+                              <div className="pay-promos-list">
+                                {discounts.map((ds) => {
+                                  const pct = promoPct(ds, casheaSelected) * 100;
+                                  const on = promoId === ds.id;
+                                  return (
+                                    <button type="button" key={ds.id} role="radio" aria-checked={on}
+                                      className={`pay-promo${on ? ' on' : ''}${pct > 0 ? '' : ' na'}`}
+                                      title={pct > 0 ? undefined : casheaSelected ? 'No aplica con Cashea' : 'Solo aplica con Cashea'}
+                                      onClick={() => pickPromo(ds.id)}>
+                                      <span className="pay-promo-name">{ds.name}</span>
+                                      <span className="pay-promo-pct">{pct > 0 ? `−${Math.round(pct * 100) / 100}%` : '—'}</span>
+                                    </button>
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
+                            </div>
+                          )}
                           {discRows.map((r) => {
                             const cfg = discCfg[r.kind];
                             return (
@@ -1242,7 +1234,6 @@ export default function Orders() {
                   <span className="pos-items-info">
                     <strong>{c.name}</strong>
                     <span>{[c.label, `${c.qty} × ${usd(c.price)}`].filter(Boolean).join(' · ')}</span>
-                    <PromoTag info={promo.perLine.get(c.id)} cashea={casheaSelected} />
                   </span>
                   <span className="pos-items-amt">
                     <strong>{usd(c.price * c.qty)}</strong>
