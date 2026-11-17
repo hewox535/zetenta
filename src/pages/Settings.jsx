@@ -20,6 +20,7 @@ import { fetchBcvRates } from '../lib/rates';
 import { money } from '../lib/calc';
 import { useConfirm } from '../components/Confirm';
 import SessionsSection from '../components/SessionsSection';
+import DiscountsManager from '../components/DiscountsManager';
 
 // Iconos limpios para acciones (editar, eliminar, agregar).
 const ICON = {
@@ -701,6 +702,8 @@ function OrdersSection({ business, refreshBusiness }) {
           {discBusy ? 'Guardando…' : 'Guardar descuentos'}
         </button>
       </section>
+
+      <DiscountsManager business={business} />
 
       <CasheaSection business={business} refreshBusiness={refreshBusiness} />
 
