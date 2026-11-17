@@ -183,16 +183,6 @@ const isCashea = (m) => m?.kind === 'cashea';
 // El contado en bolívares tiene su propio descuento (local_discount_percent).
 const isForeignCash = (m) => m?.currency === 'USD' && !isCashea(m);
 
-// Chip del selector de descuento del cobro (funciona como radio).
-function DiscChip({ on, onPick, name, pct = null }) {
-  return (
-    <button type="button" role="radio" aria-checked={on} className={`pay-chip${on ? ' on' : ''}`} onClick={onPick}>
-      <span className="pay-chip-name">{name}</span>
-      {pct != null && <span className="pay-chip-pct">−{pct}%</span>}
-    </button>
-  );
-}
-
 // Helpers de monto (aceptan coma o punto decimal).
 const parseAmt = (s) => Number(String(s ?? '').replace(',', '.')) || 0;
 const round2 = (x) => Math.round(x * 100) / 100;
@@ -359,6 +349,7 @@ export default function Orders() {
   // choice: 'cash' (descuento de contado), 'none' (sin descuento) o el id de
   // un descuento especial. Es un radio: la cajera elige cuál usa la venta.
   const [choice, setChoice] = useState('cash');
+  const [discPick, setDiscPick] = useState(null);   // modal del descuento: opción marcada (sin aplicar)
   const promoId = choice !== 'cash' && choice !== 'none' ? choice : null;
 
   useEffect(() => {
@@ -579,6 +570,37 @@ export default function Orders() {
   }, [taxonomies]);
   const hasContado = bizD > 0 || bizDv > 0;
   const contadoMeta = [bizD > 0 && `Divisa ${Number(discCfg.usd.pct) || 0}%`, bizDv > 0 && `Bs ${Number(discCfg.ves.pct) || 0}%`].filter(Boolean).join(' · ');
+  // Opciones del modal de descuento y resumen de la elegida (fila del cobro).
+  const pctLabel = (ds) => { const v = Math.round(promoPct(ds, casheaSelected) * 10000) / 100; return v > 0 ? `−${v}%` : null; };
+  const termsOf = (ds) => (ds?.term_ids || []).map((id) => termName.get(id)).filter(Boolean);
+  const discOptions = [
+    hasContado && { id: 'cash', name: 'Contado', meta: casheaSelected ? 'No aplica con Cashea' : contadoMeta },
+    ...discounts.map((ds) => {
+      const t = termsOf(ds);
+      const hits = ratesFor(0, 0, ds).hits;
+      return {
+        id: ds.id, name: ds.name, pct: pctLabel(ds),
+        meta: !pctLabel(ds) ? (casheaSelected ? 'No aplica con Cashea' : 'Solo con Cashea')
+          : t.length ? `Solo ${t.join(', ')} · ${hits ? `${hits} ${hits === 1 ? 'art.' : 'arts.'} en esta venta` : 'ninguno en esta venta'}` : 'Toda la venta',
+      };
+    }),
+    { id: 'none', name: 'Ninguno', meta: 'La venta va a precio de lista' },
+  ].filter(Boolean);
+  const discSummary = (() => {
+    if (choice === 'none') return { name: 'Ninguno' };
+    if (choice === 'cash') {
+      const rows = casheaSelected ? [] : [bizD > 0 && hasUsdCash && `${Number(discCfg.usd.pct) || 0}%`, bizDv > 0 && hasBsCash && `${Number(discCfg.ves.pct) || 0}%`].filter(Boolean);
+      return { name: 'Contado', pct: rows.length === 1 ? `−${rows[0]}` : null,
+        detail: casheaSelected ? 'Con Cashea no hay descuento de contado.' : rows.length === 1 ? null : contadoMeta };
+    }
+    const t = termsOf(promoDs);
+    return {
+      name: promoDs?.name || 'Descuento', pct: pctLabel(promoDs),
+      detail: !pctLabel(promoDs) ? (casheaSelected ? 'Este descuento no aplica con Cashea.' : 'Este descuento solo aplica con Cashea.')
+        : t.length ? (promo.hits ? `Solo ${t.join(', ')} (${promo.hits} ${promo.hits === 1 ? 'art.' : 'arts.'})${casheaSelected ? '' : '; el resto, con el de contado'}.` : `Ningún artículo de ${t.join(', ')} en esta venta.`)
+          : null,
+    };
+  })();
   const discRows = casheaSelected ? [] : [
     hasUsdCash && bizD > 0 && { kind: 'usd', label: 'Contado en divisa' },
     hasBsCash && bizDv > 0 && { kind: 'ves', label: 'Contado en bolívares' },
@@ -1151,46 +1173,20 @@ export default function Orders() {
                         )}
                       </div>
 
-                      {/* Descuento de la venta: la cajera elige uno (chips tipo
-                          radio). Debajo, una línea con el detalle del elegido; el de
-                          contado deja cambiar el % de la moneda en uso. */}
-                      {(discounts.length > 0 || hasContado) && (() => {
-                        const pctOf = (ds) => Math.round(promoPct(ds, casheaSelected) * 10000) / 100;
-                        const terms = (promoDs?.term_ids || []).map((id) => termName.get(id)).filter(Boolean);
-                        const detail = choice === 'none' ? 'La venta va a precio de lista.'
-                          : choice === 'cash' ? (casheaSelected ? 'Con Cashea no hay descuento de contado.' : discRows.length ? null : contadoMeta)
-                          : !(pctOf(promoDs) > 0) ? (casheaSelected ? 'Este descuento no aplica con Cashea.' : 'Este descuento solo aplica con Cashea.')
-                          : terms.length
-                            ? (promo.hits
-                              ? `Solo ${terms.join(', ')} (${promo.hits} ${promo.hits === 1 ? 'art.' : 'arts.'})${casheaSelected ? '' : '; el resto, con el de contado'}.`
-                              : `Ningún artículo de ${terms.join(', ')} en esta venta.`)
-                            : 'A toda la venta.';
-                        return (
-                          <div className="pay-disc">
-                            <div className="pay-chips" role="radiogroup" aria-label="Descuento de la venta">
-                              {hasContado && (
-                                <DiscChip on={choice === 'cash'} onPick={() => pickChoice('cash')} name="Contado" />
-                              )}
-                              {discounts.map((ds) => (
-                                <DiscChip key={ds.id} on={choice === ds.id} onPick={() => pickChoice(ds.id)}
-                                  name={ds.name} pct={pctOf(ds) > 0 ? pctOf(ds) : null} />
-                              ))}
-                              <DiscChip on={choice === 'none'} onPick={() => pickChoice('none')} name="Ninguno" />
-                            </div>
-                            {choice === 'cash' && discRows.map((r) => (
-                              <div className="pay-disc-row" key={r.kind}>
-                                <span className="pay-disc-sublabel">{r.label}</span>
-                                <span className="pay-pct-field">
-                                  <input inputMode="decimal" value={discCfg[r.kind].pct} aria-label={`${r.label} (%)`}
-                                    onChange={(e) => changeDisc(r.kind, { pct: e.target.value })} />
-                                  <span className="pay-pct-sign">%</span>
-                                </span>
-                              </div>
-                            ))}
-                            {detail && <p className="pay-disc-detail">{detail}</p>}
-                          </div>
-                        );
-                      })()}
+                      {/* Descuento de la venta: una sola fila con el elegido; al
+                          tocarla se abre un modal para elegir otro y aplicarlo. */}
+                      {(discounts.length > 0 || hasContado) && (
+                        <div className="pay-dsel-wrap">
+                          <button type="button" className={`pay-dsel${choice === 'none' ? ' none' : ''}`}
+                            onClick={() => setDiscPick(choice)} aria-haspopup="dialog" title="Cambiar el descuento de la venta">
+                            <svg className="pay-dsel-icon" viewBox="0 0 24 24" width="17" height="17" aria-label="Descuento"><path d="M3 12V4h8l10 10-8 8zM7.5 8.5h.01" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            <span className="pay-dsel-value">{discSummary.name}</span>
+                            {discSummary.pct && <span className="pay-dsel-pct">{discSummary.pct}</span>}
+                            <svg className="pay-dsel-chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                          {discSummary.detail && <p className="pay-disc-detail">{discSummary.detail}</p>}
+                        </div>
+                      )}
 
                       {/* Un input por cada método seleccionado, con su equivalente en la otra moneda */}
                       {selectedMethods.length > 0 && (
@@ -1256,6 +1252,42 @@ export default function Orders() {
       </div>
 
       {/* -------- Artículos de la venta (desde el ticket) -------- */}
+      {discPick && (
+        <FinModal title="Descuento de la venta" sub="Elige cuál se aplica a esta venta. Queda guardado en la venta."
+          onClose={() => setDiscPick(null)}
+          footer={(
+            <>
+              <button type="button" className="btn ghost" onClick={() => setDiscPick(null)}>Cancelar</button>
+              <button type="button" className="btn primary" onClick={() => { pickChoice(discPick); setDiscPick(null); }}>Aplicar</button>
+            </>
+          )}>
+          <div className="dopt-list" role="radiogroup" aria-label="Descuento de la venta">
+            {discOptions.map((o) => (
+              <div key={o.id}>
+                <label className={`dopt${discPick === o.id ? ' on' : ''}`}>
+                  <input type="radio" name="sale-discount" checked={discPick === o.id} onChange={() => setDiscPick(o.id)} />
+                  <span className="dopt-text">
+                    <span className="dopt-name">{o.name}</span>
+                    {o.meta && <span className="dopt-meta">{o.meta}</span>}
+                  </span>
+                  {o.pct && <span className="dopt-pct">{o.pct}</span>}
+                </label>
+                {o.id === 'cash' && discPick === 'cash' && discRows.map((r) => (
+                  <div className="dopt-sub" key={r.kind}>
+                    <span>{r.label}</span>
+                    <span className="pay-pct-field">
+                      <input inputMode="decimal" value={discCfg[r.kind].pct} aria-label={`${r.label} (%)`}
+                        onChange={(e) => changeDisc(r.kind, { pct: e.target.value })} />
+                      <span className="pay-pct-sign">%</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </FinModal>
+      )}
+
       {itemsOpen && (
         <FinModal title={`${cartCount} ${cartCount === 1 ? 'artículo' : 'artículos'}`} sub="Detalle de la venta"
           onClose={() => setItemsOpen(false)}
