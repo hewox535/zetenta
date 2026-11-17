@@ -15,6 +15,7 @@ import {
 import { money, variantLabel, offerPrice, hasOffer, offerTag } from '../lib/calc';
 import { useConfirm } from '../components/Confirm';
 import { RowMenu, SortHead } from '../components/FinUI';
+import MarkupDialog from '../components/MarkupDialog';
 import './finance.css';
 import './inventory.css';
 import { VariationDialog, emptyVariations, sigOf, labelOf, skuFor } from '../components/VariantBuilder';
@@ -179,6 +180,8 @@ export default function Inventory() {
   const [importMsg, setImportMsg] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [markupOpen, setMarkupOpen] = useState(false);
+  const [priceMsg, setPriceMsg] = useState(null);
 
   const [taxonomies, setTaxonomies] = useState([]);
   const [search, setSearch] = useState('');
@@ -581,8 +584,13 @@ export default function Inventory() {
             });
           }
           const variants = [...byCombo.values()];
+          // Un mismo código en todas las filas es el código del estilo: va en el
+          // producto y las variantes lo heredan. Si cambian, cada una lleva el suyo.
+          const codes = new Set(variants.map((v) => v.sku || ''));
+          const shared = codes.size === 1 ? [...codes][0] : '';
+          if (shared) variants.forEach((v) => { v.sku = ''; });
           await createProductWithVariants({
-            name: base.name, sku: '', unit: base.unit, price: base.price, cost: base.cost,
+            name: base.name, sku: shared, unit: base.unit, price: base.price, cost: base.cost,
             categories: {}, variantAxes: axes, variants, branchId,
           });
           vars += variants.length;
@@ -833,6 +841,8 @@ export default function Inventory() {
     withCost: all.some((p) => Number(p.cost) > 0 || variantsOf(p).some((v) => Number(v.cost) > 0)),
   };
   const lowList = all.flatMap((p) => variantsOf(p).filter(isLow).map((v) => ({ p, v })));
+  // Sin precio de venta pero con costo: se les puede poner precio por margen.
+  const noPrice = all.filter((p) => !(Number(p.price) > 0));
   const activeFilters = [
     ptype !== 'all' && { key: 'ptype', label: ptype === 'variants' ? 'Con variantes' : 'Simples', clear: () => setPtype('all') },
     stockFilter !== 'all' && { key: 'stock', label: STOCK_FILTERS.find(([k]) => k === stockFilter)[1], clear: () => setStockFilter('all') },
@@ -874,6 +884,9 @@ export default function Inventory() {
               { label: 'Descargar plantilla', hint: 'El archivo modelo para llenar en Excel', onClick: () => downloadInvTemplate(varTax.map((t) => t.name)) },
             ]} />
           )}
+          {canPrice && all.length > 0 && (
+            <button type="button" className="btn ghost" onClick={() => setMarkupOpen(true)}>Precios por margen</button>
+          )}
           {canCreate && <button className="btn primary" onClick={openCreate}>+ Nuevo producto</button>}
           <input ref={importRef} type="file" accept=".csv,text/csv" hidden disabled={busy} onChange={onImportProducts} />
         </div>
@@ -911,6 +924,30 @@ export default function Inventory() {
             <span className="fin-kpi-sub">{summary.withCost ? `ganancia posible $${money(summary.price - summary.cost)}` : 'si vendes todo lo que tienes'}</span>
           </div>
         </div>
+      )}
+
+      {priceMsg && (
+        <div className="form-ok">{priceMsg} <button className="linklike" onClick={() => setPriceMsg(null)}>ok</button></div>
+      )}
+
+      {canPrice && noPrice.length > 0 && (
+        <div className="fin-alert mk-alert">
+          <span className="fin-alert-icon" aria-hidden="true">$</span>
+          <span className="fin-alert-text">
+            <strong>{noPrice.length === 1 ? '1 producto sin precio de venta' : `${noPrice.length} productos sin precio de venta`}</strong>
+            <span> · ponles precio de una vez con un margen sobre el costo</span>
+          </span>
+          <button type="button" className="btn sm" onClick={() => setMarkupOpen(true)}>Poner precios</button>
+        </div>
+      )}
+
+      {markupOpen && (
+        <MarkupDialog products={all} onClose={() => setMarkupOpen(false)}
+          onApplied={async (r) => {
+            setMarkupOpen(false);
+            await reload();
+            setPriceMsg(`Precio de venta aplicado a ${r.products === 1 ? '1 producto' : `${r.products} productos`}${r.variants ? ` y ${r.variants === 1 ? '1 variante' : `${r.variants} variantes`} con costo propio` : ''}${r.skipped ? `; ${r.skipped === 1 ? '1 sin costo quedó igual' : `${r.skipped} sin costo quedaron igual`}` : ''}.`);
+          }} />
       )}
 
       {lowList.length > 0 && stockFilter !== 'low' && (
@@ -1200,7 +1237,7 @@ export default function Inventory() {
                                     {label}
                                   </div>
                                 </td>
-                                <td className="inv-col-sku mono">{v.sku || <span className="fin-faint">—</span>}</td>
+                                <td className="inv-col-sku mono">{v.sku || (p.sku ? <span className="fin-faint" title="Código del producto">{p.sku}</span> : <span className="fin-faint">—</span>)}</td>
                                 <td className="num">
                                   <span className="inv-num">
                                     {hasOffer(p)

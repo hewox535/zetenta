@@ -711,8 +711,10 @@ export default function Orders() {
 
   const visible = (products || []).filter((p) => {
     if (offerOnly && !hasOffer(p)) return false;
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase())
-      && !(p.sku || '').toLowerCase().includes(search.toLowerCase())) return false;
+    const q = search.toLowerCase();
+    if (search && !p.name.toLowerCase().includes(q)
+      && !(p.sku || '').toLowerCase().includes(q)
+      && !(p.product_variants || []).some((v) => (v.sku || '').toLowerCase().includes(q))) return false;
     return Object.entries(filters).every(([, termId]) =>
       !termId || (p.product_terms || []).some((pt) => pt.term_id === termId));
   });

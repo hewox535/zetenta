@@ -443,6 +443,12 @@ export async function updateCustomerConfig(customerConfig) {
 
 // Descuentos de contado (%) en divisa y en bolívares, y umbral de stock bajo (%).
 // Sin localDiscountPercent, el descuento en bolívares no se toca.
+// Precio de venta = costo × (1 + percent/100). scope: 'missing' | 'all';
+// round: 'none' | 'int' | '99'. Devuelve { products, variants, skipped }.
+export async function applyPriceMarkup({ percent, scope = 'missing', round = 'none' }) {
+  return unwrap(await supabase.rpc('apply_price_markup', { p_percent: percent, p_scope: scope, p_round: round }));
+}
+
 export async function updateBusinessSettings({ foreignDiscountPercent, lowStockPercent, localDiscountPercent }) {
   return unwrap(await supabase.rpc('update_business_settings', {
     p_foreign_discount_percent: foreignDiscountPercent,

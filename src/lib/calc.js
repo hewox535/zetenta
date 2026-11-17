@@ -77,3 +77,12 @@ export function offerPrice(price, product) {
   const off = Number(product?.offer_percent) || 0;
   return off > 0 && off < 100 ? Math.round(p * (1 - off / 100) * 100) / 100 : p;
 }
+
+// Misma fórmula que public.price_with_markup (en centavos para no arrastrar
+// errores de coma flotante).
+export function priceWithMarkup(cost, percent, round) {
+  const cents = Math.round(cost * (100 + percent));
+  if (round === 'int') return Math.ceil(cents / 100);
+  if (round === '99') return (Math.ceil((cents + 1) / 100) * 100 - 1) / 100;
+  return cents / 100;
+}
