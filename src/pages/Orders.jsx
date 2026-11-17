@@ -183,17 +183,13 @@ const isCashea = (m) => m?.kind === 'cashea';
 // El contado en bolívares tiene su propio descuento (local_discount_percent).
 const isForeignCash = (m) => m?.currency === 'USD' && !isCashea(m);
 
-// Una opción del radio de descuentos del cobro: nombre, detalle y su %.
-function DiscOption({ on, onPick, name, meta, pct = null, disabled = false }) {
+// Chip del selector de descuento del cobro (funciona como radio).
+function DiscChip({ on, onPick, name, pct = null }) {
   return (
-    <label className={`pay-dopt${on ? ' on' : ''}${disabled ? ' dis' : ''}`}>
-      <input type="radio" name="sale-discount" checked={on} disabled={disabled} onChange={onPick} />
-      <span className="pay-dopt-text">
-        <span className="pay-dopt-name">{name}</span>
-        {meta && <span className="pay-dopt-meta">{meta}</span>}
-      </span>
-      {pct != null && <span className="pay-dopt-pct">−{pct}%</span>}
-    </label>
+    <button type="button" role="radio" aria-checked={on} className={`pay-chip${on ? ' on' : ''}`} onClick={onPick}>
+      <span className="pay-chip-name">{name}</span>
+      {pct != null && <span className="pay-chip-pct">−{pct}%</span>}
+    </button>
   );
 }
 
@@ -372,8 +368,8 @@ export default function Orders() {
       })
       .catch((e) => setError(e.message));
     fetchDiscounts()
-      // Los vigentes se pueden elegir; los programados se ven atenuados con su fecha.
-      .then((list) => { const t = todayVE(); setDiscounts(list.filter((x) => ['live', 'soon'].includes(discountStatus(x, t)))); })
+      // Solo los vigentes (activos y dentro de sus fechas).
+      .then((list) => { const t = todayVE(); setDiscounts(list.filter((x) => discountStatus(x, t) === 'live')); })
       .catch(() => {});
     fetchBcvRates().then(setRates).catch((e) => setRateError(e.message));
   }, []);
@@ -583,11 +579,9 @@ export default function Orders() {
   }, [taxonomies]);
   const hasContado = bizD > 0 || bizDv > 0;
   const contadoMeta = [bizD > 0 && `Divisa ${Number(discCfg.usd.pct) || 0}%`, bizDv > 0 && `Bs ${Number(discCfg.ves.pct) || 0}%`].filter(Boolean).join(' · ');
-  const today = todayVE();
-  const fmtDay = (iso) => { const [y, mo, da] = iso.split('-').map(Number); return new Date(y, mo - 1, da).toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }).replace('.', ''); };
   const discRows = casheaSelected ? [] : [
-    hasUsdCash && bizD > 0 && { kind: 'usd', label: 'Descuento en divisa' },
-    hasBsCash && bizDv > 0 && { kind: 'ves', label: 'Descuento en bolívares' },
+    hasUsdCash && bizD > 0 && { kind: 'usd', label: 'Contado en divisa' },
+    hasBsCash && bizDv > 0 && { kind: 'ves', label: 'Contado en bolívares' },
   ].filter(Boolean);
 
   // Imagen de un artículo del carrito (la de su variante o la del producto).
@@ -1157,47 +1151,46 @@ export default function Orders() {
                         )}
                       </div>
 
-                      {/* Descuento de la venta: la cajera elige uno (radio). El de
-                          contado deja cambiar el %; los especiales muestran su %
-                          de contado o de Cashea según cómo se paga. */}
-                      {(discounts.length > 0 || hasContado) && (
-                        <div className="pay-disc" role="radiogroup" aria-label="Descuento de la venta">
-                          <span className="pay-promos-label">Descuento</span>
-                          {hasContado && (
-                            <>
-                              <DiscOption on={choice === 'cash'} onPick={() => pickChoice('cash')}
-                                name="Descuento de contado"
-                                meta={casheaSelected ? 'No aplica con Cashea' : contadoMeta} />
-                              {choice === 'cash' && discRows.map((r) => (
-                                <div className="pay-disc-row sub" key={r.kind}>
-                                  <span className="pay-disc-sublabel">{r.label}</span>
-                                  <span className="pay-pct-field">
-                                    <input inputMode="decimal" value={discCfg[r.kind].pct} aria-label={`${r.label} (%)`}
-                                      onChange={(e) => changeDisc(r.kind, { pct: e.target.value })} />
-                                    <span className="pay-pct-sign">%</span>
-                                  </span>
-                                </div>
+                      {/* Descuento de la venta: la cajera elige uno (chips tipo
+                          radio). Debajo, una línea con el detalle del elegido; el de
+                          contado deja cambiar el % de la moneda en uso. */}
+                      {(discounts.length > 0 || hasContado) && (() => {
+                        const pctOf = (ds) => Math.round(promoPct(ds, casheaSelected) * 10000) / 100;
+                        const terms = (promoDs?.term_ids || []).map((id) => termName.get(id)).filter(Boolean);
+                        const detail = choice === 'none' ? 'La venta va a precio de lista.'
+                          : choice === 'cash' ? (casheaSelected ? 'Con Cashea no hay descuento de contado.' : discRows.length ? null : contadoMeta)
+                          : !(pctOf(promoDs) > 0) ? (casheaSelected ? 'Este descuento no aplica con Cashea.' : 'Este descuento solo aplica con Cashea.')
+                          : terms.length
+                            ? (promo.hits
+                              ? `Solo ${terms.join(', ')} (${promo.hits} ${promo.hits === 1 ? 'art.' : 'arts.'})${casheaSelected ? '' : '; el resto, con el de contado'}.`
+                              : `Ningún artículo de ${terms.join(', ')} en esta venta.`)
+                            : 'A toda la venta.';
+                        return (
+                          <div className="pay-disc">
+                            <div className="pay-chips" role="radiogroup" aria-label="Descuento de la venta">
+                              {hasContado && (
+                                <DiscChip on={choice === 'cash'} onPick={() => pickChoice('cash')} name="Contado" />
+                              )}
+                              {discounts.map((ds) => (
+                                <DiscChip key={ds.id} on={choice === ds.id} onPick={() => pickChoice(ds.id)}
+                                  name={ds.name} pct={pctOf(ds) > 0 ? pctOf(ds) : null} />
                               ))}
-                            </>
-                          )}
-                          {discounts.map((ds) => {
-                            const live = discountStatus(ds, today) === 'live';
-                            const pct = promoPct(ds, casheaSelected) * 100;
-                            const terms = (ds.term_ids || []).map((id) => termName.get(id)).filter(Boolean);
-                            const hits = live ? ratesFor(0, 0, ds).hits : 0;
-                            const meta = !live ? `Desde el ${fmtDay(ds.starts_on)}`
-                              : !(pct > 0) ? (casheaSelected ? 'No aplica con Cashea' : 'Solo con Cashea')
-                              : terms.length ? (hits ? `${terms.join(', ')} · ${hits} ${hits === 1 ? 'art.' : 'arts.'}` : `Ningún artículo de ${terms.join(', ')}`)
-                              : 'Toda la venta';
-                            return (
-                              <DiscOption key={ds.id} on={choice === ds.id} disabled={!live || (terms.length > 0 && !hits)}
-                                onPick={() => pickChoice(ds.id)} name={ds.name} meta={meta}
-                                pct={pct > 0 ? Math.round(pct * 100) / 100 : null} />
-                            );
-                          })}
-                          <DiscOption on={choice === 'none'} onPick={() => pickChoice('none')} name="Sin descuento" />
-                        </div>
-                      )}
+                              <DiscChip on={choice === 'none'} onPick={() => pickChoice('none')} name="Ninguno" />
+                            </div>
+                            {choice === 'cash' && discRows.map((r) => (
+                              <div className="pay-disc-row" key={r.kind}>
+                                <span className="pay-disc-sublabel">{r.label}</span>
+                                <span className="pay-pct-field">
+                                  <input inputMode="decimal" value={discCfg[r.kind].pct} aria-label={`${r.label} (%)`}
+                                    onChange={(e) => changeDisc(r.kind, { pct: e.target.value })} />
+                                  <span className="pay-pct-sign">%</span>
+                                </span>
+                              </div>
+                            ))}
+                            {detail && <p className="pay-disc-detail">{detail}</p>}
+                          </div>
+                        );
+                      })()}
 
                       {/* Un input por cada método seleccionado, con su equivalente en la otra moneda */}
                       {selectedMethods.length > 0 && (

@@ -423,30 +423,23 @@ a.icon-btn { text-decoration: none; }
 .pay-disc-row.off .pay-disc-check { color: var(--text-2); }
 .pay-disc .pay-pct-field { height: 34px; }
 .pay-disc .pay-pct-field input:disabled { background: transparent; color: var(--text-2); cursor: default; }
-/* Descuento de la venta: radio con una opción por descuento */
-.pay-disc { gap: 2px !important; padding: 8px !important; }
-.pay-promos-label { padding: 2px 6px 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ok); }
-.pay-dopt {
-  display: flex !important; flex-direction: row !important; align-items: center; gap: 10px !important;
-  min-height: 40px; padding: 7px 8px; border-radius: 8px; cursor: pointer; font-weight: 400;
-  transition: background .12s;
+/* Descuento de la venta: chips tipo radio + una línea de detalle */
+.pay-disc { gap: 8px !important; padding: 8px 10px !important; }
+.pay-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pay-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 30px; padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent); border-radius: 999px; background: var(--surface);
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
 }
-.pay-dopt:hover { background: color-mix(in srgb, var(--ok) 8%, transparent); }
-.pay-dopt.on { background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.06), inset 0 0 0 1px color-mix(in srgb, var(--ok) 45%, transparent); }
-.pay-dopt.dis { cursor: default; opacity: .55; }
-.pay-dopt.dis:hover { background: none; }
-.pay-dopt input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--ok); }
-.pay-dopt-text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
-.pay-dopt-name { font-size: 13.5px; font-weight: 650; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pay-dopt.on .pay-dopt-name { color: var(--ok); }
-.pay-dopt-meta { font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pay-dopt-pct {
-  flex: none; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
-  background: var(--ok-bg); color: var(--ok);
-}
-.pay-dopt.on .pay-dopt-pct { background: var(--ok); color: #fff; }
-.pay-disc-row.sub { padding: 2px 8px 6px 34px; }
-.pay-disc-sublabel { font-size: 12.5px; color: var(--text-2); }
+.pay-chip:hover { border-color: var(--ok); }
+.pay-chip.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+.pay-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pay-chip-pct { flex: none; font-weight: 750; color: var(--ok); font-variant-numeric: tabular-nums; }
+.pay-chip.on .pay-chip-pct { color: #fff; opacity: .9; }
+.pay-disc-sublabel { font-size: 12.5px; font-weight: 600; color: var(--ok); }
+.pay-disc .pay-disc-row .pay-pct-field { height: 30px; }
+.pay-disc-detail { margin: 0; font-size: 12px; color: var(--ok); }
 
 /* Línea de estado del cobro, junto al botón de finalizar */
 .pay-status {
