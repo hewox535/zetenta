@@ -248,6 +248,8 @@ button.fin-kpi:hover { border-color: var(--accent-line); }
   border: 0; background: none; border-radius: 10px; cursor: pointer; font: inherit; color: inherit; text-align: left;
 }
 .fin-bar-row:hover, .fin-bar-row.on { background: var(--accent-soft); }
+/* Safari no estira los hijos de un <button> flex: se les da el ancho completo. */
+.fin-bar-row > * { width: 100%; }
 .fin-bar-label { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
 .fin-bar-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fin-bar-label strong { font-variant-numeric: tabular-nums; }
@@ -486,4 +488,8 @@ button.fin-kpi:hover { border-color: var(--accent-line); }
   .fin-tabs { gap: 18px; }
   .fin-period strong { min-width: 120px; }
   .fin-pay-btn { min-width: 0; }
+  /* Pie de los modales: el total en su propia fila y los botones repartidos. */
+  .fm-foot { flex-wrap: wrap; }
+  .fm-foot-note, .fm-foot-left { flex: 1 1 100%; margin-right: 0; }
+  .fm-foot > .btn { flex: 1 1 0; white-space: nowrap; }
 }
