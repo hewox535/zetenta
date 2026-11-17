@@ -66,14 +66,27 @@ function InlineAdd({ label, placeholder, onAdd, busy, closeOnAdd = false, classN
 
 // Desplegable con casillas: se ven los elegidos ("S, M, L") y al abrirlo se
 // marcan los valores; abajo "＋ Otro…" para escribir uno que no esté.
+// Se cierra solo al elegir un valor (como un select normal): para marcar
+// otro se vuelve a abrir. La lista tiene un alto tope con su propio scroll y
+// se abre hacia arriba si abajo no cabe.
 function MultiValueSelect({ axis, options, value, onToggle, onAdd }) {
   const [open, setOpen] = useState(false);
+  const [up, setUp] = useState(false);
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState('');
   const ref = useRef(null);
+  const close = () => { setOpen(false); setAdding(false); setText(''); };
+  const toggleOpen = () => {
+    if (!open && ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      const below = window.innerHeight - r.bottom;
+      setUp(below < 260 && r.top > below);
+    }
+    setOpen((o) => !o);
+  };
   useEffect(() => {
     if (!open) return undefined;
-    const off = (e) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setAdding(false); } };
+    const off = (e) => { if (ref.current && !ref.current.contains(e.target)) close(); };
     // En "click" (fase de captura) y no en mousedown: en celular la lista empuja
     // el contenido, y si se cerrara al presionar, el toque caería en otro lado.
     document.addEventListener('click', off, true);
@@ -81,16 +94,14 @@ function MultiValueSelect({ axis, options, value, onToggle, onAdd }) {
   }, [open]);
   const commit = () => {
     const v = text.trim();
-    if (v) onAdd(v);
-    setText(''); setAdding(false);
-    // Sin lista todavía: el campo sigue abierto para escribir el siguiente.
+    if (v) { onAdd(v); close(); } else { setAdding(false); }
   };
   const label = value.length ? value.join(', ') : `Elegir ${axis.toLowerCase()}…`;
   return (
-    <div className={`mvs${open ? ' open' : ''}`} ref={ref}
-      onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); setAdding(false); } }}>
+    <div className={`mvs${open ? ' open' : ''}${up ? ' up' : ''}`} ref={ref}
+      onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); close(); } }}>
       <button type="button" className={`mvs-trigger${value.length ? '' : ' is-empty'}`} aria-haspopup="listbox"
-        aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        aria-expanded={open} onClick={toggleOpen}>
         <span className="mvs-text">{label}</span>
         {value.length > 1 && <span className="gv-count">{value.length}</span>}
       </button>
@@ -98,7 +109,7 @@ function MultiValueSelect({ axis, options, value, onToggle, onAdd }) {
         <div className="mvs-pop" role="listbox" aria-multiselectable="true">
           {options.map((v) => (
             <label key={v} className="mvs-opt">
-              <input type="checkbox" checked={value.includes(v)} onChange={() => onToggle(v)} />
+              <input type="checkbox" checked={value.includes(v)} onChange={() => { onToggle(v); close(); }} />
               {v}
             </label>
           ))}
