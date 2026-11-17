@@ -4,8 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import {
   fetchProducts, fetchTaxonomies, fetchBankAccounts, fetchCustomers,
-  createCustomer, createOrder, fetchOrder, mediaUrl, fetchOpenCashSession,
+  createCustomer, createOrder, fetchOrder, mediaUrl, fetchOpenCashSession, fetchDiscounts,
 } from '../lib/api';
+import { applyDiscounts, bestDiscount, isLive, todayVE } from '../lib/discounts';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { notifySale } from '../lib/push';
 import { usd, bs, money, variantLabel, offerPrice, hasOffer, offerTag } from '../lib/calc';
@@ -182,6 +183,14 @@ const isCashea = (m) => m?.kind === 'cashea';
 // El contado en bolívares tiene su propio descuento (local_discount_percent).
 const isForeignCash = (m) => m?.currency === 'USD' && !isCashea(m);
 
+// Etiqueta del descuento especial de un artículo (el de contado, o el de
+// Cashea si la venta va con Cashea).
+function PromoTag({ info, cashea }) {
+  const x = cashea ? info?.cashea : info?.cash;
+  if (!x) return null;
+  return <span className="promo-tag" title={x.name}>−{x.pct}% · {x.name}</span>;
+}
+
 // Helpers de monto (aceptan coma o punto decimal).
 const parseAmt = (s) => Number(String(s ?? '').replace(',', '.')) || 0;
 const round2 = (x) => Math.round(x * 100) / 100;
@@ -342,6 +351,10 @@ export default function Orders() {
     ves: { on: true, pct: String(Number(business?.local_discount_percent) || 0) },
   }));
   const [itemsOpen, setItemsOpen] = useState(false);   // modal con los artículos de la venta
+  // Descuentos especiales vigentes (Negocio → Ventas) y los que la vendedora
+  // quitó en esta venta.
+  const [discounts, setDiscounts] = useState([]);
+  const [skipDisc, setSkipDisc] = useState([]);
 
   useEffect(() => {
     Promise.all([fetchProducts(), fetchTaxonomies(), fetchBankAccounts(), fetchCustomers()])
@@ -349,6 +362,9 @@ export default function Orders() {
         setProducts(p); setTaxonomies(t); setMethods(payOptionsFromAccounts(accts)); setCustomers(c);
       })
       .catch((e) => setError(e.message));
+    fetchDiscounts()
+      .then((list) => { const t = todayVE(); setDiscounts(list.filter((x) => isLive(x, t))); })
+      .catch(() => {});
     fetchBcvRates().then(setRates).catch((e) => setRateError(e.message));
   }, []);
 
@@ -410,19 +426,30 @@ export default function Orders() {
   const bizD = clampPct(business?.foreign_discount_percent);
   const bizDv = clampPct(business?.local_discount_percent);
   const casheaSelected = selectedMethods.some((id) => isCashea(methods.find((x) => x.id === id)));
-  const d = casheaSelected ? 0 : baseD;
-  const dv = casheaSelected ? 0 : baseDv;
+  // Descuentos especiales: de contado cambian lo que "rinde" cada moneda
+  // (effD/effDv según la mezcla de productos); con Cashea rebajan el precio de
+  // lista (casheaOff). dueUsd es lo que hay que cubrir con los pagos.
+  const productsById = useMemo(() => new Map((products || []).map((p) => [p.id, p])), [products]);
+  const skipSet = useMemo(() => new Set(skipDisc), [skipDisc]);
+  const promoFor = (dU, dB, skip = skipSet) => applyDiscounts(cart, productsById, discounts, skip, { d: dU, dv: dB });
+  const promo = promoFor(baseD, baseDv);
+  const effD = promo.d;
+  const effDv = promo.dv;
+  const casheaOff = casheaSelected ? promo.casheaOff : 0;
+  const dueUsd = totalUsd - casheaOff;
+  const d = casheaSelected ? 0 : effD;
+  const dv = casheaSelected ? 0 : effDv;
   const bsUsd = sumBy((m) => !isCashea(m) && !isForeignCash(m));
   const usdPaid = sumBy((m) => isForeignCash(m));
   const vesCredit = listUsd + bsUsd;   // todo lo que no es divisa (para los totales)
   const paidUsd = listUsd + (dv > 0 ? bsUsd / (1 - dv) : bsUsd) + (d > 0 ? usdPaid / (1 - d) : usdPaid);
-  const rawRemaining = totalUsd - paidUsd;
+  const rawRemaining = dueUsd - paidUsd;
   // Cubierto (habilita Finalizar) cuando el restante cae dentro de la tolerancia.
   const isCovered = cart.length > 0 && rawRemaining <= PAY_EPS;
   // Descuento concedido: Cashea primero, luego Bs, luego divisa (igual que el servidor).
-  let discountUsd = 0;
+  let discountUsd = casheaOff;
   {
-    let pending = totalUsd - listUsd;
+    let pending = dueUsd - listUsd;
     if (pending > 0 && bsUsd > 0) {
       if (bsUsd + PAY_EPS >= round2(pending * (1 - dv))) { discountUsd += pending * dv; pending = 0; }
       else { discountUsd += (bsUsd * dv) / (1 - dv); pending -= bsUsd / (1 - dv); }
@@ -431,7 +458,10 @@ export default function Orders() {
       discountUsd += usdPaid + PAY_EPS >= round2(pending * (1 - d)) ? pending * d : (usdPaid * d) / (1 - d);
     }
   }
-  const discountLabel = d > 0 && dv > 0 ? 'Descuento de contado' : dv > 0 ? 'Descuento en bolívares' : 'Descuento por divisa';
+  const promoRows = promo.rows.filter((r) => (casheaSelected ? r.cashea : r.cash) > 0
+    && (skipSet.has(r.id) || (casheaSelected ? r.used.cashea : r.used.cash) > 0));
+  const promoOn = promoRows.some((r) => !skipSet.has(r.id));
+  const discountLabel = promoOn ? 'Descuentos' : d > 0 && dv > 0 ? 'Descuento de contado' : dv > 0 ? 'Descuento en bolívares' : 'Descuento por divisa';
   // Lo que el cliente realmente paga (neto = lista − descuento) y lo realmente
   // recibido en efectivo (Bs a USD + USD), para no mostrar "pagado 90$" cuando el
   // descuento hace que se cobren menos. Cuando está cubierto, recibido == a pagar.
@@ -457,7 +487,7 @@ export default function Orders() {
     keepIds.forEach((id) => {
       const om = methods.find((x) => x.id === id);
       if (!om || isCashea(om) || !n[id]) return;
-      const dm = isForeignCash(om) ? baseD : baseDv;
+      const dm = isForeignCash(om) ? effD : effDv;
       if (!dm) return;
       const amt = parseAmt(n[id]);
       n[id] = (on ? amt / (1 - dm) : amt * (1 - dm)).toFixed(2);
@@ -476,23 +506,32 @@ export default function Orders() {
 
   // Cambiar el descuento (marcar/desmarcar o el %) reescribe los montos ya
   // escritos en esa moneda para que sigan cubriendo la misma parte de la venta.
-  const changeDisc = (kind, patch) => {
-    const cur = discCfg[kind];
-    const next = { ...cur, ...patch };
-    const pctOf = (c) => (c.on ? clampPct(c.pct) : 0);
-    const oldD = pctOf(cur); const newD = pctOf(next);
-    setDiscCfg((x) => ({ ...x, [kind]: next }));
-    if (casheaSelected || oldD === newD || newD >= 1) return;
-    setPayments((prev) => {
-      const n = { ...prev };
-      selectedMethods.forEach((id) => {
-        const om = methods.find((x) => x.id === id);
-        if (!om || isCashea(om) || !n[id]) return;
-        if ((kind === 'usd') !== isForeignCash(om)) return;
-        n[id] = ((parseAmt(n[id]) * (1 - newD)) / (1 - oldD)).toFixed(2);
-      });
-      return n;
+  // Lo mismo al marcar/desmarcar un descuento especial: cambia lo que rinde
+  // cada moneda según la mezcla de productos.
+  const rescaleCash = (next) => setPayments((prev) => {
+    const n = { ...prev };
+    selectedMethods.forEach((id) => {
+      const om = methods.find((x) => x.id === id);
+      if (!om || isCashea(om) || !n[id]) return;
+      const oldD = isForeignCash(om) ? effD : effDv;
+      const newD = isForeignCash(om) ? next.d : next.dv;
+      if (oldD === newD || newD >= 1) return;
+      n[id] = ((parseAmt(n[id]) * (1 - newD)) / (1 - oldD)).toFixed(2);
     });
+    return n;
+  });
+  const changeDisc = (kind, patch) => {
+    const nextCfg = { ...discCfg, [kind]: { ...discCfg[kind], ...patch } };
+    const pctOf = (c) => (c.on ? clampPct(c.pct) : 0);
+    setDiscCfg(nextCfg);
+    if (!casheaSelected) rescaleCash(promoFor(pctOf(nextCfg.usd), pctOf(nextCfg.ves)));
+  };
+  const togglePromo = (id) => {
+    const next = new Set(skipSet);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSkipDisc([...next]);
+    // Con Cashea el efecto de abajo recalcula lo financiado y la inicial.
+    if (!casheaSelected) rescaleCash(promoFor(baseD, baseDv, next));
   };
   const hasUsdCash = selectedMethods.some((id) => isForeignCash(methods.find((x) => x.id === id)));
   const hasBsCash = selectedMethods.some((id) => {
@@ -515,8 +554,8 @@ export default function Orders() {
   // Monto que cubre TODA la venta con un método (con su descuento de contado,
   // salvo que haya Cashea), en la moneda del método.
   const fullAmountFor = (om, withCashea) => {
-    const dm = withCashea ? 0 : (isForeignCash(om) ? baseD : baseDv);
-    const net = totalUsd * (1 - dm);
+    const dm = withCashea ? 0 : (isForeignCash(om) ? effD : effDv);
+    const net = (withCashea ? totalUsd - promo.casheaOff : totalUsd) * (1 - dm);
     return (om.currency === 'USD' ? net : net * rate.value).toFixed(2);
   };
 
@@ -527,12 +566,12 @@ export default function Orders() {
     // Cashea + un solo método de contado: lo que paga el cliente ES la inicial.
     // Al cambiarlo se recalculan el % de inicial y lo que financia Cashea.
     const casheaM = methods.find((x) => selectedMethods.includes(x.id) && isCashea(x));
-    if (casheaM && !isCashea(m) && cashIds.length === 1 && rate.value && totalUsd > 0) {
+    if (casheaM && !isCashea(m) && cashIds.length === 1 && rate.value && dueUsd > 0) {
       const amt = parseAmt(val);
       const initialUsd = m.currency === 'USD' ? amt : amt / rate.value;
-      if (initialUsd > 0 && initialUsd < totalUsd - PAY_EPS) {
-        const financedUsd = totalUsd - initialUsd;
-        const pct = Math.round((initialUsd / totalUsd) * 10000) / 100;
+      if (initialUsd > 0 && initialUsd < dueUsd - PAY_EPS) {
+        const financedUsd = dueUsd - initialUsd;
+        const pct = Math.round((initialUsd / dueUsd) * 10000) / 100;
         setInitialPct((prev) => ({ ...prev, [casheaM.id]: String(pct) }));
         setPayments((prev) => ({
           ...prev,
@@ -547,11 +586,11 @@ export default function Orders() {
       return;
     }
     const other = methods.find((x) => x.id === cashIds.find((id) => id !== m.id));
-    const dmOf = (om) => (casheaSelected ? 0 : isForeignCash(om) ? baseD : baseDv);
+    const dmOf = (om) => (casheaSelected ? 0 : isForeignCash(om) ? effD : effDv);
     const dm = dmOf(m); const dOther = dmOf(other);
     const thisUsd = toUsd(m, parseAmt(val));
     const covered = dm > 0 ? thisUsd / (1 - dm) : thisUsd;
-    const left = Math.max(0, totalUsd - listUsd - covered);
+    const left = Math.max(0, dueUsd - listUsd - covered);
     const otherNet = left * (1 - dOther);
     const otherAmt = left > PAY_EPS ? (other.currency === 'USD' ? otherNet : otherNet * rate.value).toFixed(2) : '';
     setPayments((prev) => ({ ...prev, [m.id]: val, [other.id]: otherAmt }));
@@ -602,7 +641,7 @@ export default function Orders() {
     const dm = isCashea(m) ? 0 : isForeignCash(m) ? d : dv;
     const curUsd = toUsd(m, cur);
     const creditOfThis = dm > 0 ? curUsd / (1 - dm) : curUsd;
-    const remaining = totalUsd - (paidUsd - creditOfThis);
+    const remaining = dueUsd - (paidUsd - creditOfThis);
     if (remaining <= PAY_EPS) return;
     // Se cobra el saldo con el descuento del método: remaining*(1-dm).
     const net = remaining * (1 - dm);
@@ -611,18 +650,17 @@ export default function Orders() {
   };
 
   // Lo que financia Cashea no se escribe: sale del % y del total. Si cambia el
-  // total o la tasa, se recalcula solo.
+  // total, la tasa o un descuento especial, se recalcula solo (y la inicial,
+  // si la cobra un solo método).
   useEffect(() => {
     selectedMethods.forEach((id) => {
       const m = methods.find((x) => x.id === id);
       if (!isCashea(m)) return;
       const pct = parseAmt(initialPct[id]);
       if (!(pct > 0 && pct < 100)) return;
-      const fin = totalUsd * (1 - pct / 100);
-      const amount = (m.currency === 'USD' ? fin : fin * rate.value).toFixed(2);
-      setPayments((prev) => (prev[id] === amount ? prev : { ...prev, [id]: amount }));
+      setCasheaPct(m, initialPct[id]);
     });
-  }, [totalUsd, rate.value]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dueUsd, rate.value]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reparte la venta con el % de inicial que escribe la vendedora: la inicial
   // la cobra la tienda con sus métodos y el resto queda financiado por Cashea.
@@ -630,12 +668,12 @@ export default function Orders() {
     setInitialPct((prev) => ({ ...prev, [m.id]: value }));
     const pct = parseAmt(value);
     if (!(pct > 0 && pct < 100)) { setPayments((prev) => ({ ...prev, [m.id]: '' })); return; }
-    const financedUsd = totalUsd * (1 - pct / 100);
+    const financedUsd = dueUsd * (1 - pct / 100);
     const amount = m.currency === 'USD' ? financedUsd : financedUsd * rate.value;
     // Si hay un solo método más, ese cobra la inicial (a precio de lista: con
     // Cashea no hay descuento de contado).
     const others = selectedMethods.filter((id) => id !== m.id && !isCashea(methods.find((x) => x.id === id)));
-    const initialUsd = totalUsd - financedUsd;
+    const initialUsd = dueUsd - financedUsd;
     setPayments((prev) => {
       const n = { ...prev, [m.id]: amount.toFixed(2) };
       if (others.length === 1) {
@@ -757,12 +795,13 @@ export default function Orders() {
         items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName, branchId,
         foreignDiscount: Math.round(baseD * 10000) / 100,
         localDiscount: Math.round(baseDv * 10000) / 100,
+        skipDiscounts: skipDisc,
       });
       notifySale(created.id); // push a los admins del negocio (fuego y olvido)
       const full = await fetchOrder(created.id);
       setFinished(full);
       setStage('done');
-      setCart([]); setPayments({}); setSelectedMethods([]); resetCustomer(); setPanelOpen(false);
+      setCart([]); setPayments({}); setSelectedMethods([]); setSkipDisc([]); resetCustomer(); setPanelOpen(false);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -896,6 +935,10 @@ export default function Orders() {
                           {!simple && <span className="variant-count">{variantsOf(p).length} variantes</span>}
                         </div>
                         {hasOffer(p) && <span className="offer-flag">🏷 {offerTag(p)}</span>}
+                        {!hasOffer(p) && (() => {
+                          const best = bestDiscount(p, discounts, 'cash');
+                          return best && <span className="offer-flag promo" title={best.name}>−{best.pct}%</span>;
+                        })()}
                         <div className="product-card-prices">
                           {hasOffer(p) ? (
                             <>
@@ -1021,6 +1064,7 @@ export default function Orders() {
                           <div className="cart-line-info">
                             <div className="cart-line-name">{c.name}{c.label && <span className="muted"> · {c.label}</span>}</div>
                             <div className="muted">{usd(c.price)} · {bs(c.price * rate.value)}</div>
+                            <PromoTag info={promo.perLine.get(c.id)} cashea={casheaSelected} />
                           </div>
                           <div className="qty-stepper">
                             <button onClick={() => setQty(c.id, c.qty - 1)} aria-label="Quitar uno">−</button>
@@ -1071,9 +1115,27 @@ export default function Orders() {
                         )}
                       </div>
 
-                      {/* Descuento de contado que se está aplicando: se puede quitar o cambiar el % */}
-                      {discRows.length > 0 && (
+                      {/* Descuentos de la venta: los especiales que tocan a estos
+                          artículos (una línea cada uno) y el de contado por moneda.
+                          Todos se pueden quitar; el de contado, además, cambiar el %. */}
+                      {(promoRows.length > 0 || discRows.length > 0) && (
                         <div className="pay-disc">
+                          {promoRows.map((r) => {
+                            const on = !skipSet.has(r.id);
+                            const pct = casheaSelected ? r.cashea : r.cash;
+                            return (
+                              <div className={`pay-disc-row promo${on ? '' : ' off'}`} key={r.id}>
+                                <label className="pay-disc-check">
+                                  <input type="checkbox" checked={on} onChange={() => togglePromo(r.id)} />
+                                  <span className="pay-promo-name">{r.name}</span>
+                                </label>
+                                <span className="pay-promo-meta">
+                                  <span className="pay-promo-count">{r.count} {r.count === 1 ? 'art.' : 'arts.'}</span>
+                                  <span className="pay-promo-pct" title={casheaSelected ? 'Con Cashea' : 'De contado'}>−{pct}%</span>
+                                </span>
+                              </div>
+                            );
+                          })}
                           {discRows.map((r) => {
                             const cfg = discCfg[r.kind];
                             return (
@@ -1109,7 +1171,7 @@ export default function Orders() {
                                 onExact={() => fillExact(m)}
                                 initialPct={isCashea(m) ? (initialPct[m.id] ?? '') : null}
                                 onInitialPct={isCashea(m) ? (val) => setCasheaPct(m, val) : null}
-                                totalUsd={totalUsd} />
+                                totalUsd={dueUsd} />
                             ))}
                         </div>
                       )}
@@ -1180,6 +1242,7 @@ export default function Orders() {
                   <span className="pos-items-info">
                     <strong>{c.name}</strong>
                     <span>{[c.label, `${c.qty} × ${usd(c.price)}`].filter(Boolean).join(' · ')}</span>
+                    <PromoTag info={promo.perLine.get(c.id)} cashea={casheaSelected} />
                   </span>
                   <span className="pos-items-amt">
                     <strong>{usd(c.price * c.qty)}</strong>
