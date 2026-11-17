@@ -590,7 +590,7 @@ export async function deleteCustomer(id) {
 // items: [{ variant_id, quantity }]   payments: [{ method_id, method_name, currency, amount }]
 // creditDue (yyyy-mm-dd): lo que no se cobre queda como cuenta por cobrar del
 // cliente, con ese vencimiento.
-export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note, branchId, creditDue, foreignDiscount, localDiscount, skipDiscounts }) {
+export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note, branchId, creditDue, foreignDiscount, localDiscount, discountId }) {
   return unwrap(await supabase.rpc('create_order', {
     p_items: items,
     p_payments: payments,
@@ -604,8 +604,8 @@ export async function createOrder({ items, payments, rate, rateSource, customerI
     // % de descuento de contado de esta venta (si no van, el servidor usa los del negocio)
     p_foreign_discount: foreignDiscount ?? null,
     p_local_discount: localDiscount ?? null,
-    // Descuentos especiales que la vendedora quitó en esta venta
-    p_skip_discounts: skipDiscounts?.length ? skipDiscounts : null,
+    // Descuento especial que eligió la cajera (queda guardado en la venta)
+    p_discount_id: discountId || null,
   }));
 }
 

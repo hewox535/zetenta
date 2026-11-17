@@ -25,6 +25,11 @@ function Amount({ o, mobile = false }) {
           <s>{usd(a.list)}</s> −{usd(a.discount)}
         </span>
       )}
+      {o.discount_name && (
+        <span className="oh-promo" title={`Descuento especial aplicado en la venta (−${Number(o.discount_percent)}%)`}>
+          {o.discount_name} · −{Number(o.discount_percent)}%
+        </span>
+      )}
       <span className="muted oh-ves">{bs(a.totalVes)}</span>
       {a.credit > 0.005 && <span className="oh-credit">{usd(a.credit)} a crédito</span>}
     </>

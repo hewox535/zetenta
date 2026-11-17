@@ -53,7 +53,7 @@ export default function OrderReceipt({ business, order }) {
         {discount > 0.005 && (
           <>
             <div className="receipt-total-row">
-              <span>Descuento de contado</span>
+              <span>{order.discount_name ? `${order.discount_name} (−${Number(order.discount_percent)}%)` : 'Descuento de contado'}</span>
               <span>−{usd(discount)}</span>
             </div>
             <div className="receipt-total-row grand">
