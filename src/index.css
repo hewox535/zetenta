@@ -423,23 +423,37 @@ a.icon-btn { text-decoration: none; }
 .pay-disc-row.off .pay-disc-check { color: var(--text-2); }
 .pay-disc .pay-pct-field { height: 34px; }
 .pay-disc .pay-pct-field input:disabled { background: transparent; color: var(--text-2); cursor: default; }
-/* Descuento de la venta: chips tipo radio + una línea de detalle */
-.pay-disc { gap: 8px !important; padding: 8px 10px !important; }
-.pay-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.pay-chip {
-  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 30px; padding: 0 11px;
-  border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent); border-radius: 999px; background: var(--surface);
-  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer;
-  transition: background .12s, border-color .12s, color .12s;
+/* Descuento de la venta: una fila con el elegido; el modal permite cambiarlo */
+.pay-dsel-wrap { margin: 12px 16px 0; }
+.pay-dsel {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 0 10px 0 12px;
+  border: 0; border-radius: var(--radius-sm); background: var(--ok-bg); cursor: pointer;
+  font: inherit; text-align: left; color: var(--ok); transition: box-shadow .12s;
 }
-.pay-chip:hover { border-color: var(--ok); }
-.pay-chip.on { background: var(--ok); border-color: var(--ok); color: #fff; }
-.pay-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.pay-chip-pct { flex: none; font-weight: 750; color: var(--ok); font-variant-numeric: tabular-nums; }
-.pay-chip.on .pay-chip-pct { color: #fff; opacity: .9; }
-.pay-disc-sublabel { font-size: 12.5px; font-weight: 600; color: var(--ok); }
-.pay-disc .pay-disc-row .pay-pct-field { height: 30px; }
-.pay-disc-detail { margin: 0; font-size: 12px; color: var(--ok); }
+.pay-dsel:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 45%, transparent); }
+.pay-dsel.none { background: rgba(0,0,0,.04); color: var(--text-2); }
+.pay-dsel-icon { flex: none; }
+.pay-dsel-value { flex: 1 1 auto; min-width: 0; font-size: 13.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pay-dsel-pct { flex: none; padding: 2px 8px; border-radius: 999px; background: var(--ok); color: #fff; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pay-dsel-chev { flex: none; opacity: .7; }
+.pay-disc-detail { margin: 6px 2px 0; font-size: 12px; color: var(--text-2); }
+
+/* Modal del descuento */
+.dopt-list { display: flex; flex-direction: column; gap: 6px; }
+.dopt {
+  display: flex !important; flex-direction: row !important; align-items: center; gap: 12px !important;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; font-weight: 400;
+  transition: border-color .12s, background .12s;
+}
+.dopt:hover { border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.dopt.on { border-color: var(--ok); background: var(--ok-bg); }
+.dopt input { width: 17px; height: 17px; margin: 0; flex: none; accent-color: var(--ok); }
+.dopt-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 auto; }
+.dopt-name { font-size: 14px; font-weight: 650; }
+.dopt-meta { font-size: 12.5px; color: var(--text-2); }
+.dopt-pct { flex: none; padding: 3px 9px; border-radius: 999px; background: var(--ok-bg); color: var(--ok); font-size: 12.5px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.dopt.on .dopt-pct { background: var(--ok); color: #fff; }
+.dopt-sub { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px 4px 43px; font-size: 13px; color: var(--text-2); }
 
 /* Línea de estado del cobro, junto al botón de finalizar */
 .pay-status {
