@@ -4,7 +4,7 @@
 //   cada eje, un desplegable donde se marcan sus valores. Crea de una vez todas
 //   las combinaciones (4 tallas × 3 colores = 12 variaciones).
 // - VariantTable: las variaciones en una tabla editable (cantidad, precio,
-//   costo, SKU, foto) con "Para todas" para llenar en bloque.
+//   costo, SKU, foto). Los datos comunes se ponen al crearlas, en el modal.
 //
 // Una fila: { key, id?, attributes, stock, price, cost, sku, target?, file?, isNew }
 import { useEffect, useRef, useState } from 'react';
@@ -343,36 +343,15 @@ function MissingValue({ axis, terms, onChange }) {
 // onPatch(key, patch), onRemove(row) quita una fila nueva, menuFor(row) → ítems ⋯
 // lock: { stock, price, info, media }. showTarget: columna de stock objetivo.
 export function VariantTable({
-  axes, rows, termsOf, onPatch, onBulk, onRemove, onPhoto, photoOf, menuFor,
+  axes, rows, termsOf, onPatch, onRemove, onPhoto, photoOf, menuFor,
   lock = {}, showTarget = false, disabled = false, photoHint,
 }) {
-  const [bulk, setBulk] = useState({ stock: '', price: '', cost: '' });
   const total = rows.reduce((s, r) => s + (Number(r.stock) || 0), 0);
   const cls = `vt-row${showTarget ? ' with-target' : ''}`;
 
-  function applyBulk() {
-    const patch = {};
-    for (const k of ['stock', 'price', 'cost']) if (bulk[k] !== '') patch[k] = bulk[k];
-    onBulk(patch);
-    setBulk({ stock: '', price: '', cost: '' });
-  }
-  const bulkEmpty = bulk.stock === '' && bulk.price === '' && bulk.cost === '';
 
   return (
     <div className="vt">
-      {rows.length > 1 && (
-        <div className="vt-bulk">
-          <span className="vt-bulk-label">Para todas</span>
-          {!lock.stock && <input type="number" min="0" step="1" placeholder="Cantidad" value={bulk.stock} disabled={disabled}
-            onChange={(e) => setBulk((b) => ({ ...b, stock: e.target.value }))} />}
-          {!lock.price && <input type="number" min="0" step="0.01" placeholder="Precio" value={bulk.price} disabled={disabled}
-            onChange={(e) => setBulk((b) => ({ ...b, price: e.target.value }))} />}
-          {!lock.price && <input type="number" min="0" step="0.01" placeholder="Costo" value={bulk.cost} disabled={disabled}
-            onChange={(e) => setBulk((b) => ({ ...b, cost: e.target.value }))} />}
-          <button type="button" className="btn ghost sm" disabled={disabled || bulkEmpty} onClick={applyBulk}>Aplicar</button>
-        </div>
-      )}
-
       <div className="vt-table" role="table" aria-label="Variaciones">
         <div className={`${cls} vt-head`} role="row">
           <span role="columnheader" aria-label="Foto" />

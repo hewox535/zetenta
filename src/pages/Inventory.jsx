@@ -761,14 +761,6 @@ export default function Inventory() {
       };
     });
   }
-  function bulkVarRows(patch) {
-    const p = { ...patch };
-    if (lockStock) delete p.stock;
-    if (lockPrice) { delete p.price; delete p.cost; }
-    setModal((m) => (m.mode === 'create'
-      ? { ...m, vb: m.vb.map((r) => ({ ...r, ...p })) }
-      : { ...m, variants: m.variants.map((v) => ({ ...v, ...p })), vbNew: m.vbNew.map((r) => ({ ...r, ...p })) }));
-  }
   function removeVarRow(row) {
     setModal((m) => (m.mode === 'create'
       ? { ...m, vb: m.vb.filter((r) => r.key !== row.key) }
@@ -1508,7 +1500,6 @@ export default function Inventory() {
                       rows={varRows}
                       termsOf={(a) => axisTermsByName(a).map((t) => t.name)}
                       onPatch={patchVarRow}
-                      onBulk={bulkVarRows}
                       onRemove={removeVarRow}
                       onPhoto={onVarPhoto}
                       photoOf={varPhotoOf}

@@ -308,6 +308,32 @@ input:focus, select:focus, textarea:focus {
 }
 input::placeholder, textarea::placeholder { color: #b0b0b6; }
 
+/* Selects iguales en todos los navegadores (Safari/iOS los pinta grises con
+   degradado): sin apariencia nativa y con una flecha propia. */
+select {
+  -webkit-appearance: none; appearance: none; padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' fill='none' stroke='%2386868b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 12px;
+}
+select:disabled { opacity: .6; }
+
+/* Fechas en iOS: el control nativo ignora el ancho del contenedor (rompe el
+   formulario) y vacío pierde la altura. Se le quita la apariencia nativa, se
+   limita al ancho disponible y se le da la misma altura que los demás campos. */
+input[type="date"], input[type="time"], input[type="month"], input[type="datetime-local"] {
+  -webkit-appearance: none; appearance: none; display: flex; align-items: center;
+  width: 100%; min-width: 0; max-width: 100%; min-height: 42px; text-align: left;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value,
+input[type="month"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+input[type="date"]::-webkit-calendar-picker-indicator { opacity: .55; cursor: pointer; }
+
+/* iPhone hace zoom al tocar un campo con letra menor a 16 px. */
+@media (max-width: 640px) {
+  :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { font-size: 16px; }
+}
+
 /* Botón que parece enlace (acciones inline) */
 .linklike { border: none; background: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
 
