@@ -350,7 +350,11 @@ export default function Orders() {
   // un descuento especial. Es un radio: la cajera elige cuál usa la venta.
   const [choice, setChoice] = useState('cash');
   const [discPick, setDiscPick] = useState(null);   // modal del descuento: opción marcada (sin aplicar)
-  const promoId = choice !== 'cash' && choice !== 'none' ? choice : null;
+  const promoId = !['cash', 'none', 'custom'].includes(choice) ? choice : null;
+  // Descuento personalizado: un % para toda la venta y un nombre opcional.
+  const [custom, setCustom] = useState({ pct: '', name: '' });
+  const [customDraft, setCustomDraft] = useState({ pct: '', name: '' });
+  const customDsOf = (c) => ({ id: 'custom', name: c.name.trim() || 'Personalizado', cash_percent: parseAmt(c.pct), cashea_percent: parseAmt(c.pct), term_ids: [] });
 
   useEffect(() => {
     Promise.all([fetchProducts(), fetchTaxonomies(), fetchBankAccounts(), fetchCustomers()])
@@ -427,7 +431,7 @@ export default function Orders() {
   // categorías, solo a sus artículos (el resto conserva el de contado). De
   // contado no se suma al de la moneda: en cada artículo, el mayor. Con Cashea
   // rebaja el precio de lista con su % de Cashea. Igual que create_order().
-  const promoDs = discounts.find((x) => x.id === promoId) || null;
+  const promoDs = choice === 'custom' ? customDsOf(custom) : discounts.find((x) => x.id === promoId) || null;
   const promoPct = (ds, cashea) => clampPct(cashea ? ds?.cashea_percent : ds?.cash_percent);
   const productsById = useMemo(() => new Map((products || []).map((p) => [p.id, p])), [products]);
   const qualifies = (ds, productId) => {
@@ -548,8 +552,8 @@ export default function Orders() {
   };
   // Elegir el descuento de la venta (radio): los montos ya escritos se ajustan
   // para seguir cubriendo la misma parte de la venta.
-  const pickChoice = (next) => {
-    const ds = discounts.find((x) => x.id === next) || null;
+  const pickChoice = (next, dsOverride) => {
+    const ds = dsOverride || discounts.find((x) => x.id === next) || null;
     const off = next === 'none';
     setChoice(next);
     // Con Cashea el efecto de abajo recalcula lo financiado y la inicial.
@@ -584,8 +588,11 @@ export default function Orders() {
           : t.length ? `Solo ${t.join(', ')} · ${hits ? `${hits} ${hits === 1 ? 'art.' : 'arts.'} en esta venta` : 'ninguno en esta venta'}` : 'Toda la venta',
       };
     }),
+    { id: 'custom', name: 'Personalizado', meta: 'Un % propio para esta venta, con nombre opcional',
+      pct: choice === 'custom' && parseAmt(custom.pct) > 0 ? `−${parseAmt(custom.pct)}%` : null },
     { id: 'none', name: 'Ninguno', meta: 'La venta va a precio de lista' },
   ].filter(Boolean);
+  const customOk = parseAmt(customDraft.pct) > 0 && parseAmt(customDraft.pct) < 100;
   const discSummary = (() => {
     if (choice === 'none') return { name: 'Ninguno' };
     if (choice === 'cash') {
@@ -859,12 +866,14 @@ export default function Orders() {
         foreignDiscount: Math.round(baseD * 10000) / 100,
         localDiscount: Math.round(baseDv * 10000) / 100,
         discountId: promoId,
+        customPercent: choice === 'custom' ? parseAmt(custom.pct) : null,
+        customName: choice === 'custom' ? custom.name.trim() : null,
       });
       notifySale(created.id); // push a los admins del negocio (fuego y olvido)
       const full = await fetchOrder(created.id);
       setFinished(full);
       setStage('done');
-      setCart([]); setPayments({}); setSelectedMethods([]); setChoice('cash'); resetCustomer(); setPanelOpen(false);
+      setCart([]); setPayments({}); setSelectedMethods([]); setChoice('cash'); setCustom({ pct: '', name: '' }); resetCustomer(); setPanelOpen(false);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -1177,15 +1186,16 @@ export default function Orders() {
                           tocarla se abre un modal para elegir otro y aplicarlo. */}
                       {(discounts.length > 0 || hasContado) && (
                         <div className="pay-dsel-wrap">
+                          <span className="pay-dsel-title">Descuento</span>
                           {/* Vista previa: las opciones como pills en una fila (la
                               elegida primero y resaltada); toda la fila abre el
                               selector, por eso la flecha al borde. */}
-                          <button type="button" className="pay-dsel" onClick={() => setDiscPick(choice)}
+                          <button type="button" className="pay-dsel" onClick={() => { setDiscPick(choice); setCustomDraft(custom); }}
                             aria-haspopup="dialog" aria-label={`Descuento: ${discSummary.name}. Cambiar`}>
                             <span className="pay-dsel-pills">
                               {[...discOptions].sort((a, b) => Number(b.id === choice) - Number(a.id === choice)).map((o) => (
                                 <span key={o.id} className={`pay-dsel-pill${o.id === choice ? ' on' : ''}`}>
-                                  {o.name}{(o.id === choice ? discSummary.pct : o.pct) && <b>{o.id === choice ? discSummary.pct : o.pct}</b>}
+                                  {o.id === choice ? discSummary.name : o.name}{(o.id === choice ? discSummary.pct : o.pct) && <b>{o.id === choice ? discSummary.pct : o.pct}</b>}
                                 </span>
                               ))}
                             </span>
@@ -1265,7 +1275,12 @@ export default function Orders() {
           footer={(
             <>
               <button type="button" className="btn ghost" onClick={() => setDiscPick(null)}>Cancelar</button>
-              <button type="button" className="btn primary" onClick={() => { pickChoice(discPick); setDiscPick(null); }}>Aplicar</button>
+              {discPick === 'custom' && !customOk && <span className="fm-foot-note">Escribe un % entre 1 y 99.</span>}
+              <button type="button" className="btn primary" disabled={discPick === 'custom' && !customOk} onClick={() => {
+                if (discPick === 'custom') { setCustom(customDraft); pickChoice('custom', customDsOf(customDraft)); }
+                else pickChoice(discPick);
+                setDiscPick(null);
+              }}>Aplicar</button>
             </>
           )}>
           <div className="dopt-list" role="radiogroup" aria-label="Descuento de la venta">
@@ -1279,6 +1294,23 @@ export default function Orders() {
                   </span>
                   {o.pct && <span className="dopt-pct">{o.pct}</span>}
                 </label>
+                {o.id === 'custom' && discPick === 'custom' && (
+                  <div className="dopt-custom">
+                    <label className="dopt-custom-pct">
+                      <span>Descuento</span>
+                      <span className="pay-pct-field">
+                        <input inputMode="decimal" value={customDraft.pct} placeholder="0" autoFocus aria-label="Descuento personalizado (%)"
+                          onChange={(e) => setCustomDraft((c) => ({ ...c, pct: e.target.value }))} />
+                        <span className="pay-pct-sign">%</span>
+                      </span>
+                    </label>
+                    <label className="dopt-custom-name">
+                      <span>Nombre (opcional)</span>
+                      <input value={customDraft.name} maxLength={40} placeholder="Ej.: Cliente fiel"
+                        onChange={(e) => setCustomDraft((c) => ({ ...c, name: e.target.value }))} />
+                    </label>
+                  </div>
+                )}
                 {o.id === 'cash' && discPick === 'cash' && discRows.map((r) => (
                   <div className="dopt-sub" key={r.kind}>
                     <span>{r.label}</span>
