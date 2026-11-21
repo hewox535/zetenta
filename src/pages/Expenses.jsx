@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import { useConfirm } from '../components/Confirm';
+import { useBranchFilter, BranchSelect } from '../components/BranchFilter';
 import { FinModal, RowMenu, Toast, SortHead } from '../components/FinUI';
 import { notifyCashChanged } from '../lib/cashEvents';
 import {
@@ -77,7 +78,9 @@ export default function Expenses() {
   const [prev, setPrev] = useState({ all: 0, fixed: 0, variable: 0, sales: 0 });
   const [sales, setSales] = useState(null);
   const [categories, setCategories] = useState([]);
-  const [recurring, setRecurring] = useState([]);
+  const [allRecurring, setRecurring] = useState([]);
+  const bf = useBranchFilter();
+  const recurring = useMemo(() => allRecurring.filter((r) => bf.match(r.branch_id)), [allRecurring, bf.match]);
   const [accounts, setAccounts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [rate, setRate] = useState({ value: 0 });
@@ -95,14 +98,14 @@ export default function Expenses() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const all = await fetchExpenses(pFrom, addDays(to, -1));
+      const all = (await fetchExpenses(pFrom, addDays(to, -1))).filter((e) => bf.match(e.branch_id));
       const cur = all.filter((e) => e.spent_on >= from);
       const old = all.filter((e) => e.spent_on < from);
       const sum = (l) => round2(l.reduce((s, e) => s + Number(e.amount_usd), 0));
       setRows(cur);
       const [salesNow, salesPrev] = await Promise.all([
-        fetchSalesTotal(toTs(from), toTs(to)).catch(() => null),
-        fetchSalesTotal(toTs(pFrom), toTs(from)).catch(() => 0),
+        fetchSalesTotal(toTs(from), toTs(to), bf.id).catch(() => null),
+        fetchSalesTotal(toTs(pFrom), toTs(from), bf.id).catch(() => 0),
       ]);
       setSales(salesNow);
       setPrev({
@@ -110,7 +113,7 @@ export default function Expenses() {
         variable: sum(old.filter((e) => e.kind === 'variable')), sales: salesPrev || 0,
       });
     } catch (e) { setError(e.message); setRows([]); }
-  }, [from, to, pFrom]);
+  }, [from, to, pFrom, bf.match, bf.id]);
 
   const loadRecurring = useCallback(() => fetchRecurringExpenses().then(setRecurring).catch(() => {}), []);
 
@@ -337,6 +340,7 @@ export default function Expenses() {
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   <option value="none">Sin categoría</option>
                 </select>
+                <BranchSelect filter={bf} />
                 <div className="chip-row">
                   {KINDS.map(([k, l]) => (
                     <button key={k} type="button" className={`chip${kindFilter === k ? ' on' : ''}`} onClick={() => setKindFilter(k)}>
@@ -385,6 +389,7 @@ export default function Expenses() {
                         </strong>
                         <span>
                           {e.kind === 'fixed' ? 'Fijo' : 'Variable'}
+                          {bf.show && bf.nameOf(e.branch_id) && ` · ${bf.nameOf(e.branch_id)}`}
                           {e.supplier_name && ` · ${e.supplier_name}`}
                           {e.note && ` · ${e.note}`}
                         </span>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchMovements, fetchProducts, fetchStaff } from '../lib/api';
 import { formatDate, variantLabel } from '../lib/calc';
+import { useBranchFilter, BranchSelect } from '../components/BranchFilter';
 
 const MOVE_LABELS = { in: 'Entrada', out: 'Salida', adjustment: 'Ajuste' };
 
@@ -13,6 +14,7 @@ export default function InventoryHistory() {
 
   const [productId, setProductId] = useState('');
   const [type, setType] = useState('');
+  const bf = useBranchFilter();
 
   useEffect(() => {
     fetchProducts().then(setProducts).catch(() => {});
@@ -21,9 +23,9 @@ export default function InventoryHistory() {
 
   useEffect(() => {
     setMovements(null);
-    fetchMovements(500, { productId: productId || undefined, type: type || undefined })
+    fetchMovements(500, { productId: productId || undefined, type: type || undefined, branchId: bf.id || undefined })
       .then(setMovements).catch((e) => setError(e.message));
-  }, [productId, type]);
+  }, [productId, type, bf.id]);
 
   const staffName = useMemo(() => {
     const m = new Map();
@@ -54,6 +56,7 @@ export default function InventoryHistory() {
           <option value="out">Salidas</option>
           <option value="adjustment">Ajustes</option>
         </select>
+        <BranchSelect filter={bf} className="" />
       </div>
 
       {error && <div className="form-error">{error}</div>}
@@ -68,7 +71,7 @@ export default function InventoryHistory() {
           <table className="list">
             <thead>
               <tr>
-                <th>Fecha</th><th>Producto</th><th>Usuario</th>
+                <th>Fecha</th>{bf.show && <th>Sucursal</th>}<th>Producto</th><th>Usuario</th>
                 <th>Tipo</th><th className="num">Cantidad</th><th>Nota</th>
               </tr>
             </thead>
@@ -78,6 +81,7 @@ export default function InventoryHistory() {
                 return (
                   <tr key={m.id}>
                     <td>{formatDate(m.created_at)}</td>
+                    {bf.show && <td className="muted" style={{ whiteSpace: 'nowrap' }}>{bf.nameOf(m.branch_id) || '—'}</td>}
                     <td>{m.products?.name ?? '—'}{vlabel && <span className="muted"> · {vlabel}</span>}</td>
                     <td className="muted">{staffName.get(m.created_by) || <span className="muted">—</span>}</td>
                     <td><span className={`badge ${m.type}`}>{MOVE_LABELS[m.type]}</span></td>
@@ -101,7 +105,10 @@ export default function InventoryHistory() {
                   <span className="mcard-title">
                     {m.products?.name ?? '—'}{vlabel && <span className="muted"> · {vlabel}</span>}
                   </span>
-                  <span className="muted">{formatDate(m.created_at)}{who ? ` · ${who}` : ''}</span>
+                  <span className="muted">
+                    {formatDate(m.created_at)}{who ? ` · ${who}` : ''}
+                    {bf.show && bf.nameOf(m.branch_id) ? ` · ${bf.nameOf(m.branch_id)}` : ''}
+                  </span>
                   {m.note && <span className="muted">{m.note}</span>}
                 </div>
                 <div className="mcard-amount">

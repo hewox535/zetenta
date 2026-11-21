@@ -302,13 +302,14 @@ export async function deleteVariant(id) {
   unwrap(await supabase.from('product_variants').delete().eq('id', id));
 }
 
-export async function fetchMovements(limit = 30, { productId, type } = {}) {
+export async function fetchMovements(limit = 30, { productId, type, branchId } = {}) {
   let q = supabase.from('inventory_movements')
     .select('*, products(name), product_variants(attributes)')
     .order('created_at', { ascending: false })
     .limit(limit);
   if (productId) q = q.eq('product_id', productId);
   if (type) q = q.eq('type', type);
+  if (branchId) q = q.eq('branch_id', branchId);
   return unwrap(await q);
 }
 
@@ -944,10 +945,12 @@ export async function expenseReceiptUrl(path) {
 }
 
 // Ventas netas de un período (para comparar gastos contra ingresos).
-export async function fetchSalesTotal(fromISO, toISO) {
-  const rows = unwrap(await supabase.from('orders')
+export async function fetchSalesTotal(fromISO, toISO, branchId) {
+  let q = supabase.from('orders')
     .select('total_usd, discount_usd, created_at')
     .is('cancelled_at', null)
-    .gte('created_at', fromISO).lt('created_at', toISO));
+    .gte('created_at', fromISO).lt('created_at', toISO);
+  if (branchId) q = q.eq('branch_id', branchId);
+  const rows = unwrap(await q);
   return rows.reduce((s, o) => s + Number(o.total_usd) - Number(o.discount_usd || 0), 0);
 }
