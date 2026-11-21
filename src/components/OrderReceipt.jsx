@@ -1,4 +1,5 @@
 import { usd, bs, money, formatDate } from '../lib/calc';
+import { useBranch } from '../context/BranchContext';
 
 // Recibo de pedido con formato de ticket. Se usa tanto en la pantalla de
 // confirmación como en la vista de un pedido guardado. Imprimible directamente
@@ -12,12 +13,16 @@ export default function OrderReceipt({ business, order }) {
   const paidUsd = payments.reduce((s, p) => s + (Number(p.amount_usd) || 0), 0);
   const credit = Number(order.credit_usd) || 0;
   const change = credit > 0 ? 0 : paidUsd - effectiveTotal;
+  // La sucursal solo se imprime si el negocio tiene más de una.
+  const { allBranches, branchById } = useBranch();
+  const branch = allBranches.length > 1 ? branchById.get(order.branch_id) : null;
 
   return (
     <div className="receipt">
       <div className="receipt-head">
         <div className="receipt-biz">{business?.name || 'Venta'}</div>
         {business?.rif && <div className="receipt-muted">{business.rif}</div>}
+        {branch && <div className="receipt-muted">Sucursal {branch.name}{branch.address ? ` · ${branch.address}` : ''}</div>}
         <div className="receipt-muted">Venta Nº {order.number}</div>
         <div className="receipt-muted">{formatDate(order.created_at)}</div>
         {order.customer_name && <div className="receipt-muted">Cliente: {order.customer_name}</div>}
