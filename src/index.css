@@ -1764,3 +1764,12 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .cash-mode-text .muted { font-size: 13px; line-height: 1.45; }
 .cash-mode-tag { padding: 1px 8px; border-radius: 999px; background: var(--ok-bg); color: var(--ok); font-size: 11px; font-weight: 700; }
 @media (max-width: 640px) { .cash-mode-opts { grid-template-columns: 1fr; } }
+
+/* Editar sucursales (desde el selector del menú lateral) */
+.branch-edit-list { display: flex; flex-direction: column; gap: 12px; }
+.branch-edit-row { display: flex; flex-direction: column; gap: 6px; }
+.branch-edit-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.branch-edit-tag { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--accent-soft); color: var(--accent); }
+.branch-edit-tag.off { background: rgba(0,0,0,.06); color: var(--text-2); }
+.branch-edit-tag.cur { background: var(--ok-bg); color: var(--ok); }
+.branch-edit-row input[aria-invalid] { border-color: var(--danger); }
