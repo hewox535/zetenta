@@ -30,37 +30,91 @@ const ICON = {
   plus: <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>,
 };
 
+// ¿Pantalla angosta? (en el teléfono la configuración es lista → sección).
+function useNarrow(query = '(max-width: 900px)') {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, [query]);
+  return narrow;
+}
+
 export default function Settings() {
   const { business, capabilities, refreshBusiness, profile } = useAuth();
   const [section, setSection] = useState('fiscal');
+  // En el teléfono: primero la lista de secciones; al tocar una, se abre.
+  const narrow = useNarrow();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const openSection = (key) => { setSection(key); setMobileOpen(true); window.scrollTo?.(0, 0); };
 
   if (!business) {
     return <div className="page"><div className="empty">Tu usuario no tiene un negocio asociado.</div></div>;
   }
 
   const tabs = [
-    { key: 'fiscal', label: 'Datos fiscales', icon: 'M4 5h16v14H4zM8 9h8M8 13h5' },
-    capabilities?.retentions && { key: 'retentions', label: 'Retenciones', icon: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6' },
-    capabilities?.inventory && { key: 'inventory', label: 'Inventario', icon: 'M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10' },
-    capabilities?.inventory && { key: 'catalog', label: 'Catálogo', icon: 'M5 4h14v4H5zM5 8v12h14V8M9 12h6' },
-    { key: 'branches', label: 'Sucursales', icon: 'M4 21V9l8-5 8 5v12M9 21v-6h6v6' },
-    capabilities?.orders && { key: 'orders', label: 'Ventas', icon: 'M4 6h2l2 10h10l2-7H7M10 20h.01M17 20h.01' },
-    { key: 'staff', label: 'Personal', icon: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14c2 .8 3 3 3 6' },
-    { key: 'sessions', label: 'Sesiones', icon: 'M4 5h16v11H4zM9 20h6M12 16v4' },
-    { key: 'notifications', label: 'Notificaciones', icon: 'M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 21h4' },
+    { key: 'fiscal', label: 'Datos fiscales', desc: 'Nombre, RIF, dirección y sello', icon: 'M4 5h16v14H4zM8 9h8M8 13h5' },
+    capabilities?.retentions && { key: 'retentions', label: 'Retenciones', desc: 'Numeración de los comprobantes', icon: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6' },
+    capabilities?.inventory && { key: 'inventory', label: 'Inventario', desc: 'Categorías, tallas y stock bajo', icon: 'M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10' },
+    capabilities?.inventory && { key: 'catalog', label: 'Catálogo', desc: 'Tu tienda en línea y WhatsApp', icon: 'M5 4h14v4H5zM5 8v12h14V8M9 12h6' },
+    { key: 'branches', label: 'Sucursales', desc: 'Sucursales y acceso del personal', icon: 'M4 21V9l8-5 8 5v12M9 21v-6h6v6' },
+    capabilities?.orders && { key: 'orders', label: 'Ventas', desc: 'Cuentas de cobro, descuentos y caja', icon: 'M4 6h2l2 10h10l2-7H7M10 20h.01M17 20h.01' },
+    { key: 'staff', label: 'Personal', desc: 'Usuarios, roles y permisos', icon: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14c2 .8 3 3 3 6' },
+    { key: 'sessions', label: 'Sesiones', desc: 'Dispositivos con la sesión abierta', icon: 'M4 5h16v11H4zM9 20h6M12 16v4' },
+    { key: 'notifications', label: 'Notificaciones', desc: 'Avisos en este dispositivo', icon: 'M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 21h4' },
   ].filter(Boolean);
+
+  const current = tabs.find((t) => t.key === section) || tabs[0];
+
+  // Teléfono, sin sección abierta: lista de secciones (sin barra con scroll horizontal).
+  if (narrow && !mobileOpen) {
+    return (
+      <div className="page settings-page">
+        <header className="page-head">
+          <div>
+            <h1>Negocio</h1>
+            <p className="page-sub">Configuración de {business.name}.</p>
+          </div>
+        </header>
+        <nav className="settings-list card" aria-label="Secciones de configuración">
+          {tabs.map((t) => (
+            <button key={t.key} type="button" className="settings-list-row" onClick={() => openSection(t.key)}>
+              <span className="settings-list-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d={t.icon} /></svg></span>
+              <span className="settings-list-text">
+                <strong>{t.label}</strong>
+                <span>{t.desc}</span>
+              </span>
+              <svg className="settings-list-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+            </button>
+          ))}
+        </nav>
+      </div>
+    );
+  }
 
   return (
     <div className="page settings-page">
-      <header className="page-head">
-        <div>
-          <h1>Negocio</h1>
-          <p className="page-sub">Configuración de {business.name}.</p>
-        </div>
-      </header>
+      {narrow ? (
+        <header className="page-head settings-mhead">
+          <button type="button" className="settings-back" onClick={() => setMobileOpen(false)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+            Negocio
+          </button>
+          <h1>{current.label}</h1>
+        </header>
+      ) : (
+        <header className="page-head">
+          <div>
+            <h1>Negocio</h1>
+            <p className="page-sub">Configuración de {business.name}.</p>
+          </div>
+        </header>
+      )}
 
       <div className="settings-layout">
-      <nav className="settings-nav" aria-label="Secciones de configuración">
+      <nav className="settings-nav" aria-label="Secciones de configuración" hidden={narrow}>
         {tabs.map((t) => (
           <button key={t.key} type="button" className={`settings-tab${section === t.key ? ' active' : ''}`}
             aria-current={section === t.key ? 'page' : undefined}

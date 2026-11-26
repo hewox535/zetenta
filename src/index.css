@@ -612,7 +612,7 @@ a.icon-btn { text-decoration: none; }
 .inline-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
 .inline-form label { flex: 1; min-width: 180px; }
 .inline-form label.short { flex: 0 1 130px; min-width: 110px; }
-.inline-form-actions { display: flex; gap: 8px; }
+.inline-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ---------- Taxonomías (categorías de productos) ---------- */
 
@@ -1350,7 +1350,9 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .kpi-value { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .kpi-sub { font-size: 13px; color: var(--text-2); margin-top: 2px; font-variant-numeric: tabular-nums; }
 
-.stats-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+/* minmax(0, …): un nombre largo no puede ensanchar la columna más allá de la pantalla. */
+.stats-cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.stats-cols > *, .stats-side > *, .stats-main-col > * { min-width: 0; }
 .stats-main-col { display: flex; flex-direction: column; gap: 16px; }
 .stats-side { display: flex; flex-direction: column; gap: 16px; }
 .rank { display: flex; flex-direction: column; gap: 12px; }
@@ -1408,20 +1410,30 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 
 @media (max-width: 900px) {
   .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .settings-nav {
-    position: static; flex-direction: row; gap: 4px; padding: 0; overflow-x: auto;
-    background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0;
-    scrollbar-width: none;
-  }
-  .settings-nav::-webkit-scrollbar { display: none; }
-  .settings-tab {
-    width: auto; flex: none; padding: 10px 12px; margin-bottom: -1px; border-radius: 0;
-    border-bottom: 2px solid transparent; white-space: nowrap;
-  }
-  .settings-tab svg { display: none; }
-  .settings-tab:hover { background: none; }
-  .settings-tab.active { background: none; border-bottom-color: var(--accent); }
+  /* En el teléfono no hay barra de pestañas: lista de secciones → sección (ver Settings.jsx). */
+  .settings-nav { display: none; }
 }
+
+/* ---------- Configuración en el teléfono: lista → sección ---------- */
+.settings-list { display: flex; flex-direction: column; padding: 6px; }
+.settings-list-row {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 10px; border: 0; border-radius: var(--radius-sm);
+  background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer;
+}
+.settings-list-row + .settings-list-row { box-shadow: inset 0 1px 0 var(--border); }
+.settings-list-row:hover, .settings-list-row:focus-visible { background: rgba(0,0,0,.035); outline: none; }
+.settings-list-icon { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.settings-list-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.settings-list-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.settings-list-text strong { font-size: 15px; font-weight: 650; }
+.settings-list-text span { font-size: 12.5px; color: var(--text-2); overflow-wrap: anywhere; }
+.settings-list-chev { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--text-2); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.settings-mhead { flex-direction: column; align-items: flex-start; gap: 4px; }
+.settings-back {
+  display: inline-flex; align-items: center; gap: 2px; margin-left: -6px; padding: 4px 8px 4px 2px; border: 0; border-radius: 8px;
+  background: none; font: inherit; font-size: 14px; font-weight: 600; color: var(--accent); cursor: pointer;
+}
+.settings-back svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 .radio-row { flex-direction: row; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
 .radio-row input { width: auto; }
@@ -1669,7 +1681,7 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   /* Espacio para que la hoja no tape el contenido al final */
   .pos-page { padding-bottom: 72px; }
 
-  .stats-cols { grid-template-columns: 1fr; }
+  .stats-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 560px) {

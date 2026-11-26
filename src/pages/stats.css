@@ -95,9 +95,9 @@
 .st-pl-margin { display: block; margin-top: 1px; font-size: 12px; font-weight: 500; color: var(--text-2); }
 
 @media (max-width: 560px) {
-  .st-presets { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 16px 2px; scrollbar-width: none; }
-  .st-presets::-webkit-scrollbar { display: none; }
-  .st-presets .chip-btn { flex: none; }
+  /* Sin carrusel: los períodos bajan de línea (nunca scroll horizontal). */
+  .st-presets { gap: 6px; }
+  .st-presets .chip-btn { flex: none; padding-left: 12px; padding-right: 12px; }
   .st-filters .fin-select { max-width: none; width: 100%; }
   .st-dates { width: 100%; }
   .st-dates label { flex: 1; }
@@ -152,3 +152,57 @@
   .st-br-tip { display: none; }
   .st-seg { width: 100%; } .st-seg-btn { flex: 1; }
 }
+
+/* ---------- Buscador de listas ---------- */
+.st-search { position: relative; display: flex; align-items: center; margin: 12px 0 10px; }
+.st-search > svg { position: absolute; left: 12px; color: var(--text-2); pointer-events: none; }
+.st-search input { width: 100%; height: 40px; padding: 0 36px 0 36px; border-radius: 999px; font-size: 14.5px; background: rgba(0,0,0,.035); border-color: transparent; }
+.st-search input:focus { background: var(--surface); }
+.st-search input::-webkit-search-cancel-button { display: none; }
+.st-search-clear { position: absolute; right: 6px; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(0,0,0,.07); color: var(--text-2); font-size: 17px; line-height: 1; cursor: pointer; }
+.st-search-clear:hover { background: rgba(0,0,0,.12); color: var(--text); }
+
+/* ---------- Ranking de productos ---------- */
+.pr-sub { margin: 3px 0 0; font-size: 13px; }
+.pr-count { margin: -2px 2px 8px; font-size: 12.5px; color: var(--text-2); }
+.pr-list { display: flex; flex-direction: column; }
+.pr-row {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 4px 12px;
+  width: 100%; padding: 10px 6px; border: 0; border-top: 1px solid var(--border); border-radius: 0;
+  background: none; font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.pr-row:first-child { border-top: 0; }
+.pr-row:hover, .pr-row:focus-visible { background: var(--accent-soft); border-radius: 10px; outline: none; }
+.pr-row:hover + .pr-row, .pr-row:focus-visible + .pr-row { border-top-color: transparent; }
+.pr-rank { padding-top: 1px; font-size: 12px; font-weight: 700; color: var(--text-2); text-align: center; font-variant-numeric: tabular-nums; }
+.pr-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pr-name {
+  min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.pr-name mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.pr-meta { font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pr-bar { display: block; height: 6px; margin-top: 4px; border-radius: 999px; background: rgba(0,0,0,.06); overflow: hidden; }
+.pr-bar span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.pr-qty { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.pr-qty strong { font-size: 16px; }
+.pr-qty small { font-size: 11.5px; color: var(--text-2); }
+.pr-zero { display: flex; flex-direction: column; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.pr-zero-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 6px 4px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.pr-zero-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px 6px; }
+.pr-zero-row::before { content: ''; }
+.pr-zero-row .pr-name { font-weight: 500; color: var(--text-2); }
+.pr-zero-row .pr-qty strong { color: var(--text-2); }
+.pr-more { align-self: flex-start; margin: 4px 0 0 34px; }
+.pr-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 8px; text-align: center; color: var(--text-2); font-size: 13.5px; }
+.pr-empty p { margin: 0; overflow-wrap: anywhere; }
+.pr-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; font-size: 12.5px; }
+.pr-pill { flex: none; padding: 2px 10px; border-radius: 999px; background: rgba(0,0,0,.06); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- Sin ventas en el período ---------- */
+.ns-list { display: flex; flex-direction: column; }
+.ns-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 2px; border-top: 1px solid var(--border); }
+.ns-row:first-child { border-top: 0; }
+.ns-row .pr-name { font-weight: 500; }
+.ns-stock { flex: none; font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ns-stock.none { color: var(--danger); }
