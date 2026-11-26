@@ -40,8 +40,8 @@ button.fin-kpi:hover { border-color: var(--accent-line); }
 .fin-delta.none { font-weight: 500; }
 
 /* ---------- Pestañas ---------- */
-.fin-tabs-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
-.fin-tabs { display: flex; gap: 26px; }
+.fin-tabs-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.fin-tabs { display: flex; flex-wrap: wrap; gap: 0 clamp(14px, 5vw, 26px); min-width: 0; }
 .fin-tab {
   position: relative; display: inline-flex; align-items: center; gap: 8px;
   padding: 10px 0 13px; border: 0; background: none; cursor: pointer;
@@ -492,4 +492,16 @@ button.fin-kpi:hover { border-color: var(--accent-line); }
   .fm-foot { flex-wrap: wrap; }
   .fm-foot-note, .fm-foot-left { flex: 1 1 100%; margin-right: 0; }
   .fm-foot > .btn { flex: 1 1 0; white-space: nowrap; }
+}
+
+/* Teléfonos (≤400px): las pestañas caben en una línea; si no, bajan (nunca scroll).
+   Va al final para ganarle a las reglas base de .fin-tab. */
+@media (max-width: 400px) {
+  .fin-tabs { gap: 0 14px; }
+  .fin-tab { font-size: 14px; gap: 5px; }
+  .fin-tab-count { min-width: 18px; height: 18px; padding: 0 5px; font-size: 10.5px; }
+}
+@media (max-width: 350px) {
+  .fin-tabs { gap: 0 11px; }
+  .fin-tab { font-size: 13px; }
 }

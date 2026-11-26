@@ -6,6 +6,8 @@ import {
   fetchOrdersForStats, fetchProducts, fetchExpenses, fetchExpenseCategories, fetchReceivablePayments,
 } from '../lib/api';
 import { usd, bs } from '../lib/calc';
+import { norm } from '../lib/finance';
+import { FinModal } from '../components/FinUI';
 import './finance.css';
 import './stats.css';
 
@@ -273,6 +275,142 @@ function BranchBreakdown({ rows, canExpenses, vs, onPick }) {
   );
 }
 
+// Buscador de las listas: lupa, borrar con ×, Escape limpia. Sin acentos ni mayúsculas.
+const SEARCH_ICON = <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M16 16l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
+function SearchField({ value, onChange, placeholder, autoFocus }) {
+  return (
+    <div className="st-search">
+      {SEARCH_ICON}
+      {/* Foco automático solo con mouse: en el teléfono abriría el teclado tapando la lista. */}
+      <input type="search" value={value} placeholder={placeholder} aria-label={placeholder}
+        autoFocus={autoFocus && typeof window !== 'undefined' && window.matchMedia?.('(pointer: fine)').matches}
+        enterKeyHint="search" autoComplete="off"
+        onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape' && value) { e.stopPropagation(); onChange(''); } }} />
+      {value && <button type="button" className="st-search-clear" aria-label="Borrar búsqueda" onClick={() => onChange('')}>×</button>}
+    </div>
+  );
+}
+const matchQ = (text, q) => !q || norm(text).includes(q);
+// Resalta lo buscado dentro del nombre (sin acentos, respetando el texto original).
+function Mark({ text, q }) {
+  if (!q) return text;
+  const i = norm(text).indexOf(q);
+  if (i < 0) return text;
+  return <>{text.slice(0, i)}<mark>{text.slice(i, i + q.length)}</mark>{text.slice(i + q.length)}</>;
+}
+
+// Una fila del ranking de productos: puesto, nombre (hasta 2 líneas),
+// unidades a la derecha, ingresos y utilidad debajo y barra relativa al #1.
+function ProductRow({ p, rank, maxQty, unitsTotal, q, onPick, bar = true }) {
+  const share = unitsTotal > 0 ? (p.qty / unitsTotal) * 100 : 0;
+  return (
+    <button type="button" className="pr-row" onClick={() => onPick(p.name)}
+      aria-label={`${p.name}: ${p.qty} unidades, ${usd(p.revenue)}. Ver ventas por día`}>
+      <span className="pr-rank" aria-hidden="true">{rank}</span>
+      <span className="pr-main">
+        <span className="pr-name"><Mark text={p.name} q={q} /></span>
+        <span className="pr-meta">
+          {usd(p.revenue)}
+          {p.cost > 0 && <> · utilidad {money(p.revenue - p.cost)}</>}
+        </span>
+        {bar && <span className="pr-bar" aria-hidden="true"><span style={{ width: `${Math.max(2, (p.qty / (maxQty || 1)) * 100)}%` }} /></span>}
+      </span>
+      <span className="pr-qty">
+        <strong>{p.qty.toLocaleString('es-VE')}</strong>
+        <small>{share >= 1 ? `${share.toFixed(0)}%` : 'und'}</small>
+      </span>
+    </button>
+  );
+}
+
+// Lista de productos del período: búsqueda + ranking completo; incluye en la
+// búsqueda los del catálogo que no se vendieron (para saber "cuánto vendió").
+function ProductRanking({ top, noSales, unitsTotal, periodText, onPick, limit, autoFocus, onSearching }) {
+  const [query, setQuery] = useState('');
+  const [allZero, setAllZero] = useState(false);
+  const q = norm(query.trim());
+  useEffect(() => { onSearching?.(!!q); setAllZero(false); }, [q, onSearching]);
+  const maxQty = top[0]?.qty || 1;
+  const ranked = top.map((p, i) => ({ p, rank: i + 1 }));
+  const hits = q ? ranked.filter(({ p }) => matchQ(p.name, q)) : ranked;
+  const zero = q ? noSales.filter((p) => matchQ(p.name, q)) : [];
+  const shown = limit && !q ? hits.slice(0, limit) : hits;
+  return (
+    <>
+      <SearchField value={query} onChange={setQuery} placeholder="Buscar un producto…" autoFocus={autoFocus} />
+      {q && (
+        <p className="pr-count" role="status">
+          {hits.length + zero.length === 0 ? null
+            : `${hits.length} ${hits.length === 1 ? 'coincidencia vendida' : 'coincidencias vendidas'} ${periodText}${zero.length ? ` · ${zero.length} sin ventas` : ''}`}
+        </p>
+      )}
+      {shown.length > 0 && (
+        <div className="pr-list">
+          {shown.map(({ p, rank }) => (
+            <ProductRow key={p.productId || p.name} p={p} rank={rank}
+              maxQty={maxQty} unitsTotal={unitsTotal} q={q} onPick={onPick} />
+          ))}
+        </div>
+      )}
+      {zero.length > 0 && (
+        <div className="pr-zero">
+          <div className="pr-zero-head">
+            <span>Sin ventas {periodText}</span>
+            <span className="pr-pill">{zero.length}</span>
+          </div>
+          {(allZero ? zero : zero.slice(0, 5)).map((p) => (
+            <div className="pr-zero-row" key={p.id}>
+              <span className="pr-name"><Mark text={p.name} q={q} /></span>
+              <span className="pr-qty"><strong>0</strong><small>und</small></span>
+            </div>
+          ))}
+          {!allZero && zero.length > 5 && (
+            <button type="button" className="btn ghost sm pr-more" onClick={() => setAllZero(true)}>
+              Mostrar los {zero.length}
+            </button>
+          )}
+        </div>
+      )}
+      {q && hits.length + zero.length === 0 && (
+        <div className="pr-empty">
+          <p>Ningún producto coincide con «{query.trim()}».</p>
+          <button type="button" className="btn ghost sm" onClick={() => setQuery('')}>Borrar búsqueda</button>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Lista simple de productos sin ventas (con stock), con buscador.
+function NoSalesList({ items, limit, autoFocus }) {
+  const [query, setQuery] = useState('');
+  const q = norm(query.trim());
+  const hits = items.filter((p) => matchQ(p.name, q));
+  const shown = limit && !q ? hits.slice(0, limit) : hits;
+  return (
+    <>
+      {(!limit || items.length > limit) && <SearchField value={query} onChange={setQuery} placeholder="Buscar un producto…" autoFocus={autoFocus} />}
+      {shown.length > 0 ? (
+        <div className="ns-list">
+          {shown.map((p) => (
+            <div className="ns-row" key={p.id}>
+              <span className="pr-name"><Mark text={p.name} q={q} /></span>
+              <span className={`ns-stock${p.stock > 0 ? '' : ' none'}`}>
+                {p.stock > 0 ? `${Math.round(p.stock).toLocaleString('es-VE')} en stock` : 'Sin stock'}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="pr-empty">
+          <p>Ningún producto coincide con «{query.trim()}».</p>
+          <button type="button" className="btn ghost sm" onClick={() => setQuery('')}>Borrar búsqueda</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 function Empty({ title, children }) {
   return (
     <div className="fin-empty">
@@ -307,6 +445,13 @@ export default function Stats() {
 
   const range = useMemo(() => resolveRange(preset, desde, hasta), [preset, desde, hasta]);
   const rangeKey = `${range.from?.getTime()}|${range.to.getTime()}`;
+  // El período en palabras: título ("28 oct – 26 nov 2026") y para frases
+  // ("del 28 oct al 26 nov", "hoy", "en todo el historial").
+  const periodTitle = range.from ? rangeLabel(range.from, range.to) : 'Todo el historial';
+  const periodText = !range.from ? 'en todo el historial'
+    : localISO(range.from) === localISO(range.to)
+      ? (localISO(range.to) === localISO(new Date()) ? 'hoy' : `el ${clean(fmtLong.format(range.to))}`)
+      : `del ${clean(fmtShort.format(range.from))} al ${clean(fmtLong.format(range.to))}`;
 
   const [branchFilter, setBranchFilter] = useState('all');
   const [data, setData] = useState(null);   // { orders, prevOrders, expenses, collections }
@@ -314,6 +459,9 @@ export default function Stats() {
   const [categories, setCategories] = useState([]);
   const [error, setError] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [allSold, setAllSold] = useState(false);      // modal: todos los productos vendidos
+  const [allNoSales, setAllNoSales] = useState(false); // modal: todos los sin ventas
+  const [searchingSold, setSearchingSold] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -744,34 +892,30 @@ export default function Stats() {
             <div className="card"><Empty title="Sin ventas en este período">Regístralas en <Link to="/orders">Ventas</Link>.</Empty></div>
           ) : (
             <div className="stats-cols">
-              <section className="card vsection">
-                <h2>Más vendidos</h2>
-                <div className="rank">
-                  {stats.topProducts.slice(0, 10).map((p) => (
-                    <button className="rank-row rank-click" key={p.productId || p.name} onClick={() => setDetail(p.name)}>
-                      <div className="rank-info">
-                        <span className="rank-name">{p.name}</span>
-                        <span className="muted">
-                          {p.qty} und · {usd(p.revenue)}
-                          {p.cost > 0 && ` · utilidad ${usd(p.revenue - p.cost)}`}
-                        </span>
-                      </div>
-                      <div className="rank-bar"><span style={{ width: `${(p.qty / (stats.topProducts[0]?.qty || 1)) * 100}%` }} /></div>
-                    </button>
-                  ))}
+              <section className="card vsection pr-card">
+                <div className="st-sec-head">
+                  <div>
+                    <h2>Más vendidos</h2>
+                    <p className="muted pr-sub">{stats.topProducts.length} {stats.topProducts.length === 1 ? 'producto vendido' : 'productos vendidos'} · {stats.cur.units.toLocaleString('es-VE')} unidades</p>
+                  </div>
                 </div>
-                <p className="hint">Toca un producto para ver sus ventas día a día.</p>
-                {stats.topProducts.length > 10 && (
+                <ProductRanking top={stats.topProducts} noSales={stats.noSales} unitsTotal={stats.cur.units}
+                  periodText={periodText} onPick={setDetail} limit={8} onSearching={setSearchingSold} />
+                <div className="pr-foot">
+                  <span className="muted">Toca un producto para ver sus ventas día a día.</span>
+                  {stats.topProducts.length > 8 && (
+                    <button type="button" className="btn ghost sm" onClick={() => setAllSold(true)}>
+                      Ver los {stats.topProducts.length} productos
+                    </button>
+                  )}
+                </div>
+                {stats.topProducts.length > 10 && !searchingSold && (
                   <>
                     <h3 className="rank-subtitle">Menos vendidos</h3>
-                    <div className="rank compact">
-                      {[...stats.topProducts].reverse().slice(0, 5).map((p) => (
-                        <div className="rank-row" key={p.productId || p.name}>
-                          <div className="rank-info">
-                            <span className="rank-name">{p.name}</span>
-                            <span className="muted">{p.qty} und · {usd(p.revenue)}</span>
-                          </div>
-                        </div>
+                    <div className="pr-list">
+                      {stats.topProducts.slice(-5).reverse().map((p) => (
+                        <ProductRow key={p.productId || p.name} p={p} rank={stats.topProducts.indexOf(p) + 1}
+                          maxQty={stats.topProducts[0]?.qty} unitsTotal={stats.cur.units} q="" onPick={setDetail} bar={false} />
                       ))}
                     </div>
                   </>
@@ -853,19 +997,28 @@ export default function Stats() {
               )}
             </section>
             <section className="card vsection">
-              <h2>Sin ventas en el período</h2>
-              <p className="hint">Productos del catálogo que no se vendieron. Los que tienen más stock van primero.</p>
-              {stats.noSales.length === 0 ? (
-                <Empty title="Todo se movió">Cada producto tuvo al menos una venta.</Empty>
-              ) : (
-                <div className="totals">
-                  {stats.noSales.slice(0, 15).map((p) => (
-                    <div className="totals-row" key={p.id}>
-                      <span>{p.name}</span><span className="muted">{Math.round(p.stock)} en stock</span>
-                    </div>
-                  ))}
-                  {stats.noSales.length > 15 && <p className="hint">y {stats.noSales.length - 15} más.</p>}
+              <div className="st-sec-head">
+                <div>
+                  <h2>Sin ventas en el período</h2>
+                  <p className="muted pr-sub">{periodTitle}</p>
                 </div>
+                {stats.noSales.length > 0 && <span className="pr-pill">{stats.noSales.length}</span>}
+              </div>
+              <p className="hint">Productos del catálogo que no se vendieron {periodText}. Los que tienen más stock van primero.</p>
+              {stats.noSales.length === 0 ? (
+                <Empty title="Todo se movió">Cada producto tuvo al menos una venta {periodText}.</Empty>
+              ) : (
+                <>
+                  <NoSalesList items={stats.noSales} limit={10} />
+                  {stats.noSales.length > 10 && (
+                    <div className="pr-foot">
+                      <span className="muted">Mostrando 10 de {stats.noSales.length}</span>
+                      <button type="button" className="btn ghost sm" onClick={() => setAllNoSales(true)}>
+                        Ver los {stats.noSales.length}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           </div>
@@ -946,6 +1099,20 @@ export default function Stats() {
             </section>
           )}
         </div>
+      )}
+
+      {allSold && stats && (
+        <FinModal title="Productos vendidos" sub={`${stats.topProducts.length} productos · ${periodTitle}`} wide
+          onClose={() => setAllSold(false)}>
+          <ProductRanking top={stats.topProducts} noSales={stats.noSales} unitsTotal={stats.cur.units}
+            periodText={periodText} onPick={(name) => { setAllSold(false); setDetail(name); }} autoFocus />
+        </FinModal>
+      )}
+      {allNoSales && stats && (
+        <FinModal title="Sin ventas en el período" sub={`${stats.noSales.length} productos · ${periodTitle}`} wide
+          onClose={() => setAllNoSales(false)}>
+          <NoSalesList items={stats.noSales} autoFocus />
+        </FinModal>
       )}
 
       {/* -------- Tendencia de un producto -------- */}
