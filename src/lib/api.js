@@ -723,6 +723,15 @@ export async function updateBusinessBranding(id, { slug, customDomain, branding,
 
 // La caja abierta de una sucursal, si hay alguna. Sin sucursal (negocio de un
 // solo local) se busca la que no tiene branch_id o la única abierta.
+// Modo "cierre del día": el turno abierto de la sucursal, creándolo si hace falta.
+export async function ensureCashSession(branchId) {
+  return unwrap(await supabase.rpc('ensure_cash_session', { p_branch_id: branchId || null }));
+}
+
+export async function setCashMode(mode) {
+  return unwrap(await supabase.rpc('set_cash_mode', { p_mode: mode }));
+}
+
 export async function fetchOpenCashSession(branchId) {
   let q = supabase.from('cash_sessions')
     .select('*, cash_session_lines(*), cash_movements(*)')

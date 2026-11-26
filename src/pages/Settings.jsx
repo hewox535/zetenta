@@ -14,6 +14,7 @@ import {
   fetchUserBranches, setUserBranches,
   fetchStaff, createStaff, deleteStaff, setStaffRole, setStaffPermissions,
   updateNotificationPrefs, setCatalogSettings,
+  setCashMode,
 } from '../lib/api';
 import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/push';
 import { fetchBcvRates } from '../lib/rates';
@@ -707,6 +708,8 @@ function OrdersSection({ business, refreshBusiness }) {
 
       <CasheaSection business={business} refreshBusiness={refreshBusiness} />
 
+      {business.capabilities?.cash && <CashModeSection business={business} refreshBusiness={refreshBusiness} />}
+
       <CancelPinSection />
 
       <section className="card vsection">
@@ -738,6 +741,42 @@ function OrdersSection({ business, refreshBusiness }) {
 
       <BankAccountsManager business={business} />
     </div>
+  );
+}
+
+// ---------- Caja: cierre del día (siempre abierta) o turnos ----------
+const CASH_MODES = [
+  ['daily', 'Cierre del día', 'La caja está siempre abierta. Al final del día se hace el cierre con el conteo del efectivo; la del día siguiente se abre sola con lo que quedó.'],
+  ['shift', 'Abrir y cerrar caja', 'Cada turno se abre declarando el fondo inicial y se cierra con el conteo. Lo que se venda con la caja cerrada no entra en ningún cierre.'],
+];
+function CashModeSection({ business, refreshBusiness }) {
+  const mode = business.cash_mode || 'daily';
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  async function pick(next) {
+    if (next === mode || busy) return;
+    setBusy(true); setError(null);
+    try { await setCashMode(next); await refreshBusiness(); }
+    catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+  return (
+    <section className="card vsection">
+      <h2>Caja</h2>
+      <p className="hint">Cómo se cuadra la caja de cada sucursal. Se puede cambiar en cualquier momento; los cierres anteriores no cambian.</p>
+      <div className="cash-mode-opts" role="radiogroup" aria-label="Modo de caja">
+        {CASH_MODES.map(([k, title, hint]) => (
+          <button key={k} type="button" role="radio" aria-checked={mode === k} disabled={busy}
+            className={`cash-mode-opt${mode === k ? ' on' : ''}`} onClick={() => pick(k)}>
+            <span className="cash-mode-radio" aria-hidden="true" />
+            <span className="cash-mode-text">
+              <strong>{title}{k === 'daily' && <span className="cash-mode-tag">Recomendado</span>}</strong>
+              <span className="muted">{hint}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      {error && <div className="form-error">{error}</div>}
+    </section>
   );
 }
 
