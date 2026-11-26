@@ -6,12 +6,14 @@ import { createBranch } from '../lib/api';
 import { FinModal } from './FinUI';
 import '../pages/finance.css';
 
-const STORE = (
+export const STORE = (
   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M3 10l1.6-5.2A1 1 0 0 1 5.6 4h12.8a1 1 0 0 1 1 .8L21 10a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M10 20v-5h4v5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
 );
 const CHEVRON = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const CHECK = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const PLUS = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
+
+const initials = (name = '') => name.replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '·';
 
 // Selector de la sucursal en la que se trabaja (solo si el usuario ve más de
 // una). Se abre como una lista; el administrador también puede crear una nueva
@@ -56,7 +58,8 @@ export default function BranchPicker({ compact = false, onPicked }) {
     <div className={`branch-pick${compact ? ' compact' : ''}${open ? ' open' : ''}`} ref={ref}>
       <button type="button" className="branch-pick-btn" aria-haspopup="listbox" aria-expanded={open}
         title={`Sucursal: ${currentBranch?.name || ''}`} onClick={() => setOpen((o) => !o)}>
-        {!compact && <span className="branch-pick-icon">{STORE}</span>}
+        {/* Con el menú contraído solo caben las iniciales (p. ej. "AP"). */}
+        <span className="branch-pick-initials" aria-hidden="true">{initials(currentBranch?.name)}</span>
         <span className="branch-pick-text">
           {!compact && <span className="branch-pick-label">Sucursal</span>}
           <span className="branch-pick-name">{currentBranch?.name || 'Elegir sucursal'}</span>

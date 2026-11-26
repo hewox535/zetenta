@@ -11,6 +11,7 @@ import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { notifySale } from '../lib/push';
 import { usd, bs, money, variantLabel, offerPrice, hasOffer, offerTag } from '../lib/calc';
 import OrderReceipt from '../components/OrderReceipt';
+import { STORE } from '../components/BranchPicker';
 import OpenCashModal from '../components/OpenCashModal';
 import { CASH_EVENT, notifyCashChanged } from '../lib/cashEvents';
 import { FinModal } from '../components/FinUI';
@@ -334,13 +335,14 @@ export default function Orders() {
 
   const puedeCaja = capabilities.cash && (isBusinessAdmin || !!permissions?.cash);
   useEffect(() => {
-    if (!puedeCaja || !branchId) return undefined;
+    // En modo "cierre del día" la caja siempre está abierta: no hay aviso.
+    if (!puedeCaja || !branchId || (business?.cash_mode || 'daily') === 'daily') { setCajaCerrada(false); return undefined; }
     const check = () => fetchOpenCashSession(branchId).then((s) => setCajaCerrada(!s)).catch(() => {});
     check();
     // La caja se abre y se cierra desde el menú lateral: el aviso se entera.
     window.addEventListener(CASH_EVENT, check);
     return () => window.removeEventListener(CASH_EVENT, check);
-  }, [puedeCaja, branchId]);
+  }, [puedeCaja, branchId, business?.cash_mode]);
 
   // Venta a crédito: lo que no se cobre queda como cuenta por cobrar del cliente.
   // Descuentos de contado de ESTA venta: arrancan con los del negocio y la
@@ -929,7 +931,7 @@ export default function Orders() {
           <p className="page-sub">Toca un producto para agregarlo a la venta.</p>
         </div>
         <div className="page-actions">
-          {branches.length > 1 && currentBranch && <span className="rate-chip">🏬 {currentBranch.name}</span>}
+          {branches.length > 1 && currentBranch && <span className="rate-chip branch-chip">{STORE}{currentBranch.name}</span>}
           {rateBadge}
           <Link to="/orders/history" className="btn ghost">Historial</Link>
         </div>

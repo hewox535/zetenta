@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import { useConfirm } from './Confirm';
 import OpenCashModal from './OpenCashModal';
 import {
-  fetchOpenCashSession, fetchCashSessions, fetchCashReport, fetchBankAccounts,
+  fetchOpenCashSession, ensureCashSession, fetchCashSessions, fetchCashReport, fetchBankAccounts,
   closeCashSession, addCashMovement, deleteCashMovement, countOrphanOrders, fetchStaff,
 } from '../lib/api';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
@@ -19,15 +20,22 @@ const hour = (iso) => new Date(iso).toLocaleTimeString('es-VE', { hour: 'numeric
 const sameDay = (iso) => new Date(iso).toDateString() === new Date().toDateString();
 
 
-// Interruptor de caja en la parte de arriba del menú lateral. Apagado: abre la
-// caja con el fondo del día. Encendido: abre el arqueo para cerrarla. La caja
-// es por sucursal (la que está elegida en el menú).
+// Caja en la parte de arriba del menú lateral, por sucursal (la elegida en el
+// menú). Dos modos (Negocio → Ventas):
+// - Cierre del día (por defecto): la caja está siempre abierta; el botón lleva
+//   al arqueo para hacer el cierre. El turno se abre solo.
+// - Turnos: interruptor; apagado abre la caja con su fondo, encendido la cierra.
+const RECEIPT = (
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 8h6M9 11.5h6M9 15h3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+);
+
 export default function CashToggle({ onAction }) {
   const { business } = useAuth();
   const { branchId } = useBranch();
   const [session, setSession] = useState(undefined);   // undefined = cargando, null = cerrada
   const [opening, setOpening] = useState(false);
   const [panel, setPanel] = useState(null);           // la sesión que muestra el panel
+  const daily = (business?.cash_mode || 'daily') === 'daily';
 
   const load = useCallback(async () => {
     try { setSession(await fetchOpenCashSession(branchId)); }
@@ -48,10 +56,41 @@ export default function CashToggle({ onAction }) {
   const open = !!session;
   const since = session ? (sameDay(session.opened_at) ? hour(session.opened_at) : formatDate(session.opened_at)) : '';
 
-  function onClick() {
+  async function onClick() {
     if (session === undefined) return;
     onAction?.();
-    if (open) setPanel(session); else setOpening(true);
+    if (open) { setPanel(session); return; }
+    if (!daily) { setOpening(true); return; }
+    // Cierre del día sin ventas aún: se abre el turno para poder cerrarlo.
+    try {
+      await ensureCashSession(branchId);
+      const s = await fetchOpenCashSession(branchId);
+      setSession(s); setPanel(s);
+    } catch { /* sin permiso: no hace nada */ }
+  }
+
+  if (daily) {
+    return (
+      <>
+        <button type="button" className="cash-toggle daily" onClick={onClick} disabled={session === undefined}
+          title="La caja está abierta todo el día. Toca para hacer el cierre del día.">
+          <span className="cash-toggle-text">
+            <span className="cash-toggle-label">Cierre del día</span>
+            <span className="cash-toggle-sub">
+              <span className="cash-dot" aria-hidden="true" />
+              {session === undefined ? '…' : session ? `Abierta · ${since}` : 'Caja abierta'}
+            </span>
+          </span>
+          <span className="cash-toggle-icon">{RECEIPT}</span>
+        </button>
+        {panel && createPortal(
+          <CashPanel session={panel} business={business} branchId={branchId} daily
+            onClose={() => setPanel(null)}
+            onChanged={async () => { await load(); notifyCashChanged(); }} />,
+          document.body,
+        )}
+      </>
+    );
   }
 
   return (
@@ -66,14 +105,17 @@ export default function CashToggle({ onAction }) {
         <span className={`switch sm${open ? ' on' : ''}`} aria-hidden="true"><span className="switch-knob" /></span>
       </button>
 
-      {opening && (
+      {/* Al body: el menú lateral usa backdrop-filter y encerraría los modales. */}
+      {opening && createPortal(
         <OpenCashModal branchId={branchId} onClose={() => setOpening(false)}
-          onOpened={async () => { setOpening(false); await load(); notifyCashChanged(); }} />
+          onOpened={async () => { setOpening(false); await load(); notifyCashChanged(); }} />,
+        document.body,
       )}
-      {panel && (
+      {panel && createPortal(
         <CashPanel session={panel} business={business} branchId={branchId}
           onClose={() => setPanel(null)}
-          onChanged={async () => { await load(); notifyCashChanged(); }} />
+          onChanged={async () => { await load(); notifyCashChanged(); }} />,
+        document.body,
       )}
     </>
   );
@@ -81,7 +123,7 @@ export default function CashToggle({ onAction }) {
 
 // Caja abierta: lo que debería haber, los movimientos del turno y el arqueo
 // para cerrarla. Desde aquí también se ven los cierres anteriores.
-function CashPanel({ session, business, branchId, onClose, onChanged }) {
+function CashPanel({ session, business, branchId, onClose, onChanged, daily = false }) {
   const ask = useConfirm();
   const [view, setView] = useState('close');           // 'close' | 'move' | 'history'
   const [report, setReport] = useState(null);
@@ -175,7 +217,7 @@ function CashPanel({ session, business, branchId, onClose, onChanged }) {
       <div className="modal card modal-wide cash-panel" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div>
-            <h2>{closedNow ? 'Caja cerrada' : view === 'history' ? 'Cierres anteriores' : view === 'move' ? 'Retiro o aporte' : 'Cerrar caja'}</h2>
+            <h2>{closedNow ? (daily ? 'Cierre del día hecho' : 'Caja cerrada') : view === 'history' ? 'Cierres anteriores' : view === 'move' ? 'Retiro o aporte' : daily ? 'Cierre del día' : 'Cerrar caja'}</h2>
             {view === 'close' && (
               <p className="muted cash-panel-sub">
                 Abierta {sameDay(session.opened_at) ? `hoy a las ${hour(session.opened_at)}` : `el ${formatDate(session.opened_at)}`} por {who(session.opened_by)}
@@ -271,8 +313,8 @@ function CashPanel({ session, business, branchId, onClose, onChanged }) {
                 <input value={note} placeholder="Faltó porque se dio vuelto de más…" onChange={(e) => setNote(e.target.value)} />
               </label>
               <div className="inline-form-actions">
-                <button className="btn primary" disabled={busy}>{busy ? 'Cerrando…' : 'Cerrar caja'}</button>
-                <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>Dejarla abierta</button>
+                <button className="btn primary" disabled={busy}>{busy ? 'Cerrando…' : daily ? 'Hacer cierre del día' : 'Cerrar caja'}</button>
+                <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>{daily ? 'Ahora no' : 'Dejarla abierta'}</button>
               </div>
             </form>
           )
@@ -312,7 +354,15 @@ function CashPanel({ session, business, branchId, onClose, onChanged }) {
 
         {view === 'history' && (
           detail ? (
-            <CashClosing detail={detail} who={who} onBack={closedNow ? null : () => setDetail(null)} />
+            <>
+              {closedNow && daily && (
+                <div className="form-ok">
+                  Listo. La caja sigue abierta: lo que se venda desde ahora entra en el próximo cierre, y su fondo
+                  es el efectivo que contaste.
+                </div>
+              )}
+              <CashClosing detail={detail} who={who} onBack={closedNow ? null : () => setDetail(null)} />
+            </>
           ) : history === null ? <div className="empty">Cargando…</div> : (
             <>
               {history.length === 0 ? <p className="hint">Todavía no hay cierres.</p> : (
