@@ -130,9 +130,10 @@ export async function fetchBranches() {
   return unwrap(await supabase.from('branches').select('*').order('sort_order').order('created_at'));
 }
 
-export async function createBranch(businessId, { name, address }) {
+export async function createBranch(businessId, { name, address, sortOrder }) {
   return unwrap(await supabase.from('branches')
-    .insert({ business_id: businessId, name, address: address || '' }).select().single());
+    .insert({ business_id: businessId, name, address: address || '', ...(sortOrder != null ? { sort_order: sortOrder } : {}) })
+    .select().single());
 }
 
 export async function updateBranch(id, patch) {

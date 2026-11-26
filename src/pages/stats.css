@@ -107,3 +107,48 @@
   .st-runway-row > :nth-child(3) { display: none; }
   .st-pl-row { grid-template-columns: minmax(0, 1fr) 104px 92px; font-size: 13.5px; }
 }
+
+/* ---------- Por sucursal (solo con "Todas las sucursales") ---------- */
+.st-br { margin-bottom: 16px; }
+.st-br .st-sec-head { align-items: flex-start; flex-wrap: wrap; }
+.st-br-sub { margin: 4px 0 0; font-size: 13px; }
+.st-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: rgba(0,0,0,.05); }
+.st-seg-btn { height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.st-seg-btn.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.st-br-list { display: flex; flex-direction: column; margin-top: 14px; }
+.st-br-row {
+  position: relative; display: grid; grid-template-columns: 22px minmax(140px, 1.1fr) minmax(0, 2fr) minmax(104px, auto);
+  align-items: center; gap: 14px; width: 100%; padding: 10px 8px; border: 0; border-top: 1px solid var(--border);
+  background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 0;
+}
+.st-br-row:first-child { border-top: 0; }
+.st-br-row.on, .st-br-row:focus-visible { background: var(--accent-soft); outline: none; border-radius: 10px; }
+.st-br-row.on + .st-br-row { border-top-color: transparent; }
+.st-br-rank { font-size: 12px; font-weight: 700; color: var(--text-2); text-align: center; font-variant-numeric: tabular-nums; }
+.st-br-name { display: flex; flex-direction: column; min-width: 0; }
+.st-br-name strong { font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-br-name .muted { font-size: 12px; }
+.st-br-track { height: 10px; border-radius: 4px; background: rgba(0,0,0,.05); overflow: hidden; }
+.st-br-fill { display: block; height: 100%; border-radius: 4px; background: var(--accent); transition: width .25s ease; }
+.st-br-fill.neg { background: var(--danger); }
+.st-br-val { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; font-variant-numeric: tabular-nums; }
+.st-br-val strong { font-size: 15px; }
+.st-br-val .fin-delta { font-size: 11.5px; }
+.st-neg { color: var(--danger); }
+.st-br-tip {
+  position: absolute; right: 8px; top: calc(100% + 4px); z-index: 3; pointer-events: none;
+  display: flex; flex-direction: column; gap: 3px; min-width: 220px; padding: 10px 12px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: left;
+}
+.st-br-tip.up { top: auto; bottom: calc(100% + 4px); }
+.st-br-tip > span:not(.st-tip-title) { display: flex; justify-content: space-between; gap: 16px; }
+.st-br-tip > span > span { color: var(--text-2); }
+.st-br-tip-total { margin-top: 3px; padding-top: 5px; border-top: 1px solid var(--border); }
+.st-br-foot { margin: 10px 0 0; font-size: 12px; }
+@media (max-width: 640px) {
+  .st-br-row { grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: "rank name val" ". bar bar"; row-gap: 8px; gap: 8px 10px; }
+  .st-br-rank { grid-area: rank; } .st-br-name { grid-area: name; } .st-br-val { grid-area: val; } .st-br-track { grid-area: bar; }
+  .st-br-tip { display: none; }
+  .st-seg { width: 100%; } .st-seg-btn { flex: 1; }
+}

@@ -200,6 +200,79 @@ function SalesChart({ buckets }) {
   );
 }
 
+// Comparación entre sucursales: barras horizontales ordenadas, una métrica a
+// la vez (nunca dos ejes). El color no identifica a la sucursal (lo hace el
+// nombre): una sola tinta, y rojo solo para utilidad negativa.
+const BR_METRICS = [['net', 'Ventas'], ['profit', 'Utilidad'], ['count', 'Tickets']];
+function BranchBreakdown({ rows, canExpenses, vs, onPick }) {
+  const [metric, setMetric] = useState('net');
+  const [hover, setHover] = useState(null);
+  const valOf = (r, m = metric) => (m === 'net' ? r.net : m === 'count' ? r.count : (canExpenses ? r.netProfit : r.grossProfit));
+  const prevOf = (r) => (r.prev ? valOf(r.prev) : null);
+  const fmt = (v) => (metric === 'count' ? String(v) : money(v));
+  const sorted = [...rows].sort((a, b) => valOf(b) - valOf(a) || a.name.localeCompare(b.name));
+  const max = Math.max(...sorted.map((r) => Math.abs(valOf(r))), 0) || 1;
+  const total = sorted.reduce((acc, r) => acc + Math.max(0, valOf(r)), 0);
+  const profitLabel = canExpenses ? 'utilidad neta (después de los gastos de cada sucursal)' : 'utilidad bruta (ventas menos costo)';
+  return (
+    <section className="card vsection st-br">
+      <div className="st-sec-head">
+        <div>
+          <h2>Por sucursal</h2>
+          <p className="muted st-br-sub">{metric === 'profit' ? `Ordenadas por ${profitLabel}` : metric === 'count' ? 'Ordenadas por cantidad de ventas' : 'Ordenadas por ventas netas'}. Toca una para ver solo esa.</p>
+        </div>
+        <div className="st-seg" role="radiogroup" aria-label="Métrica">
+          {BR_METRICS.map(([k, l]) => (
+            <button key={k} type="button" role="radio" aria-checked={metric === k}
+              className={`st-seg-btn${metric === k ? ' on' : ''}`} onClick={() => setMetric(k)}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <div className="st-br-list" role="list" onMouseLeave={() => setHover(null)}>
+        {sorted.map((r, i) => {
+          const v = valOf(r);
+          const neg = v < -0.005;
+          const share = total > 0 && v > 0 ? (v / total) * 100 : 0;
+          const pv = prevOf(r);
+          return (
+            <button key={r.id} type="button" role="listitem" className={`st-br-row${hover === r.id ? ' on' : ''}`}
+              onMouseEnter={() => setHover(r.id)} onFocus={() => setHover(r.id)} onBlur={() => setHover(null)}
+              onClick={() => onPick(r.id)}
+              aria-label={`${r.name}: ${fmt(v)}${share ? `, ${share.toFixed(0)}% del total` : ''}`}>
+              <span className="st-br-rank" aria-hidden="true">{i + 1}</span>
+              <span className="st-br-name">
+                <strong>{r.name}</strong>
+                <span className="muted">
+                  {share > 0 ? `${share.toFixed(0)}% del total` : r.count === 0 ? 'sin ventas' : '—'}
+                </span>
+              </span>
+              <span className="st-br-track" aria-hidden="true">
+                <span className={`st-br-fill${neg ? ' neg' : ''}`} style={{ width: v === 0 ? 0 : `max(4px, ${(Math.abs(v) / max) * 100}%)` }} />
+              </span>
+              <span className="st-br-val">
+                <strong className={neg ? 'st-neg' : ''}>{fmt(v)}</strong>
+                <Delta cur={v} prev={pv} vs="" />
+              </span>
+              {hover === r.id && (
+                <span className={`st-br-tip${i >= sorted.length - 2 && sorted.length > 3 ? ' up' : ''}`} role="tooltip">
+                  <span className="st-tip-title">{r.name}</span>
+                  <span><span>Ventas netas</span><b>{usd(r.net)}</b></span>
+                  <span><span>Tickets</span><b>{r.count}</b></span>
+                  <span><span>Ticket promedio</span><b>{usd(r.count ? r.net / r.count : 0)}</b></span>
+                  <span><span>Utilidad bruta</span><b>{money(r.grossProfit)}</b></span>
+                  {canExpenses && <span><span>Gastos</span><b>{r.expenses > 0.005 ? `−${usd(r.expenses)}` : usd(0)}</b></span>}
+                  {canExpenses && <span className="st-br-tip-total"><span>Utilidad neta</span><b className={r.netProfit < -0.005 ? 'st-neg' : ''}>{money(r.netProfit)}</b></span>}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {vs && <p className="muted st-br-foot">Las variaciones son {vs}.</p>}
+    </section>
+  );
+}
+
 function Empty({ title, children }) {
   return (
     <div className="fin-empty">
@@ -428,6 +501,21 @@ export default function Stats() {
       if (b) { b.value += (Number(o.total_usd) || 0) - (Number(o.discount_usd) || 0); b.count += 1; }
     }
 
+    // ---- Por sucursal (sin el filtro de sucursal; respeta el período) ----
+    const expIn = (b, a, z) => (data.expenses || []).reduce((acc, e) => (
+      e.branch_id === b && e.spent_on >= a && e.spent_on <= z ? acc + (Number(e.amount_usd) || 0) : acc), 0);
+    const byBranch = allBranches.map((b) => {
+      const s2 = summarize(data.orders.filter((o) => o.branch_id === b.id), costOf);
+      const e2 = expIn(b.id, fromDay, toDay);
+      const ps = data.prevOrders ? summarize(data.prevOrders.filter((o) => o.branch_id === b.id), costOf) : null;
+      const pe = range.prev ? expIn(b.id, pFromDay, pToDay) : 0;
+      return {
+        id: b.id, name: b.name, active: b.active,
+        net: s2.net, count: s2.count, grossProfit: s2.grossProfit, expenses: e2, netProfit: s2.grossProfit - e2,
+        prev: ps ? { net: ps.net, count: ps.count, grossProfit: ps.grossProfit, netProfit: ps.grossProfit - pe } : null,
+      };
+    }).filter((r) => r.active || r.count > 0 || r.expenses > 0);
+
     const collected = data.collections
       ? data.collections.filter((c) => inBranch(c.debts?.branch_id)).reduce((s, c) => s + (Number(c.amount_usd) || 0), 0)
       : null;
@@ -440,9 +528,9 @@ export default function Stats() {
       receivedVes, receivedUsd, receivedTotal,
       expByCat: [...exp.byCat.entries()].map(([name, v]) => ({ name, usd: v })).sort((a, b) => b.usd - a.usd),
       invCost, invPrice, invUnits, invNoCost, runway, noSales, periodDays,
-      buckets, collected,
+      buckets, collected, byBranch,
     };
-  }, [data, costOf, allProducts, categories, branchFilter, range]);
+  }, [data, costOf, allProducts, categories, branchFilter, range, allBranches]);
 
   // ---------- Exportar lo que se ve en la pestaña ----------
   function exportCsv() {
@@ -580,6 +668,10 @@ export default function Stats() {
             <Kpi label="Ticket promedio" value={usd(stats.cur.avgTicket)}
               cur={stats.cur.avgTicket} prev={P?.avgTicket} vs={vs} />
           </div>
+
+          {branchFilter === 'all' && stats.byBranch.length > 1 && (
+            <BranchBreakdown rows={stats.byBranch} canExpenses={canExpenses} vs={vs} onPick={setBranchFilter} />
+          )}
 
           <div className="stats-cols">
             <section className="card vsection">
