@@ -65,6 +65,35 @@ export async function fetchBusiness(businessId) {
   return unwrap(await supabase.from('businesses').select('*').eq('id', businessId).single());
 }
 
+// ---------- Registro, prueba gratuita y estado del negocio ----------
+
+// El negocio del usuario aunque no esté activo: { id, name, slug, status, branding,
+// trial_requested_at, is_admin… }. status: 'pending' | 'active' | 'disabled'.
+export async function fetchMyBusiness() {
+  return unwrap(await supabase.rpc('my_business'));
+}
+
+// ¿Está libre el subdominio? 'ok' | 'taken' | 'reserved' | 'short'. Funciona sin sesión.
+export async function checkSlug(slug) {
+  return unwrap(await supabase.rpc('slug_available', { p_slug: slug }));
+}
+
+export async function requestTrial() {
+  return unwrap(await supabase.rpc('request_trial'));
+}
+
+// Mientras espera la aprobación: color y logo de su marca.
+export async function setPendingBranding({ accent, accent2, logoUrl }) {
+  return unwrap(await supabase.rpc('set_pending_branding', {
+    p_accent: accent ?? null, p_accent2: accent2 ?? null, p_logo_url: logoUrl ?? null,
+  }));
+}
+
+// Administración de la plataforma: aprobar/reactivar ('active') o desactivar ('disabled').
+export async function setBusinessStatus(businessId, status) {
+  return unwrap(await supabase.rpc('set_business_status', { p_business: businessId, p_status: status }));
+}
+
 export async function updateBusinessProfile({ name, rif, fiscalAddress }) {
   return unwrap(await supabase.rpc('update_business_profile', {
     p_name: name,

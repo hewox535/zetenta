@@ -15,6 +15,11 @@ Functions, Storage). Todo el texto de la interfaz está en español de Venezuela
   `set local role authenticated`).
 - Datos de un negocio (alta de clientes, configuración): `supabase db query`, nunca una migración.
   Credenciales y material del cliente van en `entregas/` (ignorado por git), jamás en el repo.
+- Estado de un negocio (`businesses.status`): quien se registra queda `pending` (ve "Solicitar prueba
+  gratuita") hasta que el admin de la plataforma lo aprueba en Administración. Un alta manual por SQL
+  debe dejar `status = 'active'`. `current_business_id()` solo resuelve negocios activos y
+  `get_branding()` solo da la marca de los activos: cualquier otro host muestra la página genérica de
+  "no encontrado" (sin marca de nadie).
 - No se nombran plataformas de terceros en la documentación: se habla de "plataforma de referencia".
 
 ## Definición de terminado: UX/UI

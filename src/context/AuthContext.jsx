@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { fetchProfile, fetchBusiness, isSessionAlive } from '../lib/api';
+import { fetchProfile, fetchBusiness, fetchMyBusiness, isSessionAlive } from '../lib/api';
 
 const AuthContext = createContext(null);
 
@@ -8,6 +8,9 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined); // undefined = cargando
   const [profile, setProfile] = useState(null);
   const [business, setBusiness] = useState(null);
+  // Estado del negocio (pendiente de aprobación, activo o desactivado). Solo un
+  // negocio activo carga sus datos; los demás ven la pantalla de su estado.
+  const [account, setAccount] = useState(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -46,7 +49,10 @@ export function AuthProvider({ children }) {
   const loadAccount = useCallback(async (userId) => {
     const p = await fetchProfile(userId);
     setProfile(p);
-    setBusiness(p.business_id ? await fetchBusiness(p.business_id) : null);
+    if (!p.business_id) { setAccount(null); setBusiness(null); return; }
+    const acc = await fetchMyBusiness();
+    setAccount(acc);
+    setBusiness(acc?.status === 'active' ? await fetchBusiness(p.business_id) : null);
   }, []);
 
   useEffect(() => {
@@ -54,6 +60,7 @@ export function AuthProvider({ children }) {
     if (!session) {
       setProfile(null);
       setBusiness(null);
+      setAccount(null);
       setReady(true);
       return;
     }
@@ -63,6 +70,11 @@ export function AuthProvider({ children }) {
       .catch(() => { if (active) { setProfile(null); setBusiness(null); } })
       .finally(() => { if (active) setReady(true); });
     return () => { active = false; };
+  }, [session, loadAccount]);
+
+  // Tras solicitar la prueba o cambiar la marca estando pendiente.
+  const refreshAccount = useCallback(async () => {
+    if (session?.user?.id) await loadAccount(session.user.id);
   }, [session, loadAccount]);
 
   const refreshBusiness = useCallback(async () => {
@@ -87,11 +99,16 @@ export function AuthProvider({ children }) {
     return supabase.auth.signInWithPassword({ email, password });
   };
 
-  const signUp = (email, password, { businessName, fullName, businessType }) =>
+  // El negocio se crea ya configurado (nombre, subdominio, color) pero pendiente
+  // de aprobación: ver 20261130120000_business_status_trial.sql.
+  const signUp = (email, password, { businessName, fullName, businessType, slug, accent, accent2 }) =>
     supabase.auth.signUp({
       email,
       password,
-      options: { data: { business_name: businessName, full_name: fullName, business_type: businessType || 'general' } },
+      options: { data: {
+        business_name: businessName, full_name: fullName, business_type: businessType || 'general',
+        slug: slug || '', accent: accent || '', accent2: accent2 || '',
+      } },
     });
 
   const signOut = () => supabase.auth.signOut();
@@ -105,6 +122,9 @@ export function AuthProvider({ children }) {
     user: session?.user ?? null,
     profile,
     business,
+    // { status: 'pending' | 'active' | 'disabled', slug, branding, trial_requested_at… } o null
+    account,
+    refreshAccount,
     isAdmin: profile?.role === 'platform_admin',
     // Rol dentro del negocio: 'admin' (acceso completo) | 'seller' (solo ventas).
     businessRole: profile?.business_role ?? 'admin',
