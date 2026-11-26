@@ -756,6 +756,11 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
 .product-card:hover { transform: translateY(-2px); border-color: var(--accent-line); }
 .product-card:active { transform: translateY(0); }
 .product-card.in-cart { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+/* Sin control de inventario y marcado agotado en esta sucursal: no se vende. */
+.product-card.sold-out, .variant-pick.sold-out { cursor: not-allowed; }
+.product-card.sold-out .product-card-thumb, .variant-pick.sold-out .product-card-thumb { filter: grayscale(1); opacity: .5; }
+.product-card.sold-out .product-card-name, .product-card.sold-out .product-card-prices,
+.variant-pick.sold-out .variant-pick-label, .variant-pick.sold-out .product-card-prices { opacity: .5; }
 .product-card-name { font-size: 14px; font-weight: 600; line-height: 1.3; flex: 1; }
 /* Tallas y colores del producto en su tarjeta del POS */
 .product-card-head { flex: 1; }

@@ -342,12 +342,14 @@ function MissingValue({ axis, terms, onChange }) {
 // rows: filas (ver arriba). photoOf(row) → url | null.
 // onPatch(key, patch), onRemove(row) quita una fila nueva, menuFor(row) → ítems ⋯
 // lock: { stock, price, info, media }. showTarget: columna de stock objetivo.
+// noStock: producto sin control de inventario (sin columnas de cantidad).
 export function VariantTable({
   axes, rows, termsOf, onPatch, onRemove, onPhoto, photoOf, menuFor,
-  lock = {}, showTarget = false, disabled = false, photoHint,
+  lock = {}, showTarget = false, disabled = false, photoHint, noStock = false,
 }) {
   const total = rows.reduce((s, r) => s + (Number(r.stock) || 0), 0);
-  const cls = `vt-row${showTarget ? ' with-target' : ''}`;
+  if (noStock) showTarget = false;
+  const cls = `vt-row${showTarget ? ' with-target' : ''}${noStock ? ' no-stock' : ''}`;
 
 
   return (
@@ -356,7 +358,7 @@ export function VariantTable({
         <div className={`${cls} vt-head`} role="row">
           <span role="columnheader" aria-label="Foto" />
           <span role="columnheader">Variación</span>
-          <span role="columnheader">Cantidad</span>
+          {!noStock && <span role="columnheader">Cantidad</span>}
           <span role="columnheader">Precio</span>
           <span role="columnheader">Costo</span>
           <span role="columnheader">SKU</span>
@@ -384,10 +386,12 @@ export function VariantTable({
                 {r.isNew && rows.some((x) => !x.isNew) && <span className="vt-new">Nueva</span>}
                 {missing.length > 0 && <span className="sr-only">Falta {missing.join(', ')}</span>}
               </div>
-              <label className="vt-cell" data-label="Cantidad">
-                <input type="number" min="0" step="1" placeholder="0" value={r.stock} disabled={disabled || lock.stock}
-                  aria-label="Cantidad" onChange={(e) => onPatch(r.key, { stock: e.target.value })} />
-              </label>
+              {!noStock && (
+                <label className="vt-cell" data-label="Cantidad">
+                  <input type="number" min="0" step="1" placeholder="0" value={r.stock} disabled={disabled || lock.stock}
+                    aria-label="Cantidad" onChange={(e) => onPatch(r.key, { stock: e.target.value })} />
+                </label>
+              )}
               <label className="vt-cell" data-label="Precio">
                 <input type="number" min="0" step="0.01" placeholder="hereda" value={r.price} disabled={disabled || lock.price}
                   aria-label="Precio" onChange={(e) => onPatch(r.key, { price: e.target.value })} />
@@ -419,7 +423,7 @@ export function VariantTable({
         })}
       </div>
       <div className="vt-foot">
-        <span>{rows.length === 1 ? '1 variación' : `${rows.length} variaciones`} · <strong>{total} und</strong> en total</span>
+        <span>{rows.length === 1 ? '1 variación' : `${rows.length} variaciones`}{!noStock && <> · <strong>{total} und</strong> en total</>}</span>
         {photoHint && <span className="muted">{photoHint}</span>}
       </div>
     </div>

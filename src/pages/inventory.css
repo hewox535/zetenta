@@ -209,6 +209,7 @@
   padding: 8px 10px; border-bottom: 1px solid var(--border);
 }
 .vt-row.with-target { grid-template-columns: 40px minmax(120px, 1fr) 84px 92px 92px 108px 76px 34px; }
+.vt-row.no-stock { grid-template-columns: 40px minmax(120px, 1fr) 92px 92px 108px 34px; }
 .vt-row:last-child { border-bottom: 0; }
 .vt-row.is-new { background: rgba(0,0,0,.015); }
 .vt-head {
@@ -322,7 +323,7 @@
 @media (max-width: 640px) {
   .vt-table { border: 0; display: flex; flex-direction: column; gap: 10px; }
   .vt-head { display: none; }
-  .vt-row, .vt-row.with-target {
+  .vt-row, .vt-row.with-target, .vt-row.no-stock {
     grid-template-columns: 1fr 1fr; row-gap: 8px;
     border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px;
     position: relative;
@@ -395,3 +396,14 @@
   .mk-preview-head, .mk-preview-row { grid-template-columns: minmax(0, 1fr) 70px 96px; gap: 8px; padding: 9px 10px; }
   .mk-summary { flex: 1 1 100%; }
 }
+
+/* ---------- Productos sin control de inventario ---------- */
+.inv-pill.ok { background: var(--ok-bg); color: var(--ok); }
+.avail-ctl { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 13px; font-weight: 600; color: var(--danger); white-space: nowrap; }
+.avail-ctl.on { color: var(--ok); }
+.avail-ctl .switch { flex: none; }
+.inv-var-row .avail-ctl { margin-left: auto; }
+.np-track { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.np-track .switch { flex: none; margin-top: 2px; }
+.np-track-title { font-size: 14px; font-weight: 650; }
+.np-track p { margin: 2px 0 0; font-size: 13px; }
