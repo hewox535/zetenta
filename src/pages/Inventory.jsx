@@ -871,6 +871,11 @@ export default function Inventory() {
     withCost: all.some((p) => Number(p.cost) > 0 || variantsOf(p).some((v) => Number(v.cost) > 0)),
   };
   const lowList = all.flatMap((p) => variantsOf(p).filter(isLow).map((v) => ({ p, v })));
+  // Negocio sin control de inventario (heladería…): las cifras de stock no
+  // dicen nada; se resume la disponibilidad de la sucursal.
+  const noStockBiz = all.length > 0 && !all.some(tracksStock);
+  const availN = all.filter(hasAvail).length;
+  const avgPrice = all.length ? all.reduce((acc, p) => acc + Number(offerPrice(p.price, p) || 0), 0) / all.length : 0;
   // Sin precio de venta pero con costo: se les puede poner precio por margen.
   const noPrice = all.filter((p) => !(Number(p.price) > 0));
   const activeFilters = [
@@ -931,12 +936,37 @@ export default function Inventory() {
 
       {error && !modal && <div className="form-error" onClick={() => setError(null)}>{error}</div>}
 
-      {products !== null && products.length > 0 && (
+      {products !== null && products.length > 0 && noStockBiz && (
         <div className="fin-kpis">
           <div className="card fin-kpi">
             <span className="fin-kpi-label">Productos</span>
             <strong className="fin-kpi-value">{summary.products}</strong>
-            <span className="fin-kpi-sub">{summary.variants > 0 ? `${summary.variants} variantes` : 'sin variantes'}{summary.out > 0 ? ` · ${summary.out} sin stock` : ''}</span>
+            <span className="fin-kpi-sub">sin control de inventario</span>
+          </div>
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Disponibles</span>
+            <strong className="fin-kpi-value">{availN}</strong>
+            <span className="fin-kpi-sub">{multiBranch && currentBranch ? `en ${currentBranch.name}` : 'listos para vender'}</span>
+          </div>
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Agotados</span>
+            <strong className={`fin-kpi-value${summary.products - availN > 0 ? ' inv-zero' : ''}`}>{summary.products - availN}</strong>
+            <span className="fin-kpi-sub">{summary.products - availN > 0 ? 'no se pueden vender ahora' : 'todo el menú disponible'}</span>
+          </div>
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Precio promedio</span>
+            <strong className="fin-kpi-value">${money(avgPrice)}</strong>
+            <span className="fin-kpi-sub">de tu menú</span>
+          </div>
+        </div>
+      )}
+
+      {products !== null && products.length > 0 && !noStockBiz && (
+        <div className="fin-kpis">
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Productos</span>
+            <strong className="fin-kpi-value">{summary.products}</strong>
+            <span className="fin-kpi-sub">{summary.variants > 0 ? `${summary.variants} variantes` : 'sin variantes'}{summary.out > 0 ? ` · ${summary.out} sin stock o agotados` : ''}</span>
           </div>
           <div className="card fin-kpi">
             <span className="fin-kpi-label">Unidades en stock</span>
