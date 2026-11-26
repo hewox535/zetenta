@@ -1,3 +1,5 @@
+import NotFound from './components/NotFound';
+import TrialGate from './pages/TrialGate';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BranchProvider } from './context/BranchContext';
@@ -38,8 +40,11 @@ function Splash() {
 // caché), mostramos un splash neutro en vez de la marca Zetenta por defecto, para
 // no enseñar una marca y luego cambiarla.
 function BrandGate({ children }) {
-  const { ready, fromCache } = useBranding();
+  const { ready, fromCache, notFound } = useBranding();
   if (!ready && !fromCache) return <div className="brand-splash"><span className="brand-spinner" /></div>;
+  // Host sin marca activa (subdominio inventado, negocio pendiente o desactivado):
+  // página genérica, sin login ni catálogo ni marca de nadie.
+  if (notFound) return <NotFound />;
   return children;
 }
 
@@ -66,9 +71,11 @@ function RootGate({ children }) {
 }
 
 function RequireAuth({ children }) {
-  const { loading, session } = useAuth();
+  const { loading, session, account, isAdmin } = useAuth();
   if (loading) return <Splash />;
   if (!session) return <Navigate to="/login" replace />;
+  // Negocio pendiente de aprobación (o desactivado): no entra al panel.
+  if (account && account.status !== 'active' && !isAdmin) return <TrialGate />;
   return children;
 }
 

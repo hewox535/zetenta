@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
-import { fetchBusinesses, updateBusinessBranding, uploadBrandingAsset } from '../lib/api';
+import { fetchBusinesses, updateBusinessBranding, uploadBrandingAsset, setBusinessStatus } from '../lib/api';
 import { formatDate } from '../lib/calc';
+import { useConfirm } from '../components/Confirm';
+import './finance.css';
+
+// Estados de un negocio y cómo se muestran.
+const STATUS = {
+  pending: { tab: 'Solicitudes', pill: 'Pendiente', tone: 'soon' },
+  active: { tab: 'Activos', pill: 'Activo', tone: 'ok' },
+  disabled: { tab: 'Desactivados', pill: 'Desactivado', tone: 'off' },
+};
 
 // Dominio donde vive la plataforma: los slugs se sirven como subdominios de él.
 const PLATFORM_DOMAIN = 'zetenta.app';
@@ -31,12 +40,19 @@ const CAP_HINTS = {
 };
 
 export default function Admin() {
+  const ask = useConfirm();
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null); // negocio en edición de marca/dominio
+  const [tab, setTab] = useState(null);         // 'pending' | 'active' | 'disabled'
+  const [busyId, setBusyId] = useState(null);
 
   useEffect(() => {
-    fetchBusinesses().then(setRows).catch((e) => setError(e.message));
+    fetchBusinesses().then((list) => {
+      setRows(list);
+      // Si hay solicitudes, se abre ahí; si no, en los activos.
+      setTab((t) => t || (list.some((b) => b.status === 'pending') ? 'pending' : 'active'));
+    }).catch((e) => setError(e.message));
   }, []);
 
   function onSaved(updated) {
@@ -44,12 +60,31 @@ export default function Admin() {
     setEditing(null);
   }
 
+  async function changeStatus(b, status) {
+    if (status === 'disabled' && !await ask({
+      title: `¿Desactivar ${b.name}?`,
+      message: 'Sus usuarios no podrán iniciar sesión, se cierran las sesiones abiertas y su dirección mostrará «página no encontrada». Puedes reactivarlo cuando quieras.',
+      confirmLabel: 'Desactivar',
+    })) return;
+    setBusyId(b.id); setError(null);
+    try {
+      const updated = await setBusinessStatus(b.id, status);
+      setRows((prev) => prev.map((x) => (x.id === b.id ? { ...x, ...updated } : x)));
+    } catch (e) { setError(e.message); } finally { setBusyId(null); }
+  }
+
+  const count = (st) => (rows || []).filter((b) => (b.status || 'active') === st).length;
+  const list = (rows || []).filter((b) => (b.status || 'active') === tab)
+    .sort((a, b) => (tab === 'pending'
+      ? (b.trial_requested_at ? 1 : 0) - (a.trial_requested_at ? 1 : 0) || (b.trial_requested_at || b.created_at).localeCompare(a.trial_requested_at || a.created_at)
+      : a.name.localeCompare(b.name)));
+
   return (
     <div className="page">
       <header className="page-head">
         <div>
           <h1>Administración</h1>
-          <p className="page-sub">Negocios de la plataforma, sus módulos y su marca por dominio.</p>
+          <p className="page-sub">Negocios de la plataforma: solicitudes de prueba, módulos y marca por dominio.</p>
         </div>
       </header>
 
@@ -57,39 +92,69 @@ export default function Admin() {
 
       {rows === null ? (
         <div className="empty">Cargando…</div>
-      ) : rows.length === 0 ? (
-        <div className="empty">Todavía no hay negocios registrados.</div>
       ) : (
-        <div className="card table-card">
-          <table className="list">
-            <thead>
-              <tr>
-                <th>Negocio</th>
-                <th>Dominio</th>
-                <th>Registrado</th>
-                <th>Módulos</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((b) => (
-                <tr key={b.id}>
-                  <td><strong>{b.name}</strong></td>
-                  <td className="mono">
-                    {b.custom_domain || b.slug || <span className="muted">—</span>}
-                  </td>
-                  <td>{formatDate(b.created_at)}</td>
-                  <td className="muted">
-                    {CAPABILITIES.filter(([key]) => b.capabilities?.[key]).length} de {CAPABILITIES.length} activos
-                  </td>
-                  <td className="row-actions">
-                    <button className="btn ghost sm" onClick={() => setEditing(b)}>Editar</button>
-                  </td>
-                </tr>
+        <>
+          <div className="fin-tabs-row">
+            <div className="fin-tabs" role="tablist">
+              {['pending', 'active', 'disabled'].map((k) => (
+                <button key={k} type="button" role="tab" aria-selected={tab === k}
+                  className={`fin-tab${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>
+                  {STATUS[k].tab}
+                  {count(k) > 0 && <span className={`fin-tab-count${k === 'pending' ? ' alert' : ''}`}>{count(k)}</span>}
+                </button>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          </div>
+
+          {list.length === 0 ? (
+            <div className="card"><div className="empty">
+              {tab === 'pending' ? 'No hay solicitudes de prueba por revisar.' : tab === 'disabled' ? 'No hay negocios desactivados.' : 'Todavía no hay negocios activos.'}
+            </div></div>
+          ) : (
+            <div className="card adm-list">
+              {list.map((b) => {
+                const st = STATUS[b.status || 'active'];
+                const accent = b.branding?.accent || '#2323FF';
+                return (
+                  <div className="adm-row" key={b.id}>
+                    <span className="adm-mark" style={{ background: accent }} aria-hidden="true">
+                      {b.branding?.logo_url ? <img src={b.branding.logo_url} alt="" /> : (b.name || '?').charAt(0).toUpperCase()}
+                    </span>
+                    <div className="adm-main">
+                      <div className="adm-title">
+                        <strong>{b.name}</strong>
+                        <span className={`adm-pill ${st.tone}`}>{st.pill}</span>
+                      </div>
+                      <span className="adm-meta">
+                        <span className="mono">{b.custom_domain || (b.slug ? `${b.slug}.zetenta.app` : 'sin dominio')}</span>
+                        {' · '}
+                        {b.status === 'pending'
+                          ? (b.trial_requested_at ? `pidió la prueba el ${formatDate(b.trial_requested_at)}` : `se registró el ${formatDate(b.created_at)}, aún no pide la prueba`)
+                          : b.status === 'disabled'
+                            ? `desactivado${b.disabled_at ? ` el ${formatDate(b.disabled_at)}` : ''}`
+                            : `${CAPABILITIES.filter(([key]) => b.capabilities?.[key]).length} de ${CAPABILITIES.length} módulos · desde ${formatDate(b.approved_at || b.created_at)}`}
+                      </span>
+                    </div>
+                    <div className="adm-actions">
+                      {b.status === 'pending' && (
+                        <button className="btn primary sm" disabled={busyId === b.id} onClick={() => changeStatus(b, 'active')}>
+                          {busyId === b.id ? 'Aprobando…' : 'Aprobar'}
+                        </button>
+                      )}
+                      {b.status === 'disabled' && (
+                        <button className="btn sm" disabled={busyId === b.id} onClick={() => changeStatus(b, 'active')}>Reactivar</button>
+                      )}
+                      <button className="btn ghost sm" onClick={() => setEditing(b)}>Editar</button>
+                      {b.status !== 'disabled' && (
+                        <button className="btn ghost sm adm-danger" disabled={busyId === b.id} onClick={() => changeStatus(b, 'disabled')}>Desactivar</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {editing && <BrandingModal business={editing} onClose={() => setEditing(null)} onSaved={onSaved} />}

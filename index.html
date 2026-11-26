@@ -14,7 +14,9 @@
       // nunca se muestra una marca equivocada.
       try {
         var _b = JSON.parse(localStorage.getItem('zt-brand:' + location.hostname) || 'null');
-        if (_b) {
+        if (_b && _b.notFound) {
+          document.title = 'Página no encontrada';
+        } else if (_b) {
           var _brandName = _b.name && _b.name !== 'zetenta' ? _b.name : 'Zetenta';
           document.title = _brandName + ' Admin';
           if (_b.accent) {

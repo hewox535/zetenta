@@ -21,7 +21,9 @@ export default function Login() {
     const { error: err } = await signIn(email.trim(), password);
     setBusy(false);
     if (err) {
-      setError(err.message === 'Invalid login credentials' ? 'Usuario o contraseña incorrectos.' : err.message);
+      setError(err.message === 'Invalid login credentials' ? 'Usuario o contraseña incorrectos.'
+        : /banned/i.test(err.message) || err.code === 'user_banned' ? 'Esta cuenta está desactivada.'
+        : err.message);
       return;
     }
     navigate('/', { replace: true });

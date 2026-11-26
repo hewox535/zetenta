@@ -18,6 +18,16 @@ const BrandingContext = createContext({ ...DEFAULT, ready: false, fromCache: fal
 const host = typeof window !== 'undefined' ? window.location.hostname : '';
 const CACHE_KEY = `zt-brand:${host}`;
 
+// Dominios de la plataforma: sin marca de negocio muestran Zetenta. Cualquier
+// otro host (subdominio inventado, negocio pendiente o desactivado, dominio
+// propio que no está configurado) muestra la página genérica de "no encontrado".
+export function isPlatformHost(h = host) {
+  return h === 'zetenta.app' || h === 'www.zetenta.app'
+    || h === 'localhost' || h === '127.0.0.1' || h === '[::1]'
+    || /^\d{1,3}(\.\d{1,3}){3}$/.test(h)          // IP local (probar desde el teléfono)
+    || h.endsWith('.vercel.app') || h.endsWith('.netlify.app');
+}
+
 function readCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
@@ -58,7 +68,7 @@ export function BrandingProvider({ children }) {
         const next = b
           ? { name: b.name || 'zetenta', logoUrl: b.logo_url || null, faviconUrl: b.favicon_url || null,
               accent: b.accent || null, accent2: b.accent2 || null, businessId: b.business_id }
-          : { ...DEFAULT };
+          : isPlatformHost() ? { ...DEFAULT } : { ...DEFAULT, name: '', notFound: true };
         writeCache(next);
         setBranding({ ...next, ready: true, fromCache: false });
       })
@@ -71,6 +81,17 @@ export function BrandingProvider({ children }) {
     // favicon. Zetenta es una marca más: solo aparece cuando el dominio
     // efectivamente resolvió a la marca por defecto.
     if (!branding.ready && !branding.fromCache) return;
+    // Página genérica: sin identidad de nadie (ni título de marca ni ícono).
+    if (branding.notFound) {
+      document.title = 'Página no encontrada';
+      document.querySelectorAll("link[rel='icon'], link[rel='apple-touch-icon'], link[rel='manifest']").forEach((l) => l.remove());
+      setMeta('name', 'theme-color', '#f5f5f7');
+      setMeta('name', 'description', 'La página que buscas no existe.');
+      setMeta('property', 'og:title', 'Página no encontrada');
+      setMeta('property', 'og:site_name', '');
+      setMeta('property', 'og:description', 'La página que buscas no existe.');
+      return;
+    }
 
     const root = document.documentElement;
     const branded = branding.name && branding.name !== 'zetenta';
