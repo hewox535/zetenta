@@ -62,7 +62,8 @@ export default function Shell() {
   }
 
   // Avisos de vencimiento (cuentas y gastos fijos que vencen en 3 días o ya
-  // vencieron). Se refrescan al cambiar de pantalla.
+  // vencieron) de las sucursales a las que el usuario tiene acceso. Se
+  // refrescan al cambiar de pantalla.
   const { pathname } = useLocation();
   const [alerts, setAlerts] = useState({});
   const wantsAlerts = !!business && (capabilities.accounts || capabilities.expenses);
