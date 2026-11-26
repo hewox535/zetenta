@@ -144,6 +144,13 @@ export async function deleteBranch(id) {
 }
 
 // Traslado de stock entre sucursales (atómico, sin sobreventa en origen).
+// Productos sin control de inventario: Disponible/Agotado por variante y sucursal.
+export async function setVariantAvailable(variantId, branchId, available) {
+  return unwrap(await supabase.rpc('set_variant_available', {
+    p_variant_id: variantId, p_branch_id: branchId, p_available: available,
+  }));
+}
+
 export async function transferStock({ variantId, fromBranch, toBranch, quantity, note }) {
   return unwrap(await supabase.rpc('transfer_stock', {
     p_variant_id: variantId, p_from: fromBranch, p_to: toBranch,

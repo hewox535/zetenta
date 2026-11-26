@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import {
   fetchProducts, deleteProduct,
-  createMovement,
+  createMovement, setVariantAvailable,
   fetchTaxonomies,
   createProductWithVariants, updateProductDetails,
   addProductVariant, updateVariant, deleteVariant,
@@ -119,6 +119,8 @@ const variantsOf = (p) => p.product_variants || [];
 const mediaOf = (p) => (p.product_media || []).slice().sort((a, b) => a.sort_order - b.sort_order);
 const productImg = (p) => { const m = mediaOf(p).find((x) => !x.variant_id) || mediaOf(p)[0]; return m ? mediaUrl(m) : null; };
 const totalStock = (p) => variantsOf(p).reduce((s, v) => s + Number(v.stock || 0), 0);
+// Sin control de inventario (helados…): no hay cantidades, solo Disponible/Agotado por sucursal.
+const tracksStock = (p) => p.track_stock !== false;
 const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).length === 0;
 const defaultVariant = (p) =>
   variantsOf(p).find((v) => Object.keys(v.attributes || {}).length === 0) || variantsOf(p)[0];
@@ -250,6 +252,37 @@ export default function Inventory() {
     return v.target_stock != null && t > 0 && Number(v.stock) <= (t * lowPct) / 100;
   };
   const productHasLow = (p) => variantsOf(p).some(isLow);
+  // Disponible/Agotado en la sucursal actual (sin fila = disponible).
+  const availOf = (v) => (v.variant_stock || []).find((x) => x.branch_id === branchId)?.available !== false;
+  const hasAvail = (p) => variantsOf(p).some(availOf);
+  async function toggleAvail(p, v) {
+    const next = !availOf(v);
+    const upd = (vs) => {
+      const list = vs || [];
+      return list.some((x) => x.branch_id === branchId)
+        ? list.map((x) => (x.branch_id === branchId ? { ...x, available: next } : x))
+        : [...list, { branch_id: branchId, variant_id: v.id, stock: 0, available: next }];
+    };
+    setProducts((prev) => prev.map((x) => (x.id !== p.id ? x : {
+      ...x, product_variants: variantsOf(x).map((y) => (y.id !== v.id ? y : { ...y, variant_stock: upd(y.variant_stock) })),
+    })));
+    try { await setVariantAvailable(v.id, branchId, next); }
+    catch (e) { setError(e.message); reload().catch(() => {}); }
+  }
+  // Interruptor (o etiqueta, sin permiso) de disponibilidad de una variación.
+  const availCtl = (p, v) => {
+    const on = availOf(v);
+    if (!canStock) return <span className={`inv-pill ${on ? 'ok' : 'out'}`}>{on ? 'Disponible' : 'Agotado'}</span>;
+    return (
+      <span className={`avail-ctl${on ? ' on' : ''}`} onClick={(e) => e.stopPropagation()}>
+        <button type="button" className={`switch${on ? ' on' : ''}`} role="switch" aria-checked={on}
+          aria-label={`${p.name}: ${on ? 'disponible' : 'agotado'}`} onClick={() => toggleAvail(p, v)}>
+          <span className="switch-knob" />
+        </button>
+        <span>{on ? 'Disponible' : 'Agotado'}</span>
+      </span>
+    );
+  };
 
   async function reload() {
     const [p, t] = await Promise.all([fetchProducts(), fetchTaxonomies()]);
@@ -296,8 +329,9 @@ export default function Inventory() {
     if (offerOnly && !hasOffer(p)) return false;
     if (stockFilter !== 'all') {
       const n = variantsOf(p).reduce((acc, v) => acc + branchStock(v, branchId), 0);
-      if (stockFilter === 'in' && n <= 0) return false;
-      if (stockFilter === 'out' && n > 0) return false;
+      const has = tracksStock(p) ? n > 0 : hasAvail(p);
+      if (stockFilter === 'in' && !has) return false;
+      if (stockFilter === 'out' && has) return false;
       if (stockFilter === 'low' && !productHasLow(p)) return false;
     }
     if (!matchesSearch(p)) return false;
@@ -310,7 +344,7 @@ export default function Inventory() {
   function openCreate() {
     setError(null);
     setModal({
-      mode: 'create', name: '', price: '', cost: '', sku: '', unit: 'und', note: '', categories: {},
+      mode: 'create', name: '', price: '', cost: '', sku: '', unit: 'und', note: '', categories: {}, trackStock: true,
       simpleStock: '', axisIds: [], vb: emptyVariations(), stagedFiles: [],
     });
   }
@@ -329,7 +363,7 @@ export default function Inventory() {
       simple: isSimple(p),
       name: p.name, price: String(p.price ?? ''), cost: p.cost != null && Number(p.cost) !== 0 ? String(p.cost) : '',
       sku: p.sku || '', unit: p.unit || 'und', note: p.note || '',
-      categories,
+      categories, trackStock: tracksStock(p),
       variants: variantsOf(p).map((v) => ({
         id: v.id, label: variantLabel(v.attributes, p.variant_axes),
         attributes: v.attributes || {}, origAttributes: v.attributes || {},
@@ -407,8 +441,9 @@ export default function Inventory() {
         const created = await createProductWithVariants({
           name: modal.name.trim(), sku: modal.sku.trim(), unit: modal.unit.trim() || 'und',
           price: Number(modal.price) || 0, cost: Number(modal.cost) || 0, note: modal.note.trim(),
-          categories, variantAxes, variants, branchId,
+          categories, variantAxes, variants: modal.trackStock ? variants : variants.map((v) => ({ ...v, stock: 0 })), branchId,
         });
+        if (!modal.trackStock) await updateProduct(created.id, { track_stock: false });
         for (let i = 0; i < (modal.stagedFiles || []).length; i++) {
           await uploadProductImage(business.id, created.id, modal.stagedFiles[i], { sortOrder: i });
         }
@@ -434,6 +469,9 @@ export default function Inventory() {
           throw new Error(
             `Completa ${faltan.join(' y ').toLowerCase()} en ${sinValor.length === 1 ? 'una variación' : `${sinValor.length} variaciones`} (en la tabla de variaciones).`,
           );
+        }
+        if (canStock && modal.trackStock !== tracksStock(o)) {
+          await updateProduct(modal.id, { track_stock: modal.trackStock });
         }
         if (canInfo && modal.axes.join('|') !== modal.origAxes.join('|')) {
           await updateProduct(modal.id, { variant_axes: modal.axes });
@@ -467,7 +505,7 @@ export default function Inventory() {
           }
           if (Object.keys(patch).length) await updateVariant(v.id, patch);
           const ns = Number(v.stock) || 0;
-          if (canStock && ns !== v.origStock) {
+          if (canStock && modal.trackStock && ns !== v.origStock) {
             await createMovement(business.id, { productId: modal.id, variantId: v.id, type: 'adjustment', quantity: ns, note: 'Ajuste (edición)', branchId });
           }
         }
@@ -487,7 +525,7 @@ export default function Inventory() {
               attributes: r.attributes, sku: (r.sku || '').trim(),
               price: r.price === '' || r.price == null ? null : Number(r.price),
               cost: r.cost === '' || r.cost == null ? null : Number(r.cost),
-              stock: Number(r.stock) || 0, branchId,
+              stock: modal.trackStock ? Number(r.stock) || 0 : 0, branchId,
             });
             createdKeys.add(r.key);
             if (r.file && created?.id) {
@@ -827,12 +865,17 @@ export default function Inventory() {
     products: all.length,
     variants: all.reduce((s, p) => s + (isSimple(p) ? 0 : variantsOf(p).length), 0),
     units: all.reduce((s, p) => s + stockOf(p), 0),
-    out: all.filter((p) => stockOf(p) <= 0).length,
+    out: all.filter((p) => (tracksStock(p) ? stockOf(p) <= 0 : !hasAvail(p))).length,
     cost: all.reduce((s, p) => s + costValueOf(p), 0),
     price: all.reduce((s, p) => s + priceValueOf(p), 0),
     withCost: all.some((p) => Number(p.cost) > 0 || variantsOf(p).some((v) => Number(v.cost) > 0)),
   };
   const lowList = all.flatMap((p) => variantsOf(p).filter(isLow).map((v) => ({ p, v })));
+  // Negocio sin control de inventario (heladería…): las cifras de stock no
+  // dicen nada; se resume la disponibilidad de la sucursal.
+  const noStockBiz = all.length > 0 && !all.some(tracksStock);
+  const availN = all.filter(hasAvail).length;
+  const avgPrice = all.length ? all.reduce((acc, p) => acc + Number(offerPrice(p.price, p) || 0), 0) / all.length : 0;
   // Sin precio de venta pero con costo: se les puede poner precio por margen.
   const noPrice = all.filter((p) => !(Number(p.price) > 0));
   const activeFilters = [
@@ -848,11 +891,11 @@ export default function Inventory() {
 
   // Acciones de stock de una variación (entrada, salida, traslado) desde la lista.
   const stockItems = (p, v, label) => [
-    { label: 'Registrar entrada', hint: 'Compra, reposición', hidden: !canStock || !v,
+    { label: 'Registrar entrada', hint: 'Compra, reposición', hidden: !canStock || !v || !tracksStock(p),
       onClick: () => setMove({ productId: p.id, variantId: v.id, label, type: 'in', quantity: '', note: '' }) },
-    { label: 'Registrar salida', hint: 'Merma, consumo, regalo', hidden: !canStock || !v,
+    { label: 'Registrar salida', hint: 'Merma, consumo, regalo', hidden: !canStock || !v || !tracksStock(p),
       onClick: () => setMove({ productId: p.id, variantId: v.id, label, type: 'out', quantity: '', note: '' }) },
-    { label: 'Trasladar a otra sucursal', hidden: !canStock || !v || !multiBranch,
+    { label: 'Trasladar a otra sucursal', hidden: !canStock || !v || !multiBranch || !tracksStock(p),
       onClick: () => setTransfer({ productId: p.id, variantId: v.id, label: label || 'Estándar', to: '', quantity: '' }) },
   ];
 
@@ -893,12 +936,37 @@ export default function Inventory() {
 
       {error && !modal && <div className="form-error" onClick={() => setError(null)}>{error}</div>}
 
-      {products !== null && products.length > 0 && (
+      {products !== null && products.length > 0 && noStockBiz && (
         <div className="fin-kpis">
           <div className="card fin-kpi">
             <span className="fin-kpi-label">Productos</span>
             <strong className="fin-kpi-value">{summary.products}</strong>
-            <span className="fin-kpi-sub">{summary.variants > 0 ? `${summary.variants} variantes` : 'sin variantes'}{summary.out > 0 ? ` · ${summary.out} sin stock` : ''}</span>
+            <span className="fin-kpi-sub">sin control de inventario</span>
+          </div>
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Disponibles</span>
+            <strong className="fin-kpi-value">{availN}</strong>
+            <span className="fin-kpi-sub">{multiBranch && currentBranch ? `en ${currentBranch.name}` : 'listos para vender'}</span>
+          </div>
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Agotados</span>
+            <strong className={`fin-kpi-value${summary.products - availN > 0 ? ' inv-zero' : ''}`}>{summary.products - availN}</strong>
+            <span className="fin-kpi-sub">{summary.products - availN > 0 ? 'no se pueden vender ahora' : 'todo el menú disponible'}</span>
+          </div>
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Precio promedio</span>
+            <strong className="fin-kpi-value">${money(avgPrice)}</strong>
+            <span className="fin-kpi-sub">de tu menú</span>
+          </div>
+        </div>
+      )}
+
+      {products !== null && products.length > 0 && !noStockBiz && (
+        <div className="fin-kpis">
+          <div className="card fin-kpi">
+            <span className="fin-kpi-label">Productos</span>
+            <strong className="fin-kpi-value">{summary.products}</strong>
+            <span className="fin-kpi-sub">{summary.variants > 0 ? `${summary.variants} variantes` : 'sin variantes'}{summary.out > 0 ? ` · ${summary.out} sin stock o agotados` : ''}</span>
           </div>
           <div className="card fin-kpi">
             <span className="fin-kpi-label">Unidades en stock</span>
@@ -1189,10 +1257,19 @@ export default function Inventory() {
                               )}
                             </td>
                             <td className="num">
-                              <span className="inv-num">
-                                <strong className={n <= 0 ? 'inv-zero' : ''}>{n.toLocaleString('es-VE')} <span className="inv-unit">{p.unit}</span></strong>
-                                {stockBadge(p, n, low) || (multiBranch && <small>total {totalStock(p)}</small>)}
-                              </span>
+                              {!tracksStock(p) ? (
+                                simple && dv ? availCtl(p, dv) : (
+                                  <span className="inv-num">
+                                    <strong>{variantsOf(p).filter(availOf).length} de {variantsOf(p).length}</strong>
+                                    <small>disponibles</small>
+                                  </span>
+                                )
+                              ) : (
+                                <span className="inv-num">
+                                  <strong className={n <= 0 ? 'inv-zero' : ''}>{n.toLocaleString('es-VE')} <span className="inv-unit">{p.unit}</span></strong>
+                                  {stockBadge(p, n, low) || (multiBranch && <small>total {totalStock(p)}</small>)}
+                                </span>
+                              )}
                             </td>
                             <td className="num inv-col-value">
                               {value > 0 ? <span className="inv-num"><strong>${money(value)}</strong></span> : <span className="fin-faint">—</span>}
@@ -1238,6 +1315,7 @@ export default function Inventory() {
                                   </span>
                                 </td>
                                 <td className="num">
+                                  {!tracksStock(p) ? availCtl(p, v) : (
                                   <span className="inv-num">
                                     <span className={vn <= 0 ? 'inv-zero' : ''}>{vn.toLocaleString('es-VE')}</span>
                                     {vn <= 0 ? <span className="inv-pill out">Sin stock</span>
@@ -1245,6 +1323,7 @@ export default function Inventory() {
                                         : v.target_stock != null ? <small>objetivo {Number(v.target_stock)}</small>
                                           : multiBranch ? <small>total {Number(v.stock)}</small> : null}
                                   </span>
+                                  )}
                                 </td>
                                 <td className="num inv-col-value">{vValue > 0 ? `$${money(vValue)}` : <span className="fin-faint">—</span>}</td>
                                 <td className="inv-col-actions">
@@ -1295,8 +1374,14 @@ export default function Inventory() {
                             <strong>${money(offerPrice(p.price, p))}</strong>
                             {hasOffer(p) && <span className="offer-old">${money(p.price)}</span>}
                             <span className="inv-card-sep">·</span>
-                            <span className={n <= 0 ? 'inv-zero' : ''}>{n} {p.unit}</span>
-                            {stockBadge(p, n, low)}
+                            {tracksStock(p) ? (
+                              <>
+                                <span className={n <= 0 ? 'inv-zero' : ''}>{n} {p.unit}</span>
+                                {stockBadge(p, n, low)}
+                              </>
+                            ) : hasAvail(p)
+                              ? <span className="inv-pill ok">{simple ? 'Disponible' : `${variantsOf(p).filter(availOf).length} de ${variantsOf(p).length} disponibles`}</span>
+                              : <span className="inv-pill out">Agotado</span>}
                           </span>
                           <span className="muted inv-card-tags">
                             {[!simple && `${variantsOf(p).length} variantes`, p.sku, ...(p.product_terms || []).map((pt) => termName.get(pt.term_id))].filter(Boolean).join(' · ')}
@@ -1307,14 +1392,17 @@ export default function Inventory() {
                       {open && !offerMode && (
                         <div className="inv-card-body">
                           {(simple ? [dv].filter(Boolean) : variantsOf(p)).map((v) => {
-                            const label = simple ? 'Existencias' : (variantLabel(v.attributes, p.variant_axes) || 'Estándar');
+                            const label = simple ? (tracksStock(p) ? 'Existencias' : 'Disponibilidad') : (variantLabel(v.attributes, p.variant_axes) || 'Estándar');
                             const vn = branchStock(v, branchId);
                             return (
                               <div className="inv-var-row" key={v.id}>
                                 <div className="inv-var-info">
                                   <span>{label}{isLow(v) && <span className="inv-pill low">Stock bajo</span>}</span>
-                                  <span className="muted"><strong>{vn}</strong> en stock{!simple && ` · $${money(offerPrice(v.price ?? p.price, p))}`}</span>
+                                  {tracksStock(p)
+                                    ? <span className="muted"><strong>{vn}</strong> en stock{!simple && ` · $${money(offerPrice(v.price ?? p.price, p))}`}</span>
+                                    : !simple && <span className="muted">${money(offerPrice(v.price ?? p.price, p))}</span>}
                                 </div>
+                                {!tracksStock(p) && availCtl(p, v)}
                                 <div className="inv-var-actions">
                                   <RowMenu items={[
                                     ...stockItems(p, v, simple ? '' : label),
@@ -1374,7 +1462,7 @@ export default function Inventory() {
                 <label>SKU
                   <input value={modal.sku} onChange={(e) => setM({ sku: e.target.value })} placeholder="CAM-OXF" disabled={lockInfo} />
                 </label>
-                {modal.mode === 'create' && modal.vb.length === 0 && (
+                {modal.mode === 'create' && modal.vb.length === 0 && modal.trackStock && (
                   <label>Cantidad
                     <input type="number" step="1" min="0" value={modal.simpleStock}
                       onChange={(e) => setM({ simpleStock: e.target.value })} placeholder="0" />
@@ -1386,6 +1474,21 @@ export default function Inventory() {
                   <textarea rows={2} value={modal.note} placeholder="p. ej. Este pantalón tiene una mancha" disabled={lockInfo}
                     onChange={(e) => setM({ note: e.target.value })} />
                 </label>
+              </div>
+
+              {/* -------- Control de inventario -------- */}
+              <div className="np-block np-track">
+                <button type="button" className={`switch${modal.trackStock ? ' on' : ''}`} role="switch"
+                  aria-checked={modal.trackStock} aria-labelledby="np-track-title" disabled={lockStock}
+                  onClick={() => setM({ trackStock: !modal.trackStock })}><span className="switch-knob" /></button>
+                <div>
+                  <div className="np-track-title" id="np-track-title">Controlar inventario</div>
+                  <p className="muted">
+                    {modal.trackStock
+                      ? 'Cuenta unidades: cada venta descuenta del stock de la sucursal.'
+                      : 'Sin cantidades: se vende siempre que esté Disponible. Ideal para lo que se prepara al momento (helados, bebidas, comida). En la lista lo marcas Agotado por sucursal.'}
+                  </p>
+                </div>
               </div>
 
               {(() => {
@@ -1449,7 +1552,7 @@ export default function Inventory() {
               </div>
 
               {/* -------- Cantidad de un producto simple ya guardado -------- */}
-              {editing && simpleEdit && (
+              {editing && simpleEdit && modal.trackStock && (
                 <div className="np-block">
                   <div className="oc-label">Cantidad</div>
                   {modal.variants.map((v, i) => {
@@ -1505,11 +1608,12 @@ export default function Inventory() {
                       photoOf={varPhotoOf}
                       menuFor={varMenu}
                       lock={{ stock: lockStock, price: lockPrice, info: lockInfo, media: lockMedia }}
+                      noStock={!modal.trackStock}
                       showTarget={editing}
                       disabled={busy}
                       photoHint={colorAxisOf(varAxes) && varAxes.length > 1 ? `La foto se aplica a todas las variaciones del mismo ${colorAxisOf(varAxes).toLowerCase()}.` : null}
                     />
-                    {editing && !lockStock && (
+                    {editing && !lockStock && modal.trackStock && (
                       <p className="hint">Cambiar la cantidad registra un ajuste. Para una entrada o salida con su nota, usa ⋯ en la variación.</p>
                     )}
                   </>

@@ -94,6 +94,13 @@ const branchStock = (v, branchId) => {
   return vs ? Number(vs.stock) : 0;
 };
 const totalStock = (p, branchId) => variantsOf(p).reduce((s, v) => s + branchStock(v, branchId), 0);
+// Productos sin control de inventario (helados…): no tienen cantidad, solo un
+// interruptor Disponible/Agotado por sucursal (sin fila = disponible).
+const tracksStock = (p) => p.track_stock !== false;
+const availableIn = (v, branchId) => (v.variant_stock || []).find((x) => x.branch_id === branchId)?.available !== false;
+const sellable = (p, v, branchId) => (tracksStock(p) ? branchStock(v, branchId) > 0 : availableIn(v, branchId));
+// Agotado sin control de inventario: no se puede vender (el servidor también lo rechaza).
+const blockedOut = (p, v, branchId) => !tracksStock(p) && !availableIn(v, branchId);
 const isSimple = (p) => variantsOf(p).length <= 1 && (p.variant_axes || []).length === 0;
 // Qué tallas y colores tiene el producto a la vista: los de las variantes con
 // stock en esta sucursal (es lo vendible). Si no queda ninguna, se muestran
@@ -107,7 +114,7 @@ const axisRow = (axis, values, soldOut) => ({
 const axisValues = (p, branchId) => {
   const axes = p.variant_axes || [];
   if (axes.length === 0) return [];
-  const withStock = variantsOf(p).filter((v) => branchStock(v, branchId) > 0);
+  const withStock = variantsOf(p).filter((v) => sellable(p, v, branchId));
   const source = withStock.length > 0 ? withStock : variantsOf(p);
   return axes.map((axis) =>
     axisRow(axis, [...new Set(source.map((v) => v.attributes?.[axis]).filter(Boolean))], withStock.length === 0),
@@ -121,7 +128,7 @@ const axisValues = (p, branchId) => {
 const cardAttrs = (p, branchId, varTax) => {
   const rows = axisValues(p, branchId);
   const yaEstan = new Set(rows.map((r) => r.axis.toLowerCase()));
-  const soldOut = totalStock(p, branchId) <= 0;
+  const soldOut = !variantsOf(p).some((v) => sellable(p, v, branchId));
   const porTax = new Map();
   (p.product_terms || []).forEach((pt) => {
     const t = varTax.get(pt.term_id);
@@ -373,6 +380,7 @@ export default function Orders() {
 
   // ------- carrito (por variante) -------
   const addVariant = (p, v) => {
+    if (blockedOut(p, v, branchId)) return;
     setCart((prev) => {
       const found = prev.find((c) => c.id === v.id);
       if (found) return prev.map((c) => (c.id === v.id ? { ...c, qty: c.qty + 1 } : c));
@@ -980,12 +988,14 @@ export default function Orders() {
                   {visible.map((p) => {
                     const qty = cartQtyForProduct(p);
                     const stock = totalStock(p, branchId);
+                    const tracked = tracksStock(p);
+                    const agotado = !tracked && !variantsOf(p).some((v) => availableIn(v, branchId));
                     const simple = isSimple(p);
                     const dv = simple ? defaultVariant(p) : null;
                     const img = productImg(p);
                     const inCartLine = dv ? cart.find((c) => c.id === dv.id) : null;
                     return (
-                      <div key={p.id} className={`product-card${qty ? ' in-cart' : ''}`}
+                      <div key={p.id} className={`product-card${qty ? ' in-cart' : ''}${agotado ? ' sold-out' : ''}`} aria-disabled={agotado || undefined}
                         onClick={() => (simple && inCartLine ? setQty(dv.id, 0) : onTapProduct(p))}
                         role="button" tabIndex={0}>
                         {qty > 0 && <span className="product-qty-badge">{qty}</span>}
@@ -1003,7 +1013,9 @@ export default function Orders() {
                           ))}
                         </div>
                         <div className="product-card-meta">
-                          <span className={`stock-badge${stock <= 0 ? ' out' : ''}`}>{stock} {p.unit}</span>
+                          {tracked
+                            ? <span className={`stock-badge${stock <= 0 ? ' out' : ''}`}>{stock} {p.unit}</span>
+                            : agotado && <span className="stock-badge out">Agotado</span>}
                           {!simple && <span className="variant-count">{variantsOf(p).length} variantes</span>}
                         </div>
                         {hasOffer(p) && <span className="offer-flag">🏷 {offerTag(p)}</span>}
@@ -1373,10 +1385,11 @@ export default function Orders() {
               {variantsOf(picker).map((v) => {
                 const inCart = cart.find((c) => c.id === v.id);
                 const vStock = branchStock(v, branchId);
-                const out = vStock <= 0;
+                const tracked = tracksStock(picker);
+                const out = tracked ? vStock <= 0 : !availableIn(v, branchId);
                 const img = variantImg(picker, v);
                 return (
-                  <div key={v.id} className={`variant-pick${inCart ? ' in-cart' : ''}`}
+                  <div key={v.id} className={`variant-pick${inCart ? ' in-cart' : ''}${!tracked && out ? ' sold-out' : ''}`}
                     role="button" tabIndex={0}
                     onClick={() => (inCart ? setQty(v.id, 0) : addVariant(picker, v))}>
                     {inCart && <span className="product-qty-badge">{inCart.qty}</span>}
@@ -1385,7 +1398,9 @@ export default function Orders() {
                     </div>
                     <div className="variant-pick-label">{variantLabel(v.attributes, picker.variant_axes) || 'Estándar'}</div>
                     <div className="product-card-meta">
-                      <span className={`stock-badge${out ? ' out' : ''}`}>{vStock} {picker.unit}</span>
+                      {tracked
+                        ? <span className={`stock-badge${out ? ' out' : ''}`}>{vStock} {picker.unit}</span>
+                        : out && <span className="stock-badge out">Agotado</span>}
                     </div>
                     <div className="product-card-prices">
                       <strong>{usd(effPrice(picker, v))}</strong>

@@ -384,6 +384,8 @@ export default function Stats() {
       }
       const sold = soldById.get(p.id) || 0;
       if (sold > 0) {
+        // Sin control de inventario (helados…) no hay stock que se agote.
+        if (p.track_stock === false) continue;
         const perDay = sold / periodDays;
         const daysLeft = stock / perDay;
         runway.push({ id: p.id, name: p.name, stock, perDay, daysLeft });
