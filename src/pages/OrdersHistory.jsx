@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchOrders, fetchStaff, cancelOrder } from '../lib/api';
 import { usd, bs, formatDate } from '../lib/calc';
+import { useBranchFilter, BranchSelect } from '../components/BranchFilter';
 
 // Montos reales de una venta: total_usd es a precio de lista y el descuento
 // (de contado o en divisa) se guarda aparte en discount_usd.
@@ -42,6 +43,8 @@ export default function OrdersHistory() {
   const [error, setError] = useState(null);
   // Venta que se está cancelando: { order, pin, reason, busy, error }
   const [cancel, setCancel] = useState(null);
+  const bf = useBranchFilter();
+  const shown = useMemo(() => orders && orders.filter((o) => bf.match(o.branch_id)), [orders, bf.match]);
 
   useEffect(() => {
     fetchOrders().then(setOrders).catch((e) => setError(e.message));
@@ -71,12 +74,14 @@ export default function OrdersHistory() {
       <header className="page-head">
         <div>
           <h1>Historial de ventas</h1>
-          <p className="page-sub">Todas las ventas registradas, de la más reciente a la más antigua.</p>
+          <p className="page-sub">{bf.show ? 'Las ventas de tus sucursales' : 'Todas las ventas registradas'}, de la más reciente a la más antigua.</p>
         </div>
         <div className="page-actions">
           <Link to="/orders" className="btn primary">+ Nueva venta</Link>
         </div>
       </header>
+
+      {bf.show && <div className="filters"><BranchSelect filter={bf} className="" /></div>}
 
       {error && <div className="form-error">{error}</div>}
 
@@ -84,24 +89,27 @@ export default function OrdersHistory() {
         <div className="empty">Cargando…</div>
       ) : orders.length === 0 ? (
         <div className="empty">Aún no hay ventas. Registra la primera en <Link to="/orders">Ventas</Link>.</div>
+      ) : shown.length === 0 ? (
+        <div className="empty">Sin ventas en {bf.nameOf(bf.value)}.</div>
       ) : (
         <>
         <div className="card table-card m-hide">
           <table className="list">
             <thead>
               <tr>
-                <th>Nº</th><th>Fecha</th><th>Cliente</th><th>Atendió</th>
+                <th>Nº</th><th>Fecha</th>{bf.show && <th>Sucursal</th>}<th>Cliente</th><th>Atendió</th>
                 <th>Pago</th><th className="num">Total</th><th />
               </tr>
             </thead>
             <tbody>
-              {orders.map((o) => (
+              {shown.map((o) => (
                 <tr key={o.id} className={o.cancelled_at ? 'row-cancelled' : undefined}>
                   <td className="mono">
                     {o.number}
                     {o.cancelled_at && <div><span className="badge out">Cancelada</span></div>}
                   </td>
                   <td>{formatDate(o.created_at)}</td>
+                  {bf.show && <td className="muted" style={{ whiteSpace: 'nowrap' }}>{bf.nameOf(o.branch_id) || '—'}</td>}
                   <td>{o.customer_name || <span className="muted">—</span>}</td>
                   <td className="muted">{staffName.get(o.created_by) || <span className="muted">—</span>}</td>
                   <td className="muted">
@@ -125,7 +133,7 @@ export default function OrdersHistory() {
 
         {/* -------- Lista móvil: cada venta es una tarjeta que abre el detalle -------- */}
         <div className="mlist">
-          {orders.map((o) => (
+          {shown.map((o) => (
             <div className="mcard-wrap" key={o.id}>
             <Link to={`/orders/${o.id}`} className="mcard mcard-link">
               <div className="mcard-info">
@@ -135,6 +143,7 @@ export default function OrdersHistory() {
                 </span>
                 <span className="muted">
                   {formatDate(o.created_at)}{staffName.get(o.created_by) ? ` · ${staffName.get(o.created_by)}` : ''}
+                  {bf.show && bf.nameOf(o.branch_id) ? ` · ${bf.nameOf(o.branch_id)}` : ''}
                 </span>
                 <span className="muted">{(o.order_payments || []).map((p) => p.method_name || p.account_name).filter(Boolean).join(', ') || '—'}</span>
               </div>

@@ -1130,11 +1130,24 @@ function BranchesSection({ business }) {
 
       <section className="card vsection">
         <h2>Acceso del personal</h2>
-        <p className="hint">Define a qué sucursales puede acceder cada persona. “Todas” incluye las que crees a futuro.</p>
+        <p className="hint">
+          Define a qué sucursales puede acceder cada vendedora: solo verá y registrará ventas, caja, inventario,
+          gastos y cuentas de esas sucursales. “Todas” incluye las que crees a futuro. Los administradores ven todas.
+        </p>
         {staff.length === 0 ? <div className="empty">Cargando…</div> : (
           <div className="acct-list">
             {staff.map((u) => {
               const a = access[u.id] || { all: true, ids: new Set() };
+              if (u.business_role === 'admin') {
+                return (
+                  <div className="acct" key={u.id}>
+                    <div className="acct-head">
+                      <div className="acct-title"><strong>{u.full_name || u.email}</strong><span className="muted">{u.email}</span></div>
+                      <span className="muted">Administrador · todas las sucursales</span>
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div className="acct" key={u.id}>
                   <div className="acct-head">

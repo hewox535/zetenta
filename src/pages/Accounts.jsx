@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
+import { useBranchFilter, BranchSelect } from '../components/BranchFilter';
 import { useConfirm } from '../components/Confirm';
 import { FinModal, RowMenu, Toast, SortHead } from '../components/FinUI';
 import { notifyCashChanged } from '../lib/cashEvents';
@@ -43,7 +44,9 @@ export default function Accounts() {
   const { branchId } = useBranch();
   const ask = useConfirm();
 
-  const [debts, setDebts] = useState(null);
+  const [allDebts, setDebts] = useState(null);
+  const bf = useBranchFilter();
+  const debts = useMemo(() => allDebts && allDebts.filter((d) => bf.match(d.branch_id)), [allDebts, bf.match]);
   const [accounts, setAccounts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -249,6 +252,7 @@ export default function Accounts() {
               <button key={k} type="button" className={`chip${filter === k ? ' on' : ''}`} onClick={() => setFilter(k)}>{label}</button>
             ))}
           </div>
+          <BranchSelect filter={bf} />
           <span className="fin-total">Total: <strong>{usd(listTotal)}</strong></span>
         </div>
 
@@ -331,6 +335,7 @@ export default function Accounts() {
                                 </strong>
                                 <span>
                                   {formatDate(d.issue_date)}
+                                  {bf.show && bf.nameOf(d.branch_id) && ` · ${bf.nameOf(d.branch_id)}`}
                                   {d.expense_id && ' · desde Gastos'}
                                   {d.note && ` · ${d.note}`}
                                 </span>
