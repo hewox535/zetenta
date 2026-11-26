@@ -1,23 +1,11 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useBranch } from '../context/BranchContext';
 import Brand from '../components/Brand';
 import { useConfirm } from '../components/Confirm';
 import CashToggle from '../components/CashToggle';
+import BranchPicker from '../components/BranchPicker';
 import { fetchFinanceAlerts } from '../lib/api';
-
-// Selector global de sucursal (solo si el usuario tiene acceso a más de una).
-function BranchSwitch({ className }) {
-  const { branches, branchId, setBranchId } = useBranch();
-  if (!branches || branches.length < 2) return null;
-  return (
-    <select className={`branch-select${className ? ' ' + className : ''}`} value={branchId || ''}
-      onChange={(e) => setBranchId(e.target.value)} title="Sucursal actual" aria-label="Sucursal">
-      {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-    </select>
-  );
-}
 
 const Icon = {
   doc: <svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M13.5 3.5V9H19" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>,
@@ -117,7 +105,7 @@ export default function Shell() {
           <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
         </button>
         <Brand className="sidebar-brand" />
-        <BranchSwitch className="mobile" />
+        <BranchPicker compact />
       </header>
       {menuOpen && <div className="sidebar-backdrop no-print" onClick={() => setMenuOpen(false)} />}
       <aside className={`sidebar no-print${menuOpen ? ' open' : ''}${collapsed ? ' collapsed' : ''}`}>
@@ -129,7 +117,7 @@ export default function Shell() {
             {collapsed ? Icon.chevRight : Icon.chevLeft}
           </button>
         </div>
-        <BranchSwitch />
+        <BranchPicker onPicked={() => setMenuOpen(false)} />
         {canModule('cash') && <CashToggle onAction={() => setMenuOpen(false)} />}
         <nav className="sidebar-nav">
           {items.map((it) => (
