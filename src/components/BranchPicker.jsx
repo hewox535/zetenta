@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
-import { createBranch } from '../lib/api';
+import { createBranch, updateBranch } from '../lib/api';
 import { FinModal } from './FinUI';
 import '../pages/finance.css';
 
@@ -11,6 +11,7 @@ export const STORE = (
 );
 const CHEVRON = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const CHECK = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+const PENCIL = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16v4z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.7"/></svg>;
 const PLUS = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
 
 const initials = (name = '') => name.replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '·';
@@ -20,9 +21,10 @@ const initials = (name = '') => name.replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s
 // desde aquí. compact: versión de la barra superior en el celular.
 export default function BranchPicker({ compact = false, onPicked }) {
   const { business, isBusinessAdmin } = useAuth();
-  const { branches, branchId, setBranchId, currentBranch, reload } = useBranch();
+  const { branches, allBranches, branchId, setBranchId, currentBranch, reload } = useBranch();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(null);   // { name, address, busy, error }
+  const [editing, setEditing] = useState(null);     // { names: { id: nombre }, busy, error }
   const ref = useRef(null);
 
   useEffect(() => {
@@ -51,6 +53,23 @@ export default function BranchPicker({ compact = false, onPicked }) {
       onPicked?.();
     } catch (err) {
       setCreating((c) => ({ ...c, busy: false, error: err.message }));
+    }
+  }
+
+  // Renombrar sucursales (solo administradores; el servidor también lo exige).
+  const editList = allBranches?.length ? allBranches : branches;
+  const changed = editing ? editList.filter((b) => (editing.names[b.id] ?? b.name).trim() !== b.name) : [];
+  const emptyName = editing ? editList.some((b) => !(editing.names[b.id] ?? b.name).trim()) : false;
+  async function onSaveNames(e) {
+    e.preventDefault();
+    if (!changed.length || emptyName) return;
+    setEditing((x) => ({ ...x, busy: true, error: null }));
+    try {
+      for (const b of changed) await updateBranch(b.id, { name: editing.names[b.id].trim() });
+      await reload();
+      setEditing(null);
+    } catch (err) {
+      setEditing((x) => ({ ...x, busy: false, error: err.message }));
     }
   }
 
@@ -88,6 +107,11 @@ export default function BranchPicker({ compact = false, onPicked }) {
                 <span className="branch-pick-new-icon">{PLUS}</span>
                 Nueva sucursal
               </button>
+              <button type="button" className="branch-pick-new"
+                onClick={() => { setOpen(false); setEditing({ names: {}, busy: false, error: null }); }}>
+                <span className="branch-pick-new-icon">{PENCIL}</span>
+                Editar sucursales
+              </button>
             </>
           )}
         </div>
@@ -118,6 +142,43 @@ export default function BranchPicker({ compact = false, onPicked }) {
             sucursales, ve a Negocio → Sucursales.
           </p>
           {creating.error && <div className="form-error">{creating.error}</div>}
+        </FinModal>,
+        document.body,
+      )}
+      {editing && createPortal(
+        <FinModal title="Editar sucursales" sub="Cambia el nombre con el que aparece cada sucursal." busy={editing.busy}
+          onClose={() => setEditing(null)} onSubmit={onSaveNames}
+          footer={(
+            <>
+              <button type="button" className="btn ghost" disabled={editing.busy} onClick={() => setEditing(null)}>Cancelar</button>
+              <button className="btn primary" disabled={editing.busy || !changed.length || emptyName}>
+                {editing.busy ? 'Guardando…' : changed.length > 1 ? `Guardar ${changed.length} cambios` : 'Guardar cambios'}
+              </button>
+            </>
+          )}>
+          <div className="branch-edit-list">
+            {editList.map((b, i) => {
+              const val = editing.names[b.id] ?? b.name;
+              return (
+                <label className="branch-edit-row" key={b.id}>
+                  <span className="branch-edit-meta">
+                    Sucursal {i + 1}
+                    {b.is_default && <span className="branch-edit-tag">Principal</span>}
+                    {b.active === false && <span className="branch-edit-tag off">Inactiva</span>}
+                    {b.id === branchId && <span className="branch-edit-tag cur">Actual</span>}
+                  </span>
+                  <input value={val} maxLength={60} autoFocus={i === 0} aria-invalid={!val.trim() || undefined}
+                    onChange={(e) => setEditing((x) => ({ ...x, names: { ...x.names, [b.id]: e.target.value } }))} />
+                </label>
+              );
+            })}
+          </div>
+          {emptyName && <p className="muted branch-pick-hint">Ninguna sucursal puede quedar sin nombre.</p>}
+          <p className="muted branch-pick-hint">
+            Las ventas, cajas y gastos ya registrados siguen ligados a su sucursal; solo cambia el nombre que se ve.
+            Dirección, activar o borrar sucursales y el acceso del personal están en Negocio → Sucursales.
+          </p>
+          {editing.error && <div className="form-error">{editing.error}</div>}
         </FinModal>,
         document.body,
       )}
