@@ -5,6 +5,20 @@ function unwrap({ data, error }) {
   return data;
 }
 
+// El servidor devuelve como máximo 1.000 filas por consulta. Las listas que
+// alimentan estadísticas y gastos se piden en páginas hasta tener todo (un
+// negocio con varias sucursales pasa de 1.000 ventas al mes). build() arma la
+// consulta (con un orden estable) y se le aplica el rango de cada página.
+const PAGE = 1000;
+async function fetchAllPages(build) {
+  const out = [];
+  for (let from = 0; ; from += PAGE) {
+    const rows = unwrap(await build().range(from, from + PAGE - 1));
+    out.push(...rows);
+    if (rows.length < PAGE) return out;
+  }
+}
+
 // ---------- Perfil y negocio ----------
 
 export async function fetchProfile(userId) {
@@ -651,24 +665,29 @@ export async function hasCancelPin() {
 // Pedidos con ítems y pagos en un rango de fechas, para estadísticas. Las
 // canceladas no cuentan: no son ventas.
 export async function fetchOrdersForStats(fromISO, toISO) {
-  let q = supabase.from('orders')
-    .select('*, order_items(*), order_payments(*)')
-    .is('cancelled_at', null)
-    .order('created_at', { ascending: false });
-  if (fromISO) q = q.gte('created_at', fromISO);
-  if (toISO) q = q.lte('created_at', toISO);
-  return unwrap(await q);
+  return fetchAllPages(() => {
+    let q = supabase.from('orders')
+      .select('*, order_items(*), order_payments(*)')
+      .is('cancelled_at', null)
+      .order('created_at', { ascending: false }).order('id');
+    if (fromISO) q = q.gte('created_at', fromISO);
+    if (toISO) q = q.lte('created_at', toISO);
+    return q;
+  });
 }
 
 // Cobros de cuentas por cobrar (abonos de ventas a crédito y otras deudas a
 // favor) hechos en el período. Requiere el permiso de Cuentas (RLS).
 export async function fetchReceivablePayments(fromISO, toISO) {
-  let q = supabase.from('debt_payments')
-    .select('amount_usd, created_at, debts!inner(kind, branch_id, order_id)')
-    .eq('debts.kind', 'receivable');
-  if (fromISO) q = q.gte('created_at', fromISO);
-  if (toISO) q = q.lte('created_at', toISO);
-  return unwrap(await q);
+  return fetchAllPages(() => {
+    let q = supabase.from('debt_payments')
+      .select('id, amount_usd, created_at, debts!inner(kind, branch_id, order_id)')
+      .eq('debts.kind', 'receivable')
+      .order('created_at').order('id');
+    if (fromISO) q = q.gte('created_at', fromISO);
+    if (toISO) q = q.lte('created_at', toISO);
+    return q;
+  });
 }
 
 // ---------- Administración de la plataforma ----------
@@ -900,11 +919,13 @@ export async function deleteDebtPayment(id) {
 // ---------- Gastos ----------
 
 export async function fetchExpenses(fromISO, toISO) {
-  let q = supabase.from('expenses').select('*')
-    .order('spent_on', { ascending: false }).order('created_at', { ascending: false });
-  if (fromISO) q = q.gte('spent_on', fromISO);
-  if (toISO) q = q.lte('spent_on', toISO);
-  return unwrap(await q);
+  return fetchAllPages(() => {
+    let q = supabase.from('expenses').select('*')
+      .order('spent_on', { ascending: false }).order('created_at', { ascending: false }).order('id');
+    if (fromISO) q = q.gte('spent_on', fromISO);
+    if (toISO) q = q.lte('spent_on', toISO);
+    return q;
+  });
 }
 
 export async function createExpense(payload) {
@@ -963,11 +984,14 @@ export async function expenseReceiptUrl(path) {
 
 // Ventas netas de un período (para comparar gastos contra ingresos).
 export async function fetchSalesTotal(fromISO, toISO, branchId) {
-  let q = supabase.from('orders')
-    .select('total_usd, discount_usd, created_at')
-    .is('cancelled_at', null)
-    .gte('created_at', fromISO).lt('created_at', toISO);
-  if (branchId) q = q.eq('branch_id', branchId);
-  const rows = unwrap(await q);
+  const rows = await fetchAllPages(() => {
+    let q = supabase.from('orders')
+      .select('id, total_usd, discount_usd, created_at')
+      .is('cancelled_at', null)
+      .gte('created_at', fromISO).lt('created_at', toISO)
+      .order('created_at').order('id');
+    if (branchId) q = q.eq('branch_id', branchId);
+    return q;
+  });
   return rows.reduce((s, o) => s + Number(o.total_usd) - Number(o.discount_usd || 0), 0);
 }
