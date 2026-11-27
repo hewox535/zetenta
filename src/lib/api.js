@@ -65,6 +65,19 @@ export async function fetchBusiness(businessId) {
   return unwrap(await supabase.from('businesses').select('*').eq('id', businessId).single());
 }
 
+// ---------- Historial de cambios (audit_log) ----------
+// Del más reciente al más antiguo, de a `limit`. beforeId: id del último ya
+// cargado (para "Cargar más"; el id es único y crece con el tiempo, a diferencia
+// de created_at, que se repite en lo cambiado en una misma operación).
+// areas: ['productos', …]. productId: un producto.
+export async function fetchAuditLog({ areas, productId, beforeId, limit = 150 } = {}) {
+  let q = supabase.from('audit_log').select('*').order('id', { ascending: false }).limit(limit);
+  if (areas?.length) q = q.in('area', areas);
+  if (productId) q = q.eq('product_id', productId);
+  if (beforeId) q = q.lt('id', beforeId);
+  return unwrap(await q);
+}
+
 // ---------- Registro, prueba gratuita y estado del negocio ----------
 
 // El negocio del usuario aunque no esté activo: { id, name, slug, status, branding,

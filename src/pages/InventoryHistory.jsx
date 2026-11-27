@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import ChangeLog from '../components/ChangeLog';
+import './finance.css';
 import { fetchMovements, fetchProducts, fetchStaff } from '../lib/api';
 import { formatDate, variantLabel } from '../lib/calc';
 import { useBranchFilter, BranchSelect } from '../components/BranchFilter';
@@ -7,6 +9,13 @@ import { useBranchFilter, BranchSelect } from '../components/BranchFilter';
 const MOVE_LABELS = { in: 'Entrada', out: 'Salida', adjustment: 'Ajuste' };
 
 export default function InventoryHistory() {
+  // Dos historiales: Stock (entradas, salidas, ajustes) y Cambios (precios,
+  // datos, variaciones, fotos…). La pestaña y el producto viven en la URL para
+  // poder llegar directo desde un producto ("Ver historial de cambios").
+  const [params, setParams] = useSearchParams();
+  const vista = params.get('vista') === 'cambios' ? 'cambios' : 'stock';
+  const productParam = params.get('producto') || '';
+  const setVista = (v) => { const n = new URLSearchParams(params); if (v === 'stock') n.delete('vista'); else n.set('vista', v); setParams(n, { replace: true }); };
   const [movements, setMovements] = useState(null);
   const [products, setProducts] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -38,13 +47,28 @@ export default function InventoryHistory() {
       <header className="page-head">
         <div>
           <h1>Historial de inventario</h1>
-          <p className="page-sub">Entradas, salidas y ajustes con fecha, usuario y cantidad.</p>
+          <p className="page-sub">{vista === 'stock'
+            ? 'Entradas, salidas y ajustes con fecha, usuario y cantidad.'
+            : 'Precios, costos, ofertas, datos, variaciones y fotos: quién cambió qué y cuándo.'}</p>
         </div>
         <div className="page-actions">
           <Link to="/inventory" className="btn ghost">Volver a Inventario</Link>
         </div>
       </header>
 
+      <div className="fin-tabs-row">
+        <div className="fin-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={vista === 'stock'} className={`fin-tab${vista === 'stock' ? ' active' : ''}`} onClick={() => setVista('stock')}>Stock</button>
+          <button type="button" role="tab" aria-selected={vista === 'cambios'} className={`fin-tab${vista === 'cambios' ? ' active' : ''}`} onClick={() => setVista('cambios')}>Cambios</button>
+        </div>
+      </div>
+
+      {vista === 'cambios' ? (
+        <ChangeLog mode="products" productId={productParam || null}
+          productName={products.find((p) => p.id === productParam)?.name}
+          onClearProduct={() => { const n = new URLSearchParams(params); n.delete('producto'); setParams(n, { replace: true }); }} />
+      ) : (
+      <>
       <div className="filters">
         <select value={productId} onChange={(e) => setProductId(e.target.value)}>
           <option value="">Todos los productos</option>
@@ -120,6 +144,8 @@ export default function InventoryHistory() {
           })}
         </div>
         </>
+      )}
+      </>
       )}
     </div>
   );

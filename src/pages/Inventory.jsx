@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import {
@@ -164,6 +164,7 @@ function TermSelect({ terms, value, onChange, placeholder, disabled }) {
 }
 
 export default function Inventory() {
+  const navigate = useNavigate();
   const ask = useConfirm();
   const { business, canInventory } = useAuth();
   // Qué puede hacer este usuario en el inventario (el admin, todo). El
@@ -1283,6 +1284,7 @@ export default function Inventory() {
                                 {!offerMode && (
                                   <RowMenu items={[
                                     { label: 'Editar producto', onClick: () => openEdit(p), hidden: !canEdit },
+                                    { label: 'Ver historial de cambios', onClick: () => navigate(`/inventory/history?vista=cambios&producto=${p.id}`) },
                                     ...(simple ? stockItems(p, dv, '') : []),
                                     { label: open ? 'Ocultar variantes' : 'Ver variantes', hidden: simple,
                                       onClick: () => setExpanded((s) => ({ ...s, [p.id]: !s[p.id] })) },
@@ -1412,9 +1414,10 @@ export default function Inventory() {
                               </div>
                             );
                           })}
-                          {(canEdit || canDelete) && (
+                          {(
                             <div className="inv-card-foot">
                               {canEdit && <button className="btn sm" onClick={() => openEdit(p)}>{ICON.edit} Editar</button>}
+                              <button className="btn ghost sm" onClick={() => navigate(`/inventory/history?vista=cambios&producto=${p.id}`)}>Historial</button>
                               {canDelete && <button className="btn danger sm" onClick={() => onDeleteProduct(p)}>{ICON.trash} Eliminar</button>}
                             </div>
                           )}

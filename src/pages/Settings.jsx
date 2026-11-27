@@ -20,6 +20,7 @@ import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/pu
 import { fetchBcvRates } from '../lib/rates';
 import { money } from '../lib/calc';
 import { useConfirm } from '../components/Confirm';
+import ChangeLog from '../components/ChangeLog';
 import SessionsSection from '../components/SessionsSection';
 import DiscountsManager from '../components/DiscountsManager';
 
@@ -64,6 +65,7 @@ export default function Settings() {
     { key: 'staff', label: 'Personal', desc: 'Usuarios, roles y permisos', icon: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14c2 .8 3 3 3 6' },
     { key: 'sessions', label: 'Sesiones', desc: 'Dispositivos con la sesión abierta', icon: 'M4 5h16v11H4zM9 20h6M12 16v4' },
     { key: 'notifications', label: 'Notificaciones', desc: 'Avisos en este dispositivo', icon: 'M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 21h4' },
+    { key: 'activity', label: 'Actividad', desc: 'Quién cambió qué y cuándo', icon: 'M12 8v4l2.5 2.5M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17z' },
   ].filter(Boolean);
 
   const current = tabs.find((t) => t.key === section) || tabs[0];
@@ -136,6 +138,15 @@ export default function Settings() {
       {section === 'staff' && <StaffSection profile={profile} />}
       {section === 'sessions' && <SessionsSection />}
       {section === 'notifications' && <NotificationsSection />}
+      {section === 'activity' && (
+        <section className="vsection settings-activity">
+          <p className="hint">
+            Cada cambio de precios, productos, descuentos, cuentas de cobro, sucursales, personal, configuración,
+            gastos y clientes queda aquí con quién lo hizo y cuándo. Los movimientos de stock están en Inventario → Historial.
+          </p>
+          <ChangeLog mode="activity" />
+        </section>
+      )}
       </div>
       </div>
     </div>
