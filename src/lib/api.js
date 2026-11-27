@@ -624,9 +624,9 @@ function customerResult(res) {
   return unwrap(res);
 }
 
-export async function createCustomer(businessId, { name, document, phone, email }) {
+export async function createCustomer(businessId, { name, document, phone, email, address }) {
   return customerResult(await supabase.from('customers')
-    .insert({ business_id: businessId, name, document: document || '', phone: phone || '', email: email || '' })
+    .insert({ business_id: businessId, name, document: document || '', phone: phone || '', email: email || '', address: address || '' })
     .select().single());
 }
 
@@ -655,7 +655,7 @@ export async function deleteCustomer(id) {
 // items: [{ variant_id, quantity }]   payments: [{ method_id, method_name, currency, amount }]
 // creditDue (yyyy-mm-dd): lo que no se cobre queda como cuenta por cobrar del
 // cliente, con ese vencimiento.
-export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note, branchId, creditDue, foreignDiscount, localDiscount, discountId, customPercent, customName }) {
+export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note, branchId, creditDue, foreignDiscount, localDiscount, discountId, customPercent, customName, addIva, igtf }) {
   return unwrap(await supabase.rpc('create_order', {
     p_items: items,
     p_payments: payments,
@@ -674,6 +674,9 @@ export async function createOrder({ items, payments, rate, rateSource, customerI
     // Descuento personalizado (si la cajera escribió un % propio)
     p_custom_percent: customPercent || null,
     p_custom_name: customName || null,
+    // Facturación (beta): IVA sumado al precio e IGTF sobre lo pagado en divisas
+    p_add_iva: !!addIva,
+    p_igtf: !!igtf,
   }));
 }
 
@@ -1028,12 +1031,100 @@ export async function expenseReceiptUrl(path) {
 export async function fetchSalesTotal(fromISO, toISO, branchId) {
   const rows = await fetchAllPages(() => {
     let q = supabase.from('orders')
-      .select('id, total_usd, discount_usd, created_at')
+      .select('id, total_usd, discount_usd, iva_usd, created_at')
       .is('cancelled_at', null)
       .gte('created_at', fromISO).lt('created_at', toISO)
       .order('created_at').order('id');
     if (branchId) q = q.eq('branch_id', branchId);
     return q;
   });
-  return rows.reduce((s, o) => s + Number(o.total_usd) - Number(o.discount_usd || 0), 0);
+  // Sin el IVA que se sumó al cobrar (no es venta).
+  return rows.reduce((s, o) => s + Number(o.total_usd) - Number(o.discount_usd || 0) - Number(o.iva_usd || 0), 0);
+}
+
+// ---------- Facturación digital ----------
+// Perfil fiscal del negocio (la solicitud de activación). null si aún no empezó.
+export async function fetchFiscalProfile() {
+  return unwrap(await supabase.from('fiscal_profiles').select('*').maybeSingle());
+}
+
+// Guarda el avance del asistente (solo los campos que vengan).
+export async function saveFiscalProfile(patch) {
+  return unwrap(await supabase.rpc('save_fiscal_profile', { p: patch }));
+}
+
+export async function submitFiscalProfile() {
+  return unwrap(await supabase.rpc('submit_fiscal_profile'));
+}
+
+// Documentos de la solicitud: bucket privado, carpeta = negocio.
+export async function uploadFiscalDoc(businessId, key, file) {
+  const ext = (file.name?.split('.').pop() || (file.type === 'application/pdf' ? 'pdf' : 'png')).toLowerCase();
+  const path = `${businessId}/${key}-${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from('fiscal-docs')
+    .upload(path, file, { contentType: file.type || undefined, upsert: false });
+  if (error) throw new Error(error.message);
+  return { path, name: file.name || `${key}.${ext}`, uploaded_at: new Date().toISOString() };
+}
+
+export async function fiscalDocUrl(path) {
+  const { data, error } = await supabase.storage.from('fiscal-docs').createSignedUrl(path, 300);
+  if (error) throw new Error(error.message);
+  return data.signedUrl;
+}
+
+// Administración de la plataforma: solicitudes con el nombre del negocio.
+export async function fetchFiscalRequests() {
+  return unwrap(await supabase.from('fiscal_profiles')
+    .select('*, businesses(name, slug)').neq('status', 'draft').order('submitted_at', { ascending: false }));
+}
+
+export async function setFiscalStatus(businessId, status, note = '') {
+  return unwrap(await supabase.rpc('set_fiscal_status', { p_business_id: businessId, p_status: status, p_note: note }));
+}
+
+// customer: { name, document, address, phone, email }
+export async function issueInvoice(orderId, customer) {
+  return unwrap(await supabase.rpc('issue_invoice', { p_order_id: orderId, p_customer: customer }));
+}
+
+export async function issueCreditNote(invoiceId, reason) {
+  return unwrap(await supabase.rpc('issue_credit_note', { p_invoice_id: invoiceId, p_reason: reason }));
+}
+
+export async function fetchInvoice(id) {
+  return unwrap(await supabase.from('invoices').select('*').eq('id', id).single());
+}
+
+// Facturas y notas de una venta (la factura y, si se anuló, su nota de crédito).
+export async function fetchInvoicesForOrder(orderId) {
+  return unwrap(await supabase.from('invoices').select('*').eq('order_id', orderId).order('issued_at'));
+}
+
+// Documentos de un período (yyyy-mm-dd, ambos incluidos), en páginas de 1.000.
+export async function fetchInvoices({ from, to, branchId } = {}) {
+  return fetchAllPages(() => {
+    let q = supabase.from('invoices').select('*');
+    if (from) q = q.gte('issued_at', `${from}T00:00:00-04:00`);
+    if (to) q = q.lte('issued_at', `${to}T23:59:59.999-04:00`);
+    if (branchId) q = q.eq('branch_id', branchId);
+    return q.order('issued_at', { ascending: false }).order('id');
+  });
+}
+
+export async function fetchCustomer(id) {
+  return unwrap(await supabase.from('customers').select('*').eq('id', id).maybeSingle());
+}
+
+// Nota de débito sobre una factura: concepto, monto en Bs sin IVA y alícuota.
+export async function issueDebitNote(invoiceId, reason, amountVes, ivaRate = 16) {
+  return unwrap(await supabase.rpc('issue_debit_note', { p_invoice_id: invoiceId, p_reason: reason, p_amount_ves: amountVes, p_iva_rate: ivaRate }));
+}
+
+// IVA e IGTF cobrados en un turno de caja (para el arqueo): están en el dinero
+// contado, pero son del SENIAT.
+export async function fetchSessionTaxes(sessionId) {
+  const rows = unwrap(await supabase.from('orders').select('iva_usd, igtf_usd')
+    .eq('cash_session_id', sessionId).is('cancelled_at', null).or('iva_usd.gt.0,igtf_usd.gt.0'));
+  return rows.reduce((t, o) => ({ iva: t.iva + Number(o.iva_usd || 0), igtf: t.igtf + Number(o.igtf_usd || 0) }), { iva: 0, igtf: 0 });
 }

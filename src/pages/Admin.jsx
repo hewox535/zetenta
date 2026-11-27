@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { fetchBusinesses, updateBusinessBranding, uploadBrandingAsset, setBusinessStatus } from '../lib/api';
+import { fetchBusinesses, updateBusinessBranding, uploadBrandingAsset, setBusinessStatus, fetchFiscalRequests, setFiscalStatus, fiscalDocUrl } from '../lib/api';
+import { FinModal } from '../components/FinUI';
+import { DOCS, docsFor, METHODS, STATUS as FISCAL_STATUS } from '../lib/fiscal';
 import { formatDate } from '../lib/calc';
 import { useConfirm } from '../components/Confirm';
 import './finance.css';
+import '../components/invoices.css';
 
 // Estados de un negocio y cómo se muestran.
 const STATUS = {
@@ -25,6 +28,7 @@ const CAPABILITIES = [
   ['customers', 'Clientes'],
   ['campaigns', 'Campañas'],
   ['retentions', 'Retenciones'],
+  ['invoicing', 'Facturación digital (beta)'],
 ];
 
 const CAP_HINTS = {
@@ -37,6 +41,7 @@ const CAP_HINTS = {
   customers: 'Base de clientes.',
   campaigns: 'Campañas dirigidas desde el módulo de clientes.',
   retentions: 'Retenciones y proveedores.',
+  invoicing: 'Solicitud de facturación, IVA e IGTF en el cobro, facturas y notas. En pruebas: actívalo solo a negocios de prueba.',
 };
 
 export default function Admin() {
@@ -46,6 +51,10 @@ export default function Admin() {
   const [editing, setEditing] = useState(null); // negocio en edición de marca/dominio
   const [tab, setTab] = useState(null);         // 'pending' | 'active' | 'disabled'
   const [busyId, setBusyId] = useState(null);
+  const [fiscal, setFiscal] = useState([]);       // solicitudes de facturación digital
+  const [review, setReview] = useState(null);     // solicitud abierta
+  useEffect(() => { fetchFiscalRequests().then(setFiscal).catch(() => {}); }, []);
+  const fiscalPending = fiscal.filter((f) => f.status === 'submitted').length;
 
   useEffect(() => {
     fetchBusinesses().then((list) => {
@@ -103,10 +112,42 @@ export default function Admin() {
                   {count(k) > 0 && <span className={`fin-tab-count${k === 'pending' ? ' alert' : ''}`}>{count(k)}</span>}
                 </button>
               ))}
+              <button type="button" role="tab" aria-selected={tab === 'fiscal'}
+                className={`fin-tab${tab === 'fiscal' ? ' active' : ''}`} onClick={() => setTab('fiscal')}>
+                Facturación
+                {fiscalPending > 0 && <span className="fin-tab-count alert">{fiscalPending}</span>}
+              </button>
             </div>
           </div>
 
-          {list.length === 0 ? (
+          {tab === 'fiscal' ? (
+            fiscal.length === 0 ? (
+              <div className="card"><div className="empty">Ningún negocio ha enviado la solicitud de facturación digital.</div></div>
+            ) : (
+              <div className="card adm-list">
+                {fiscal.map((f) => {
+                  const st = FISCAL_STATUS[f.status] || FISCAL_STATUS.draft;
+                  return (
+                    <div className="adm-row" key={f.business_id}>
+                      <div className="adm-main">
+                        <div className="adm-title">
+                          <strong>{f.businesses?.name || f.legal_name}</strong>
+                          <span className={`inv-status ${st.tone === 'ok' ? 'ok' : st.tone === 'danger' ? 'void' : 'pending'}`}>{st.label}</span>
+                        </div>
+                        <span className="adm-meta">
+                          {f.legal_name} · {f.rif} · {f.person_type === 'juridica' ? 'Jurídica' : 'Natural'}, {f.taxpayer_type}
+                          {f.submitted_at ? ` · enviada el ${formatDate(f.submitted_at)}` : ''}
+                        </span>
+                      </div>
+                      <div className="adm-actions">
+                        <button className={`btn sm${f.status === 'submitted' ? ' primary' : ' ghost'}`} onClick={() => setReview(f)}>Revisar</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : list.length === 0 ? (
             <div className="card"><div className="empty">
               {tab === 'pending' ? 'No hay solicitudes de prueba por revisar.' : tab === 'disabled' ? 'No hay negocios desactivados.' : 'Todavía no hay negocios activos.'}
             </div></div>
@@ -158,6 +199,10 @@ export default function Admin() {
       )}
 
       {editing && <BrandingModal business={editing} onClose={() => setEditing(null)} onSaved={onSaved} />}
+      {review && (
+        <FiscalReview req={review} onClose={() => setReview(null)}
+          onDone={(updated) => { setFiscal((prev) => prev.map((x) => (x.business_id === updated.business_id ? { ...x, ...updated } : x))); setReview(null); }} />
+      )}
     </div>
   );
 }
@@ -330,5 +375,61 @@ function AssetField({ label, hint, url, uploading, onPick, onClear }) {
       </div>
       <span className="hint">{hint}</span>
     </div>
+  );
+}
+
+// Revisión de una solicitud de facturación digital: datos, documentos y firma.
+function FiscalReview({ req, onClose, onDone }) {
+  const [note, setNote] = useState(req.review_note || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  async function open(path) {
+    try { window.open(await fiscalDocUrl(path), '_blank', 'noopener'); } catch (e) { setError(e.message); }
+  }
+  async function act(status) {
+    if (status === 'rejected' && !note.trim()) { setError('Escribe qué debe corregir el negocio.'); return; }
+    setBusy(true); setError(null);
+    try { onDone(await setFiscalStatus(req.business_id, status, status === 'rejected' ? note.trim() : '')); }
+    catch (e) { setError(e.message); setBusy(false); }
+  }
+  const files = [...docsFor(req.person_type).filter((k) => req.documents?.[k]?.path).map((k) => [DOCS[k].label, req.documents[k].path]),
+    req.signature_path && ['Firma', req.signature_path], req.seal_path && ['Sello', req.seal_path]].filter(Boolean);
+  const missing = docsFor(req.person_type).filter((k) => !DOCS[k].optional && !req.documents?.[k]?.path).map((k) => DOCS[k].label);
+  return (
+    <FinModal wide title={`Facturación · ${req.businesses?.name || req.legal_name}`} sub="Revisa que los documentos estén legibles, vigentes y coincidan con los datos."
+      onClose={onClose} busy={busy}
+      footer={(
+        <>
+          <button type="button" className="btn ghost" disabled={busy} onClick={() => act('rejected')}>Pedir cambios</button>
+          <button type="button" className="btn primary" disabled={busy || req.status === 'active'} onClick={() => act('active')}>
+            {req.status === 'active' ? 'Ya está activa' : busy ? 'Guardando…' : 'Activar facturación'}
+          </button>
+        </>
+      )}>
+      <dl className="fs-facts">
+        <div><dt>Razón social</dt><dd>{req.legal_name}</dd></div>
+        <div><dt>RIF</dt><dd>{req.rif}</dd></div>
+        <div><dt>{req.person_type === 'juridica' ? 'Representante legal' : 'Titular'}</dt><dd>{req.representative_name} · {req.representative_id}</dd></div>
+        <div><dt>Contribuyente</dt><dd>{req.taxpayer_type}</dd></div>
+        <div className="wide"><dt>Domicilio fiscal</dt><dd>{req.fiscal_address}{req.city ? `, ${req.city}` : ''}</dd></div>
+        <div className="wide"><dt>Actividad principal</dt><dd>{req.main_activity}</dd></div>
+        <div><dt>Contacto</dt><dd>{[req.phone, req.email].filter(Boolean).join(' · ') || '—'}</dd></div>
+        <div><dt>Hoy factura con</dt><dd>{(METHODS.find((m) => m[0] === req.current_method) || [])[1] || '—'}</dd></div>
+      </dl>
+      <div className="fs-group" style={{ marginTop: 16 }}>
+        <div className="fs-group-head"><h3>Documentos</h3><span>{files.length} archivos</span></div>
+        {missing.length > 0 && <p className="fs-missing">Faltan: {missing.join(', ')}.</p>}
+        {files.map(([label, path]) => (
+          <div className="fs-doc done" key={path}>
+            <div className="fs-doc-text"><strong>{label}</strong></div>
+            <div className="fs-doc-actions"><button type="button" className="btn ghost sm" onClick={() => open(path)}>Ver</button></div>
+          </div>
+        ))}
+      </div>
+      <label className="fm-field" style={{ marginTop: 16 }}>Nota para el negocio (si pides cambios)
+        <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ej.: el RIF está vencido; sube uno vigente." />
+      </label>
+      {error && <div className="form-error">{error}</div>}
+    </FinModal>
   );
 }

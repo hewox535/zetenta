@@ -15,7 +15,7 @@ export const FIELD = {
   name: 'Nombre', sku: 'SKU', unit: 'Unidad', price: 'Precio', cost: 'Costo', note: 'Nota',
   offer_percent: 'Oferta', offer_price: 'Precio de oferta', track_stock: 'Controlar inventario',
   variant_axes: 'Variaciones', attributes: 'Variación', active: 'Estado', target_stock: 'Stock objetivo',
-  available: 'Disponibilidad', term: 'Etiqueta', path: 'Foto',
+  available: 'Disponibilidad', term: 'Etiqueta', path: 'Foto', iva_rate: 'IVA',
   cash_percent: 'Descuento de contado', cashea_percent: 'Descuento con Cashea', starts_on: 'Desde', ends_on: 'Hasta', term_ids: 'Categorías',
   currency: 'Moneda', opening_balance: 'Saldo inicial', is_cash: 'Es efectivo', details: 'Datos de la cuenta', description: 'Descripción', kind: 'Tipo',
   address: 'Dirección', is_default: 'Principal',
@@ -29,7 +29,7 @@ export const FIELD = {
   frequency: 'Frecuencia', document: 'Documento', phone: 'Teléfono', email: 'Correo',
 };
 
-const PCT = new Set(['offer_percent', 'cash_percent', 'cashea_percent', 'foreign_discount_percent', 'local_discount_percent', 'low_stock_percent', 'cashea_initial_percent']);
+const PCT = new Set(['iva_rate', 'offer_percent', 'cash_percent', 'cashea_percent', 'foreign_discount_percent', 'local_discount_percent', 'low_stock_percent', 'cashea_initial_percent']);
 const MONEY = new Set(['price', 'cost', 'offer_price', 'amount_usd']);
 const DATES = new Set(['starts_on', 'ends_on', 'spent_on']);
 const ENUMS = {
@@ -73,7 +73,7 @@ export const CHANGE_TYPES = [
   ['all', 'Todos'], ['price', 'Precios'], ['info', 'Datos'], ['variants', 'Variaciones'],
   ['media', 'Fotos'], ['available', 'Disponibilidad'], ['life', 'Altas y bajas'],
 ];
-const PRICE_FIELDS = new Set(['price', 'cost', 'offer_percent', 'offer_price']);
+const PRICE_FIELDS = new Set(['price', 'cost', 'offer_percent', 'offer_price', 'iva_rate']);
 export function typesOf(e) {
   const t = new Set();
   if (e.entity === 'product_media') t.add('media');

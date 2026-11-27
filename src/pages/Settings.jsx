@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import { useBranding } from '../context/BrandingContext';
@@ -21,6 +22,7 @@ import { fetchBcvRates } from '../lib/rates';
 import { money } from '../lib/calc';
 import { useConfirm } from '../components/Confirm';
 import ChangeLog from '../components/ChangeLog';
+import FiscalSetup from '../components/FiscalSetup';
 import SessionsSection from '../components/SessionsSection';
 import DiscountsManager from '../components/DiscountsManager';
 
@@ -45,10 +47,13 @@ function useNarrow(query = '(max-width: 900px)') {
 
 export default function Settings() {
   const { business, capabilities, refreshBusiness, profile } = useAuth();
-  const [section, setSection] = useState('fiscal');
+  // ?seccion=facturacion abre esa sección directo (enlaces desde Facturas).
+  const [params] = useSearchParams();
+  const fromUrl = { facturacion: 'invoicing', actividad: 'activity' }[params.get('seccion')];
+  const [section, setSection] = useState(fromUrl || 'fiscal');
   // En el teléfono: primero la lista de secciones; al tocar una, se abre.
   const narrow = useNarrow();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(!!fromUrl);
   const openSection = (key) => { setSection(key); setMobileOpen(true); window.scrollTo?.(0, 0); };
 
   if (!business) {
@@ -57,6 +62,7 @@ export default function Settings() {
 
   const tabs = [
     { key: 'fiscal', label: 'Datos fiscales', desc: 'Nombre, RIF, dirección y sello', icon: 'M4 5h16v14H4zM8 9h8M8 13h5' },
+    capabilities?.invoicing && { key: 'invoicing', label: 'Facturación', desc: 'Facturas digitales válidas ante el SENIAT', icon: 'M6 3h12v18l-3-1.8-3 1.8-3-1.8L6 21zM9 8h6M9 11.5h6M9 15h3.5' },
     capabilities?.retentions && { key: 'retentions', label: 'Retenciones', desc: 'Numeración de los comprobantes', icon: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6' },
     capabilities?.inventory && { key: 'inventory', label: 'Inventario', desc: 'Categorías, tallas y stock bajo', icon: 'M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10' },
     capabilities?.inventory && { key: 'catalog', label: 'Catálogo', desc: 'Tu tienda en línea y WhatsApp', icon: 'M5 4h14v4H5zM5 8v12h14V8M9 12h6' },
@@ -130,6 +136,7 @@ export default function Settings() {
       <div className="settings-body">
 
       {section === 'fiscal' && <FiscalSection business={business} refreshBusiness={refreshBusiness} />}
+      {section === 'invoicing' && <FiscalSetup business={business} />}
       {section === 'retentions' && <RetentionSection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'inventory' && <InventorySection business={business} refreshBusiness={refreshBusiness} />}
       {section === 'catalog' && <CatalogSection business={business} refreshBusiness={refreshBusiness} />}

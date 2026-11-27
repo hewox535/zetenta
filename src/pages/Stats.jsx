@@ -86,10 +86,13 @@ function resolveRange(preset, desde, hasta) {
 // Lo que necesita el resumen y la comparación con el período anterior.
 function summarize(orders, costOf) {
   let gross = 0, discount = 0, credit = 0, cogs = 0, units = 0;
-  let paidAtSale = 0, cashea = 0;
+  let paidAtSale = 0, cashea = 0, iva = 0, igtf = 0;
   for (const o of orders) {
     gross += Number(o.total_usd) || 0;
     discount += Number(o.discount_usd) || 0;
+    // IVA sumado al cobrar e IGTF: se cobran, pero son del SENIAT, no venta.
+    iva += Number(o.iva_usd) || 0;
+    igtf += Number(o.igtf_usd) || 0;
     credit += Number(o.credit_usd) || 0;
     for (const it of o.order_items || []) {
       const qty = Number(it.quantity) || 0;
@@ -101,9 +104,9 @@ function summarize(orders, costOf) {
       else paidAtSale += Number(p.amount_usd) || 0;
     }
   }
-  const net = gross - discount;
+  const net = gross - discount - iva;
   const count = orders.length;
-  return { gross, discount, net, credit, cogs, units, paidAtSale, cashea, count,
+  return { gross, discount, iva, igtf, net, credit, cogs, units, paidAtSale, cashea, count,
     grossProfit: net - cogs, avgTicket: count ? net / count : 0 };
 }
 
@@ -648,7 +651,7 @@ export default function Stats() {
     for (const b of buckets) { b.value = 0; b.count = 0; }
     for (const o of orders) {
       const b = buckets[slotOf(new Date(o.created_at))];
-      if (b) { b.value += (Number(o.total_usd) || 0) - (Number(o.discount_usd) || 0); b.count += 1; }
+      if (b) { b.value += (Number(o.total_usd) || 0) - (Number(o.discount_usd) || 0) - (Number(o.iva_usd) || 0); b.count += 1; }
     }
 
     // ---- Por sucursal (sin el filtro de sucursal; respeta el período) ----
@@ -699,7 +702,8 @@ export default function Stats() {
     } else if (tab === 'utilidad') {
       const { cur } = stats;
       const rows = [['Concepto', 'USD'],
-        ['Ventas a precio de lista', f2(cur.gross)], ['Descuentos', f2(-cur.discount)], ['Ventas netas', f2(cur.net)],
+        ['Ventas a precio de lista', f2(cur.gross)], ['Descuentos', f2(-cur.discount)],
+        ...(cur.iva > 0.005 ? [['IVA cobrado', f2(-cur.iva)]] : []), ['Ventas netas', f2(cur.net)],
         ['Costo de lo vendido', f2(-cur.cogs)], ['Utilidad bruta', f2(cur.grossProfit)]];
       if (canExpenses) {
         rows.push(['Gastos fijos', f2(-stats.exp.fixed)], ['Gastos variables', f2(-stats.exp.variable)], ['Utilidad neta', f2(stats.netProfit)]);
@@ -845,6 +849,12 @@ export default function Stats() {
                     <div className="totals-row"><span>Financiado por Cashea</span><span>{usd(stats.cur.cashea)}</span></div>
                   )}
                   <div className="totals-row"><span>Vendido a crédito</span><span>{usd(stats.cur.credit)}</span></div>
+                  {stats.cur.iva > 0.005 && (
+                    <div className="totals-row"><span>IVA cobrado <span className="muted">(es del SENIAT)</span></span><span>−{usd(stats.cur.iva)}</span></div>
+                  )}
+                  {stats.cur.igtf > 0.005 && (
+                    <div className="totals-row"><span>IGTF cobrado <span className="muted">(es del SENIAT)</span></span><span>−{usd(stats.cur.igtf)}</span></div>
+                  )}
                   <div className="totals-row grand"><span>Ventas netas</span><span>{usd(stats.cur.net)}</span></div>
                   {stats.collected != null && (
                     <div className="totals-row st-row-top">
@@ -1037,6 +1047,7 @@ export default function Stats() {
               {[
                 ['Ventas a precio de lista', stats.cur.gross, P?.gross],
                 ['Descuentos', -stats.cur.discount, P && -P.discount],
+                ...(stats.cur.iva > 0.005 || P?.iva > 0.005 ? [['IVA cobrado (es del SENIAT)', -stats.cur.iva, P && -P.iva]] : []),
                 ['Ventas netas', stats.cur.net, P?.net, 'sub'],
                 ['Costo de lo vendido', -stats.cur.cogs, P && -P.cogs],
                 ['Utilidad bruta', stats.cur.grossProfit, P?.grossProfit, 'sub', pct(stats.cur.grossProfit, stats.cur.net)],

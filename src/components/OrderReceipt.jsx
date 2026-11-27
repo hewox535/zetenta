@@ -12,7 +12,10 @@ export default function OrderReceipt({ business, order }) {
   const effectiveTotal = (Number(order.total_usd) || 0) - discount;
   const paidUsd = payments.reduce((s, p) => s + (Number(p.amount_usd) || 0), 0);
   const credit = Number(order.credit_usd) || 0;
-  const change = credit > 0 ? 0 : paidUsd - effectiveTotal;
+  const iva = Number(order.iva_usd) || 0;
+  const igtf = Number(order.igtf_usd) || 0;
+  // El IGTF va encima de la venta: se paga, pero no es vuelto.
+  const change = credit > 0 ? 0 : paidUsd - effectiveTotal - igtf;
   // La sucursal solo se imprime si el negocio tiene más de una.
   const { allBranches, branchById } = useBranch();
   const branch = allBranches.length > 1 ? branchById.get(order.branch_id) : null;
@@ -67,9 +70,15 @@ export default function OrderReceipt({ business, order }) {
             </div>
           </>
         )}
+        {order.iva_added && iva > 0.004 && (
+          <div className="receipt-total-row receipt-muted"><span>Incluye IVA</span><span>{usd(iva)}</span></div>
+        )}
+        {igtf > 0.004 && (
+          <div className="receipt-total-row"><span>IGTF 3 % (pago en divisas)</span><span>{usd(igtf)}</span></div>
+        )}
         <div className="receipt-total-row grand bs">
           <span>Total Bs</span>
-          <span>{bs(rate > 0 ? effectiveTotal * rate : order.total_ves)}</span>
+          <span>{bs(rate > 0 ? (effectiveTotal + igtf) * rate : order.total_ves)}</span>
         </div>
         <div className="receipt-total-row receipt-muted">
           <span>Tasa aplicada</span>

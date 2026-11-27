@@ -1,3 +1,4 @@
+import { IVA_RATES } from '../lib/fiscal';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -345,7 +346,7 @@ export default function Inventory() {
   function openCreate() {
     setError(null);
     setModal({
-      mode: 'create', name: '', price: '', cost: '', sku: '', unit: 'und', note: '', categories: {}, trackStock: true,
+      mode: 'create', name: '', price: '', cost: '', sku: '', unit: 'und', note: '', categories: {}, trackStock: true, iva: 16,
       simpleStock: '', axisIds: [], vb: emptyVariations(), stagedFiles: [],
     });
   }
@@ -364,7 +365,7 @@ export default function Inventory() {
       simple: isSimple(p),
       name: p.name, price: String(p.price ?? ''), cost: p.cost != null && Number(p.cost) !== 0 ? String(p.cost) : '',
       sku: p.sku || '', unit: p.unit || 'und', note: p.note || '',
-      categories, trackStock: tracksStock(p),
+      categories, trackStock: tracksStock(p), iva: Number(p.iva_rate ?? 16),
       variants: variantsOf(p).map((v) => ({
         id: v.id, label: variantLabel(v.attributes, p.variant_axes),
         attributes: v.attributes || {}, origAttributes: v.attributes || {},
@@ -445,6 +446,7 @@ export default function Inventory() {
           categories, variantAxes, variants: modal.trackStock ? variants : variants.map((v) => ({ ...v, stock: 0 })), branchId,
         });
         if (!modal.trackStock) await updateProduct(created.id, { track_stock: false });
+        if (Number(modal.iva) !== 16) await updateProduct(created.id, { iva_rate: Number(modal.iva) });
         for (let i = 0; i < (modal.stagedFiles || []).length; i++) {
           await uploadProductImage(business.id, created.id, modal.stagedFiles[i], { sortOrder: i });
         }
@@ -473,6 +475,9 @@ export default function Inventory() {
         }
         if (canStock && modal.trackStock !== tracksStock(o)) {
           await updateProduct(modal.id, { track_stock: modal.trackStock });
+        }
+        if (canPrice && Number(modal.iva) !== Number(o.iva_rate ?? 16)) {
+          await updateProduct(modal.id, { iva_rate: Number(modal.iva) });
         }
         if (canInfo && modal.axes.join('|') !== modal.origAxes.join('|')) {
           await updateProduct(modal.id, { variant_axes: modal.axes });
@@ -1464,6 +1469,11 @@ export default function Inventory() {
                 </label>
                 <label>SKU
                   <input value={modal.sku} onChange={(e) => setM({ sku: e.target.value })} placeholder="CAM-OXF" disabled={lockInfo} />
+                </label>
+                <label title="El precio ya incluye el IVA; la factura lo separa">IVA
+                  <select value={modal.iva} onChange={(e) => setM({ iva: Number(e.target.value) })} disabled={lockPrice}>
+                    {IVA_RATES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
                 </label>
                 {modal.mode === 'create' && modal.vb.length === 0 && modal.trackStock && (
                   <label>Cantidad

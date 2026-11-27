@@ -5,10 +5,13 @@ import { useBranch } from '../context/BranchContext';
 import {
   fetchProducts, fetchTaxonomies, fetchBankAccounts, fetchCustomers,
   createCustomer, createOrder, fetchOrder, mediaUrl, fetchOpenCashSession, fetchDiscounts,
+  fetchFiscalProfile, issueInvoice,
 } from '../lib/api';
 import { discountStatus, todayVE } from '../lib/discounts';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { notifySale } from '../lib/push';
+import { invoiceNo } from '../lib/fiscal';
+import '../components/invoices.css';
 import { usd, bs, money, variantLabel, offerPrice, hasOffer, offerTag } from '../lib/calc';
 import OrderReceipt from '../components/OrderReceipt';
 import { STORE } from '../components/BranchPicker';
@@ -17,9 +20,11 @@ import { CASH_EVENT, notifyCashChanged } from '../lib/cashEvents';
 import { FinModal } from '../components/FinUI';
 import { findByDoc } from '../lib/customerDoc';
 
-const EMPTY_CUST = { name: '', docType: 'V', document: '', phone: '', email: '' };
+const EMPTY_CUST = { name: '', docType: 'V', document: '', phone: '', email: '', address: '' };
 // Cédula/RIF: V (venezolano), J (jurídico), E (extranjero) + solo números.
-const DOC_TYPES = [['V', 'Venezolano'], ['J', 'Jurídico'], ['E', 'Extranjero']];
+const DOC_TYPES = [['V', 'Venezolano'], ['J', 'Jurídico'], ['E', 'Extranjero'], ['G', 'Gobierno']];
+// Documentos de empresa: la factura exige además su domicilio fiscal.
+const isCompanyDoc = (doc) => /^[JGC]/i.test(doc || '');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const docOf = (c) => (c.document.trim() ? `${c.docType}-${c.document.trim()}` : '');
 
@@ -27,11 +32,11 @@ const docOf = (c) => (c.document.trim() ? `${c.docType}-${c.document.trim()}` : 
 // veces (resumen desktop y hoja de pago móvil) compartiendo el mismo estado.
 function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCustomer,
   showNewCust, setShowNewCust, newCust, setNew, setNewCust, custSearch, setCustSearch,
-  custMatches, pickCustomer, issue, dupCustomer }) {
+  custMatches, pickCustomer, issue, dupCustomer, invoicing }) {
   const emailBad = !!newCust.email.trim() && !EMAIL_RE.test(newCust.email.trim());
   return (
     <div className={`order-customer-block${desktop ? '' : ' oc-mobile'}`}>
-      <div className="oc-label">Cliente{required ? '' : ' (opcional)'}</div>
+      <div className="oc-label">Cliente{required || invoicing ? '' : ' (opcional)'}</div>
       {selectedCustomer ? (
         <div className="oc-selected">
           <div>
@@ -48,10 +53,13 @@ function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCus
               onChange={(e) => setNewCust((f) => ({ ...f, docType: e.target.value }))}>
               {DOC_TYPES.map(([k, l]) => <option key={k} value={k} title={l}>{k}</option>)}
             </select>
-            <input placeholder={`Cédula o RIF${fieldReq('document') ? '' : ' (opcional)'}`} inputMode="numeric"
+            <input placeholder={`Cédula o RIF${fieldReq('document') || invoicing ? '' : ' (opcional)'}`} inputMode="numeric"
               value={newCust.document} aria-label="Número de documento"
               onChange={(e) => setNewCust((f) => ({ ...f, document: e.target.value.replace(/\D/g, '') }))} />
           </div>
+          {invoicing && isCompanyDoc(newCust.docType) && (
+            <input placeholder="Domicilio fiscal (sale en la factura)" value={newCust.address} onChange={setNew('address')} />
+          )}
           <input placeholder={`Teléfono${fieldReq('phone') ? '' : ' (opcional)'}`}
             value={newCust.phone} onChange={setNew('phone')} inputMode="tel" />
           <input placeholder="Correo (opcional)" value={newCust.email} onChange={setNew('email')} type="email"
@@ -332,6 +340,20 @@ export default function Orders() {
   const casheaDefault = Number(business?.cashea_initial_percent) || 40;
   const [busy, setBusy] = useState(false);
   const [finished, setFinished] = useState(null);      // pedido guardado (con ítems/pagos)
+  // Facturación digital: con el negocio activo, cada venta sale con factura
+  // salvo que la cajera la desmarque. La factura exige cédula o RIF.
+  const [fiscal, setFiscal] = useState(null);
+  const fiscalOn = !!capabilities?.invoicing && fiscal?.status === 'active';
+  // IVA e IGTF opcionales al cobrar (módulo de facturación, beta).
+  const taxToggles = !!capabilities?.invoicing;
+  const [addIva, setAddIva] = useState(false);
+  const [igtfOn, setIgtfOn] = useState(false);
+  const [wantInvoice, setWantInvoice] = useState(true);
+  const invoicing = fiscalOn && wantInvoice;
+  const [invoice, setInvoice] = useState(null);        // factura de la venta recién hecha
+  const [invoiceError, setInvoiceError] = useState(null);
+  const [invoiceCustomer, setInvoiceCustomer] = useState(null);
+  useEffect(() => { if (capabilities?.invoicing) fetchFiscalProfile().then(setFiscal).catch(() => {}); }, [capabilities?.invoicing]);
 
   const puedeCaja = capabilities.cash && (isBusinessAdmin || !!permissions?.cash);
   useEffect(() => {
@@ -407,7 +429,14 @@ export default function Orders() {
     setCart((prev) => prev.map((c) => (c.id === id ? { ...c, qty } : c)));
   };
   const cartCount = cart.reduce((s, c) => s + c.qty, 0);
-  const totalUsd = cart.reduce((s, c) => s + c.price * c.qty, 0);
+  // Con «IVA» encendido, cada línea cuesta su precio más el IVA del producto:
+  // todo lo demás (descuentos, montos, vuelto) se calcula sobre eso, igual que
+  // create_order(). baseUsd es la venta sin IVA.
+  const productsById = useMemo(() => new Map((products || []).map((p) => [p.id, p])), [products]);
+  const ivaOf = (c) => Number(productsById.get(c.productId)?.iva_rate ?? 16);
+  const lineAmt = (c) => (addIva ? round2(c.price * c.qty * (1 + ivaOf(c) / 100)) : c.price * c.qty);
+  const baseUsd = cart.reduce((s, c) => s + c.price * c.qty, 0);
+  const totalUsd = cart.reduce((s, c) => s + lineAmt(c), 0);
   const totalVes = totalUsd * rate.value;
 
   // ------- pagos (solo los métodos seleccionados) -------
@@ -423,9 +452,12 @@ export default function Orders() {
   // listUsd: lo de Cashea (a precio de lista). bsUsd: el contado en Bs, en $.
   // usdPaid: el contado en divisa.
   const toUsd = (m, amt) => (m.currency === 'USD' ? amt : (rate.value ? round2(amt / rate.value) : 0));
+  // Con IGTF, lo que se paga en divisas trae el 3 % encima: a la venta va amt / 1,03.
+  const fx = (m) => (igtfOn && m && isForeignCash(m) ? 1.03 : 1);
+  const toMerch = (m, amt) => toUsd(m, amt) / fx(m);
   const sumBy = (pred) => selectedMethods.reduce((acc, id) => {
     const m = methods.find((x) => x.id === id);
-    return m && pred(m) ? acc + toUsd(m, parseAmt(payments[id])) : acc;
+    return m && pred(m) ? acc + toMerch(m, parseAmt(payments[id])) : acc;
   }, 0);
   const listUsd = sumBy((m) => isCashea(m));
   // Con Cashea elegido la venta va a precio de lista, desde el momento en que
@@ -443,7 +475,6 @@ export default function Orders() {
   // rebaja el precio de lista con su % de Cashea. Igual que create_order().
   const promoDs = choice === 'custom' ? customDsOf(custom) : discounts.find((x) => x.id === promoId) || null;
   const promoPct = (ds, cashea) => clampPct(cashea ? ds?.cashea_percent : ds?.cash_percent);
-  const productsById = useMemo(() => new Map((products || []).map((p) => [p.id, p])), [products]);
   const qualifies = (ds, productId) => {
     const terms = ds?.term_ids || [];
     if (!terms.length) return true;
@@ -454,7 +485,7 @@ export default function Orders() {
     if (ds) {
       const pc = promoPct(ds, false); const pk = promoPct(ds, true);
       cart.forEach((c) => {
-        const amt = c.price * c.qty;
+        const amt = lineAmt(c);
         const q = qualifies(ds, c.productId);
         const lp = q ? pc : 0;
         if (q) { hits += c.qty; off += round2(amt * pk); }
@@ -482,6 +513,8 @@ export default function Orders() {
   const isCovered = cart.length > 0 && rawRemaining <= PAY_EPS;
   // Descuento concedido: Cashea primero, luego Bs, luego divisa (igual que el servidor).
   let discountUsd = casheaOff;
+  // Lo que queda por cubrir con divisas (para el IGTF: el vuelto no lo paga).
+  let usdNeeded = 0;
   {
     let pending = dueUsd - listUsd;
     if (pending > 0 && bsUsd > 0) {
@@ -491,6 +524,7 @@ export default function Orders() {
     if (pending > 0 && usdPaid > 0) {
       discountUsd += usdPaid + PAY_EPS >= round2(pending * (1 - d)) ? pending * d : (usdPaid * d) / (1 - d);
     }
+    usdNeeded = pending > 0 ? round2(pending * (1 - d)) : 0;
   }
   const promoOn = promo.hits > 0 && promoPct(promoDs, casheaSelected) > 0;
   const discountLabel = promoOn ? promoDs.name : d > 0 && dv > 0 ? 'Descuento de contado' : dv > 0 ? 'Descuento en bolívares' : 'Descuento por divisa';
@@ -498,7 +532,14 @@ export default function Orders() {
   // recibido en efectivo (Bs a USD + USD), para no mostrar "pagado 90$" cuando el
   // descuento hace que se cobren menos. Cuando está cubierto, recibido == a pagar.
   const netTotalUsd = Math.max(0, totalUsd - discountUsd);
-  const receivedUsd = vesCredit + usdPaid;
+  // IVA de la venta (neto del descuento) e IGTF de lo pagado en divisas; igual que el servidor.
+  const ivaUsd = addIva && totalUsd > 0 ? round2((totalUsd - baseUsd) * (netTotalUsd / totalUsd)) : 0;
+  // IGTF: 3 % de lo pagado en divisas que se queda en la venta (igual que el servidor).
+  const igtfUsd = igtfOn ? round2(Math.min(usdPaid, usdNeeded) * 0.03) : 0;
+  // Lo pagado en divisas tal cual (con el IGTF adentro), para el vuelto.
+  const usdRaw = igtfOn ? round2(usdPaid * 1.03) : usdPaid;
+  // Lo recibido para la venta: Bs + divisas, sin el IGTF (que es aparte).
+  const receivedUsd = igtfOn ? vesCredit + usdRaw - igtfUsd : vesCredit + usdPaid;
   // Lo que financia Cashea cubre la venta, pero no es plata que entre hoy:
   // en los totales va aparte para no leerlo como "ya pagó".
   const casheaUsd = selectedMethods.reduce((s, id) => {
@@ -534,7 +575,7 @@ export default function Orders() {
       ? { tone: 'warn', label: casheaUsd > PAY_EPS ? 'Falta cobrar la inicial' : 'Falta por cobrar', usd: remainingNet }
       : changeNet > PAY_EPS
         ? { tone: 'change', label: 'Vuelto', usd: changeNet }
-        : { tone: 'ok', label: 'Cobro completo', usd: netTotalUsd };
+        : { tone: 'ok', label: 'Cobro completo', usd: netTotalUsd + igtfUsd };
 
   // Cambiar el descuento (marcar/desmarcar o el %) reescribe los montos ya
   // escritos en esa moneda para que sigan cubriendo la misma parte de la venta.
@@ -636,7 +677,7 @@ export default function Orders() {
   const fullAmountFor = (om, withCashea) => {
     const dm = withCashea ? 0 : (isForeignCash(om) ? effD : effDv);
     const net = (withCashea ? totalUsd - casheaOffFor(promoDs) : totalUsd) * (1 - dm);
-    return (om.currency === 'USD' ? net : net * rate.value).toFixed(2);
+    return (om.currency === 'USD' ? net * fx(om) : net * rate.value).toFixed(2);
   };
 
   // Al escribir un monto con dos métodos de contado elegidos, el otro se
@@ -648,7 +689,7 @@ export default function Orders() {
     const casheaM = methods.find((x) => selectedMethods.includes(x.id) && isCashea(x));
     if (casheaM && !isCashea(m) && cashIds.length === 1 && rate.value && dueUsd > 0) {
       const amt = parseAmt(val);
-      const initialUsd = m.currency === 'USD' ? amt : amt / rate.value;
+      const initialUsd = toMerch(m, amt);
       if (initialUsd > 0 && initialUsd < dueUsd - PAY_EPS) {
         const financedUsd = dueUsd - initialUsd;
         const pct = Math.round((initialUsd / dueUsd) * 10000) / 100;
@@ -668,11 +709,11 @@ export default function Orders() {
     const other = methods.find((x) => x.id === cashIds.find((id) => id !== m.id));
     const dmOf = (om) => (casheaSelected ? 0 : isForeignCash(om) ? effD : effDv);
     const dm = dmOf(m); const dOther = dmOf(other);
-    const thisUsd = toUsd(m, parseAmt(val));
+    const thisUsd = toMerch(m, parseAmt(val));
     const covered = dm > 0 ? thisUsd / (1 - dm) : thisUsd;
     const left = Math.max(0, dueUsd - listUsd - covered);
     const otherNet = left * (1 - dOther);
-    const otherAmt = left > PAY_EPS ? (other.currency === 'USD' ? otherNet : otherNet * rate.value).toFixed(2) : '';
+    const otherAmt = left > PAY_EPS ? (other.currency === 'USD' ? otherNet * fx(other) : otherNet * rate.value).toFixed(2) : '';
     setPayments((prev) => ({ ...prev, [m.id]: val, [other.id]: otherAmt }));
   };
 
@@ -719,13 +760,13 @@ export default function Orders() {
     const cur = parseAmt(payments[m.id]);
     // Descuento que le toca a este método: divisa d, Bs dv, Cashea ninguno.
     const dm = isCashea(m) ? 0 : isForeignCash(m) ? d : dv;
-    const curUsd = toUsd(m, cur);
+    const curUsd = toMerch(m, cur);
     const creditOfThis = dm > 0 ? curUsd / (1 - dm) : curUsd;
     const remaining = dueUsd - (paidUsd - creditOfThis);
     if (remaining <= PAY_EPS) return;
     // Se cobra el saldo con el descuento del método: remaining*(1-dm).
     const net = remaining * (1 - dm);
-    const amount = m.currency === 'USD' ? net : net * rate.value;
+    const amount = m.currency === 'USD' ? net * fx(m) : net * rate.value;
     setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
   };
 
@@ -758,7 +799,8 @@ export default function Orders() {
       const n = { ...prev, [m.id]: amount.toFixed(2) };
       if (others.length === 1) {
         const om = methods.find((x) => x.id === others[0]);
-        n[om.id] = (om.currency === 'USD' ? initialUsd : initialUsd * rate.value).toFixed(2);
+        // Con IGTF, la inicial en divisas trae el 3 % encima.
+        n[om.id] = (om.currency === 'USD' ? initialUsd * fx(om) : initialUsd * rate.value).toFixed(2);
       }
       return n;
     });
@@ -802,6 +844,18 @@ export default function Orders() {
     }
     if (custRequired && !selectedCustomer) return 'Este negocio requiere el cliente: búscalo o toca «Nuevo cliente» para registrarlo.';
     return null;
+  })() || (() => {
+    // Lo que además pide la factura.
+    if (!invoicing) return null;
+    if (selectedCustomer) {
+      if (!selectedCustomer.document) return `${selectedCustomer.name} no tiene cédula ni RIF: elige otro cliente o desmarca «Factura fiscal».`;
+      if (isCompanyDoc(selectedCustomer.document) && !(selectedCustomer.address || '').trim()) return `Falta el domicilio fiscal de ${selectedCustomer.name} (agrégalo en Clientes) o desmarca «Factura fiscal».`;
+      return null;
+    }
+    if (!showNewCust || !newCust.name.trim()) return 'Para facturar, busca al cliente o regístralo con su cédula o RIF.';
+    if (!newCust.document.trim()) return 'La factura necesita la cédula o RIF del cliente.';
+    if (isCompanyDoc(newCust.docType) && !newCust.address.trim()) return 'Para facturar a una empresa escribe su domicilio fiscal.';
+    return null;
   })();
 
   // Props compartidas del bloque de cliente: se renderiza en el resumen
@@ -812,6 +866,7 @@ export default function Orders() {
     selectedCustomer, resetCustomer, showNewCust, setShowNewCust,
     newCust, setNew, setNewCust, custSearch, setCustSearch, custMatches, pickCustomer, dupCustomer,
     issue: stage === 'pay' ? custIssue : null,
+    invoicing,
   };
 
   // ------- categorías / filtros -------
@@ -847,15 +902,17 @@ export default function Orders() {
       // Resuelve el cliente: existente, nuevo (se crea) o ninguno.
       let customerId = selectedCustomer?.id || null;
       let customerName = selectedCustomer?.name || '';
+      let cust = selectedCustomer;
       if (creatingCustNow) {
         const created = await createCustomer(business.id, {
           name: newCust.name.trim(), document: docOf(newCust),
-          phone: newCust.phone.trim(), email: newCust.email.trim(),
+          phone: newCust.phone.trim(), email: newCust.email.trim(), address: newCust.address.trim(),
         });
         setCustomers((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
         // Queda seleccionado: si la venta falla y se reintenta, no se vuelve a crear.
         setSelectedCustomer(created); setShowNewCust(false); setNewCust(EMPTY_CUST);
         customerId = created.id; customerName = created.name;
+        cust = created;
       }
 
       const items = cart.map((c) => ({ variant_id: c.id, quantity: c.qty }));
@@ -873,6 +930,7 @@ export default function Orders() {
 
       const created = await createOrder({
         items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName, branchId,
+        addIva: taxToggles && addIva, igtf: taxToggles && igtfOn,
         foreignDiscount: Math.round(baseD * 10000) / 100,
         localDiscount: Math.round(baseDv * 10000) / 100,
         discountId: promoId,
@@ -880,6 +938,14 @@ export default function Orders() {
         customName: choice === 'custom' ? custom.name.trim() : null,
       });
       notifySale(created.id); // push a los admins del negocio (fuego y olvido)
+      // La factura va aparte: si falla, la venta ya quedó y se puede emitir luego.
+      setInvoice(null); setInvoiceError(null); setInvoiceCustomer(null);
+      if (invoicing && cust) {
+        const fc = { name: cust.name, document: cust.document, address: cust.address || '', phone: cust.phone || '', email: cust.email || '' };
+        setInvoiceCustomer(fc);
+        try { setInvoice(await issueInvoice(created.id, fc)); }
+        catch (e) { setInvoiceError(e.message); }
+      }
       const full = await fetchOrder(created.id);
       setFinished(full);
       setStage('done');
@@ -893,6 +959,7 @@ export default function Orders() {
 
   function newOrder() {
     setFinished(null); setStage('shop'); setSearch(''); setFilters({});
+    setInvoice(null); setInvoiceError(null); setInvoiceCustomer(null); setWantInvoice(true);
   }
 
   // ============ Confirmación ============
@@ -906,9 +973,27 @@ export default function Orders() {
           </div>
           <div className="page-actions">
             <button className="btn ghost" onClick={newOrder}>Nueva venta</button>
-            <button className="btn primary" onClick={() => window.print()}>Imprimir venta</button>
+            {invoice
+              ? <Link className="btn primary" to={`/invoices/${invoice.id}`}>Ver factura Nº {invoiceNo(invoice.number)}</Link>
+              : <button className="btn primary" onClick={() => window.print()}>Imprimir venta</button>}
           </div>
         </header>
+        {invoice && (
+          <div className="form-ok no-print">
+            Factura Nº {invoiceNo(invoice.number)} emitida a {invoice.customer?.name}. El número de control queda pendiente hasta conectar la imprenta digital.
+          </div>
+        )}
+        {invoiceError && (
+          <div className="form-error no-print inv-retry">
+            <span>La venta quedó registrada, pero la factura no se emitió: {invoiceError}</span>
+            {invoiceCustomer && (
+              <button type="button" className="btn sm" onClick={async () => {
+                try { setInvoice(await issueInvoice(finished.id, invoiceCustomer)); setInvoiceError(null); }
+                catch (e) { setInvoiceError(e.message); }
+              }}>Reintentar</button>
+            )}
+          </div>
+        )}
         <div className="receipt-wrap">
           <OrderReceipt business={business} order={finished} />
         </div>
@@ -1081,6 +1166,12 @@ export default function Orders() {
 
                 {/* Desglose de totales: una línea por concepto, como en el panel */}
                 <div className="pos-ticket-sum totals">
+                  {addIva && (
+                    <>
+                      <div className="totals-row"><span className="muted">Subtotal sin IVA</span><span className="muted">{usd(baseUsd)}</span></div>
+                      <div className="totals-row"><span className="muted">IVA</span><span className="muted">{usd(totalUsd - baseUsd)}</span></div>
+                    </>
+                  )}
                   {discountUsd > 0.005 ? (
                     <>
                       <div className="totals-row"><span>Total lista</span><span>{usd(totalUsd)}</span></div>
@@ -1100,7 +1191,10 @@ export default function Orders() {
                       <div className="totals-row"><span className="muted">Financia Cashea</span><span className="muted">{usd(casheaUsd)}</span></div>
                     </>
                   ) : (
-                    <div className="totals-row"><span>Pagado</span><span>{usd(receivedUsd)}</span></div>
+                    <div className="totals-row"><span>Pagado</span><span>{usd(igtfOn ? vesCredit + usdRaw : receivedUsd)}</span></div>
+                  )}
+                  {igtfUsd > 0.004 && (
+                    <div className="totals-row"><span>IGTF 3 % (de lo pagado en divisas)</span><span>{usd(igtfUsd)}</span></div>
                   )}
                   {!isCovered
                     ? (
@@ -1241,6 +1335,53 @@ export default function Orders() {
                   )}
                   {/* En móvil el resumen queda tapado por esta hoja: el
                       cliente se captura aquí mismo. */}
+                  {taxToggles && (
+                    <div className="pay-taxes" role="group" aria-label="Impuestos de la venta">
+                      <button type="button" className="pay-tax" role="switch" aria-checked={addIva}
+                        onClick={() => {
+                          // Los montos ya escritos siguen cubriendo la misma parte de la venta.
+                          const next = !addIva;
+                          const withIva = cart.reduce((t, c) => t + round2(c.price * c.qty * (1 + ivaOf(c) / 100)), 0);
+                          const k = baseUsd > 0 && withIva > 0 ? (next ? withIva / baseUsd : baseUsd / withIva) : 1;
+                          setAddIva(next);
+                          setPayments((prev) => {
+                            const n = { ...prev };
+                            Object.keys(n).forEach((id) => { if (n[id]) n[id] = (parseAmt(n[id]) * k).toFixed(2); });
+                            return n;
+                          });
+                        }}>
+                        <span className={`switch sm${addIva ? ' on' : ''}`} aria-hidden="true"><span className="switch-knob" /></span>
+                        <span className="pay-tax-text"><strong>IVA</strong><small>{addIva ? `+${usd(ivaUsd)} sobre el precio` : 'Precio con IVA incluido'}</small></span>
+                      </button>
+                      <button type="button" className="pay-tax" role="switch" aria-checked={igtfOn}
+                        onClick={() => {
+                          // Los montos en divisas ya escritos se reajustan con el 3 %.
+                          const next = !igtfOn;
+                          setIgtfOn(next);
+                          setPayments((prev) => {
+                            const n = { ...prev };
+                            selectedMethods.forEach((id) => {
+                              const m = methods.find((x) => x.id === id);
+                              if (m && isForeignCash(m) && n[id]) n[id] = (parseAmt(n[id]) * (next ? 1.03 : 1 / 1.03)).toFixed(2);
+                            });
+                            return n;
+                          });
+                        }}>
+                        <span className={`switch sm${igtfOn ? ' on' : ''}`} aria-hidden="true"><span className="switch-knob" /></span>
+                        <span className="pay-tax-text"><strong>IGTF 3 %</strong><small>{igtfOn ? (igtfUsd > 0 ? `+${usd(igtfUsd)} por el pago en divisas` : 'Sobre lo que se pague en divisas') : 'Sin IGTF'}</small></span>
+                      </button>
+                    </div>
+                  )}
+                  {fiscalOn && (
+                    <button type="button" className="pay-invoice" role="switch" aria-checked={wantInvoice}
+                      onClick={() => setWantInvoice((v) => !v)}>
+                      <span className="pay-invoice-text">
+                        <strong>Factura fiscal</strong>
+                        <small>{wantInvoice ? 'Se emite al finalizar, con la cédula o RIF del cliente.' : 'Esta venta sale solo con el recibo.'}</small>
+                      </span>
+                      <span className={`switch${wantInvoice ? ' on' : ''}`} aria-hidden="true"><span className="switch-knob" /></span>
+                    </button>
+                  )}
                   <CustomerBlock {...customerBlockProps} />
                 </>
               )}

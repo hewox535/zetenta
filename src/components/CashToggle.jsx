@@ -6,7 +6,7 @@ import { useBranch } from '../context/BranchContext';
 import { useConfirm } from './Confirm';
 import OpenCashModal from './OpenCashModal';
 import {
-  fetchOpenCashSession, ensureCashSession, fetchCashSessions, fetchCashReport, fetchBankAccounts,
+  fetchOpenCashSession, ensureCashSession, fetchCashSessions, fetchCashReport, fetchBankAccounts, fetchSessionTaxes,
   closeCashSession, addCashMovement, deleteCashMovement, countOrphanOrders, fetchStaff,
 } from '../lib/api';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
@@ -139,11 +139,13 @@ function CashPanel({ session, business, branchId, onClose, onChanged, daily = fa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [justClosed, setJustClosed] = useState(false);
+  const [taxes, setTaxes] = useState({ iva: 0, igtf: 0 });   // IVA e IGTF cobrados en el turno
 
   const loadReport = useCallback(async () => {
     try {
       setReport(await fetchCashReport(session.id));
       setOrphans(await countOrphanOrders(branchId, session.opened_at));
+      setTaxes(await fetchSessionTaxes(session.id).catch(() => ({ iva: 0, igtf: 0 })));
     } catch (e) { setError(e.message); }
   }, [session.id, session.opened_at, branchId]);
 
@@ -276,6 +278,15 @@ function CashPanel({ session, business, branchId, onClose, onChanged, daily = fa
                   </div>
                 );
               })}
+
+              {(taxes.iva > 0.004 || taxes.igtf > 0.004) && (
+                <div className="cash-taxes" role="note">
+                  <strong>De lo cobrado en este turno, es del SENIAT:</strong>
+                  {taxes.iva > 0.004 && <span>IVA {usd(taxes.iva)}</span>}
+                  {taxes.igtf > 0.004 && <span>IGTF {usd(taxes.igtf)}</span>}
+                  <small>Ya está incluido en las cifras de arriba: cuéntalo igual, pero no es venta.</small>
+                </div>
+              )}
 
               {otherRows.length > 0 && (
                 <div className="totals">

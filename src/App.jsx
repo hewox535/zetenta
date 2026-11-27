@@ -22,6 +22,8 @@ import InventoryHistory from './pages/InventoryHistory';
 import Orders from './pages/Orders';
 import OrdersHistory from './pages/OrdersHistory';
 import OrderView from './pages/OrderView';
+import Invoices from './pages/Invoices';
+import InvoiceView from './pages/InvoiceView';
 import Stats from './pages/Stats';
 import Accounts from './pages/Accounts';
 import Expenses from './pages/Expenses';
@@ -151,6 +153,8 @@ export default function App() {
             <Route path="orders" element={<RequireCapability name="orders"><Orders /></RequireCapability>} />
             <Route path="orders/history" element={<RequireCapability name="orders"><OrdersHistory /></RequireCapability>} />
             <Route path="orders/:id" element={<RequireCapability name="orders"><OrderView /></RequireCapability>} />
+            <Route path="invoices" element={<RequireCapability name="orders"><Invoices /></RequireCapability>} />
+            <Route path="invoices/:id" element={<RequireCapability name="orders"><InvoiceView /></RequireCapability>} />
             {/* La caja ya no es una pantalla: se abre y se cierra desde el menú lateral */}
             <Route path="cash" element={<Navigate to="/" replace />} />
             <Route path="accounts" element={<RequirePermission name="accounts"><RequireCapability name="accounts"><Accounts /></RequireCapability></RequirePermission>} />

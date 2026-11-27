@@ -5,7 +5,7 @@ import Brand from '../components/Brand';
 import { useConfirm } from '../components/Confirm';
 import CashToggle from '../components/CashToggle';
 import BranchPicker from '../components/BranchPicker';
-import { fetchFinanceAlerts } from '../lib/api';
+import { fetchFinanceAlerts, fetchFiscalProfile } from '../lib/api';
 
 const Icon = {
   doc: <svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M13.5 3.5V9H19" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>,
@@ -17,6 +17,7 @@ const Icon = {
   cash: <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M6.5 9.5h.01M17.5 14.5h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>,
   ledger: <svg viewBox="0 0 24 24"><path d="M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M9 9.5l2.5-2.5L14 9.5M11.5 7v6M15 14.5l-2.5 2.5L10 14.5M12.5 17v-6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   receipt: <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 8h6M9 11.5h6M9 15h3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
+  invoice: <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-1.8-3 1.8-3-1.8L6 21z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 8h6M9 11.5h6M9 15h3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
   chart: <svg viewBox="0 0 24 24"><path d="M4 20V4M4 20h16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M8 20v-6M12 20v-9M16 20v-4M20 20V9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
   user: <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.6"/><path d="M4.5 20c.9-3.6 3.6-5.5 7.5-5.5s6.6 1.9 7.5 5.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
   chevLeft: <svg viewBox="0 0 24 24"><path d="M11.5 6L6 12l5.5 6M18 6l-5.5 6 5.5 6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>,
@@ -60,9 +61,19 @@ export default function Shell() {
     fetchFinanceAlerts().then((a) => setAlerts(a || {})).catch(() => {});
   }, [wantsAlerts, pathname]);
 
+  const [fiscalStatus, setFiscalStatus] = useState(null);
+  useEffect(() => {
+    if (!business || !capabilities.invoicing) return;
+    fetchFiscalProfile().then((f) => setFiscalStatus(f?.status || null)).catch(() => {});
+  }, [business, capabilities.invoicing, pathname === '/settings']); // eslint-disable-line react-hooks/exhaustive-deps
+
   const items = [];
   if (capabilities.orders) {
     items.push({ to: '/orders', label: 'Ventas', icon: Icon.cart });
+  }
+  // Facturas: solo con la facturación digital activa.
+  if (capabilities.orders && capabilities.invoicing && fiscalStatus === 'active') {
+    items.push({ to: '/invoices', label: 'Facturas', icon: Icon.invoice });
   }
   // Módulos de administración del negocio: para el admin, o para la vendedora
   // con el permiso otorgado en Negocio → Personal.
