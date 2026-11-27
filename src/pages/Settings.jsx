@@ -62,7 +62,7 @@ export default function Settings() {
 
   const tabs = [
     { key: 'fiscal', label: 'Datos fiscales', desc: 'Nombre, RIF, dirección y sello', icon: 'M4 5h16v14H4zM8 9h8M8 13h5' },
-    capabilities?.orders && { key: 'invoicing', label: 'Facturación', desc: 'Facturas digitales válidas ante el SENIAT', icon: 'M6 3h12v18l-3-1.8-3 1.8-3-1.8L6 21zM9 8h6M9 11.5h6M9 15h3.5' },
+    capabilities?.invoicing && { key: 'invoicing', label: 'Facturación', desc: 'Facturas digitales válidas ante el SENIAT', icon: 'M6 3h12v18l-3-1.8-3 1.8-3-1.8L6 21zM9 8h6M9 11.5h6M9 15h3.5' },
     capabilities?.retentions && { key: 'retentions', label: 'Retenciones', desc: 'Numeración de los comprobantes', icon: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6' },
     capabilities?.inventory && { key: 'inventory', label: 'Inventario', desc: 'Categorías, tallas y stock bajo', icon: 'M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10' },
     capabilities?.inventory && { key: 'catalog', label: 'Catálogo', desc: 'Tu tienda en línea y WhatsApp', icon: 'M5 4h14v4H5zM5 8v12h14V8M9 12h6' },

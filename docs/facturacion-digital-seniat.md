@@ -121,38 +121,49 @@ La lista de imprentas revisadas (quién declara autorización, quién publica AP
 
 ## 7. Lo que ya tiene Zetenta y lo que falta
 
-### Ya implementado (migración `20261202120000_fiscal_invoicing.sql`)
+### Estado: beta, solo en Nácar
+
+El módulo es la capacidad `invoicing` del negocio: la habilita la administración de la plataforma en Administración → Editar → Módulos («Facturación digital (beta)»). Sin ella no se ve nada de esto ni el servidor deja usarlo. Hoy está activa **solo en `nacar`** (la demo de pruebas).
+
+### Ya implementado
+
+Migraciones `20261202120000_fiscal_invoicing.sql` y `20261203120000_iva_igtf_debit_notes.sql`.
 
 - **Activación (Negocio → Facturación):** asistente de 4 pasos con autoguardado.
   1. Tu negocio: persona natural o jurídica, contribuyente ordinario o especial, cómo factura hoy.
-  2. Identidad y empresa: documentos según el tipo de persona y datos fiscales (razón social, RIF, representante, domicilio, actividad principal).
-  3. Actividad: Certificado de Actividad del SENIAT (PDF) y logo de la factura.
-  4. Revisar y firmar: resumen, borrador de la solicitud ante la Intendencia armado con los datos, firma (dibujada o imagen), sello y autorización.
+  2. Identidad y empresa: documentos según el tipo de persona y datos fiscales.
+  3. Actividad: Certificado de Actividad del SENIAT (PDF) y logo.
+  4. Revisar y firmar: resumen, borrador de la solicitud ante la Intendencia, firma, sello y autorización.
 
-  Los documentos van a un bucket privado (`fiscal-docs`, carpeta = negocio). Estados: borrador → en revisión → activa (o "requiere cambios" con nota).
-- **Revisión (Administración → Facturación):** el equipo de Zetenta ve datos y documentos y activa o pide cambios.
-- **IVA por producto:** alícuota 16 %, 8 % o exento (16 % por defecto). El precio incluye el IVA; la alícuota queda congelada en cada línea vendida.
-- **Facturas (`invoices`):**
-  - numeración correlativa sin huecos por negocio y tipo (factura, nota de crédito, nota de débito);
-  - datos del emisor y del cliente congelados al emitir;
-  - líneas con código, descripción, cantidad, precio y alícuota;
-  - totales en bolívares por alícuota (exento, base e IVA 16 %, base e IVA 8 %), descuento prorrateado y equivalente en dólares con la tasa de la venta;
-  - nadie las puede editar ni borrar (sin políticas de escritura; solo funciones del servidor).
-- **Cobro:** interruptor "Factura fiscal" (activo por defecto). Exige cédula o RIF y, para empresas (J, G, C), domicilio fiscal. Si la factura falla, la venta queda y se reintenta.
-- **Detalle de la venta:** "Emitir factura" para una venta que salió sin factura.
-- **Anulación:** al anular una venta facturada se emite sola la nota de crédito; el administrador también puede emitirla desde la factura.
-- **Facturas (menú):** lista por mes y sucursal con buscador, KPIs (facturado, base, IVA débito fiscal) y **Libro de Ventas en CSV**.
-- **Documento imprimible** (carta) con todos los campos; el número de control aparece como "Pendiente".
+  Documentos en el bucket privado `fiscal-docs`. Estados: borrador → en revisión → activa (o «requiere cambios»).
+- **Revisión (Administración → Facturación):** activar o pedir cambios con nota.
+- **IVA por producto:** 16 %, 8 % o exento (16 % por defecto), congelado en cada línea vendida.
+- **IVA e IGTF al cobrar (interruptores, como la plataforma de referencia):**
+  - **IVA:** suma el IVA de cada producto encima del precio. Apagado, el precio se toma con IVA incluido y la factura lo separa.
+  - **IGTF 3 %:** se cobra sobre lo que se paga en divisas; el monto en dólares lo trae incluido ($26,76 = $25,98 de la venta + $0,78 de IGTF).
+  - Los descuentos de contado y especiales se calculan sobre el precio con IVA; los montos ya escritos se reajustan al tocar los interruptores.
+  - La venta guarda `iva_added`, `iva_usd` (neto del descuento), `igtf_usd` e `igtf_base_usd`. El recibo muestra el IVA y el IGTF.
+- **Facturas (`invoices`):** correlativo sin huecos por negocio y tipo; emisor y cliente congelados; totales en Bs por alícuota, descuento prorrateado, IGTF con su base; sin edición ni borrado.
+- **Cobro:** interruptor «Factura fiscal» (exige cédula o RIF, y domicilio para empresas). Si la factura falla, la venta queda y se reintenta.
+- **Detalle de la venta:** «Emitir factura» si salió sin factura.
+- **Notas de crédito:** al anular una venta facturada sale sola; el administrador también la emite desde la factura.
+- **Notas de débito:** desde la factura, con concepto, monto en Bs sin IVA y alícuota; correlativo propio.
+- **Facturas (menú):** lista por mes y sucursal con buscador, KPIs y **Libro de Ventas en CSV** (las notas de crédito restan y las de débito suman).
+- **Documento imprimible** (carta) con todos los campos; el número de control dice «Pendiente».
 
-### Falta (último paso: la imprenta digital)
+### Falta
 
-1. **Conexión con la imprenta:** una función del servidor que, al emitir, envíe la factura a la imprenta, guarde `control_number`, `control_status = 'assigned'` y lo que devuelva (PDF/XML) en `provider_payload`, con reintentos idempotentes y `control_status = 'error'` si falla. La tabla ya tiene esos campos.
-2. **Contingencia:** registrar facturas del talonario de papel y reportarlas.
-3. **IGTF (3 % en pagos en divisas):** las columnas existen (`igtf_base_ves`, `igtf_ves`), pero el cobro no lo calcula. **Por confirmar con un contador** para qué negocios aplica.
-4. **Notas de débito:** el tipo y su correlativo existen; falta la pantalla.
-5. **Entrega por correo o WhatsApp** del PDF de la imprenta.
-6. **Precios sin IVA:** hoy se asume que el precio de venta incluye el IVA.
-7. **Credenciales por negocio:** dónde guardar las de la imprenta (**por decidir** si cada negocio contrata la suya o Zetenta revende folios).
+1. **Conexión con la imprenta digital** (el paso que da validez fiscal): enviar cada documento al emitir, guardar `control_number`, `control_status = 'assigned'` y el PDF/XML en `provider_payload`, con reintentos idempotentes y `control_status = 'error'` si falla.
+2. **Contingencia:** registrar las facturas hechas en talonario cuando no hay sistema y reportarlas.
+3. **Estadísticas sin impuestos:** hoy «ventas netas» incluye el IVA cuando se sumó al cobrar (y el IGTF no se cuenta como venta). Hay que separar IVA e IGTF de la venta en Estadísticas, el cierre del día y los reportes.
+4. **IGTF:**
+   - si se paga de más en divisas (con vuelto), el 3 % se calcula sobre todo lo recibido en divisas, no solo sobre lo que se queda;
+   - falta decidir con un contador si debe encenderse solo para contribuyentes especiales (agentes de percepción) y si va por defecto.
+5. **Valores por defecto:** los interruptores de IVA e IGTF arrancan apagados en cada venta. Falta una configuración por negocio («siempre sumar IVA»).
+6. **Cashea con IVA:** se probó el contado; falta probar Cashea con el IVA sumado.
+7. **Entrega por correo o WhatsApp** del PDF de la imprenta.
+8. **Credenciales de la imprenta por negocio** (**por decidir:** cada negocio contrata la suya o Zetenta revende folios).
+9. **Validación legal:** el borrador de la solicitud, la lista de campos y el IGTF, con un contador, contra las Gacetas 43.032 y 43.484.
 
 ### Próximos pasos
 

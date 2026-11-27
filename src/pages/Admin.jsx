@@ -28,6 +28,7 @@ const CAPABILITIES = [
   ['customers', 'Clientes'],
   ['campaigns', 'Campañas'],
   ['retentions', 'Retenciones'],
+  ['invoicing', 'Facturación digital (beta)'],
 ];
 
 const CAP_HINTS = {
@@ -40,6 +41,7 @@ const CAP_HINTS = {
   customers: 'Base de clientes.',
   campaigns: 'Campañas dirigidas desde el módulo de clientes.',
   retentions: 'Retenciones y proveedores.',
+  invoicing: 'Solicitud de facturación, IVA e IGTF en el cobro, facturas y notas. En pruebas: actívalo solo a negocios de prueba.',
 };
 
 export default function Admin() {

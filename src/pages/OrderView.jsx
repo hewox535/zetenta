@@ -11,7 +11,7 @@ import { formatDate } from '../lib/calc';
 
 export default function OrderView() {
   const { id } = useParams();
-  const { business } = useAuth();
+  const { business, capabilities } = useAuth();
   const [order, setOrder] = useState(null);
   const [error, setError] = useState(null);
   const [docs, setDocs] = useState([]);            // factura y notas de esta venta
@@ -20,7 +20,7 @@ export default function OrderView() {
 
   useEffect(() => {
     fetchInvoicesForOrder(id).then(setDocs).catch(() => {});
-    fetchFiscalProfile().then((f) => setFiscalOn(f?.status === 'active')).catch(() => {});
+    if (capabilities?.invoicing) fetchFiscalProfile().then((f) => setFiscalOn(f?.status === 'active')).catch(() => {});
   }, [id]);
 
   async function openEmit() {

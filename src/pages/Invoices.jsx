@@ -98,7 +98,7 @@ export default function Invoices() {
       <header className="page-head">
         <div>
           <h1>Facturas</h1>
-          <p className="page-sub">Facturas y notas de crédito de {monthLabel(month)} (del {dateVE(`${from}T12:00:00`)} al {dateVE(`${to}T12:00:00`)}).</p>
+          <p className="page-sub">Facturas y notas de crédito y débito de {monthLabel(month)} (del {dateVE(`${from}T12:00:00`)} al {dateVE(`${to}T12:00:00`)}).</p>
         </div>
         <div className="page-actions">
           <button type="button" className="btn ghost" disabled={!inBranch.length} onClick={exportBook}>Libro de Ventas (CSV)</button>
@@ -113,7 +113,7 @@ export default function Invoices() {
       )}
 
       <div className="fin-kpis">
-        <div className="fin-kpi"><span className="fin-kpi-label">Facturas</span><span className="fin-kpi-value">{t.count}</span><span className="fin-kpi-sub">{t.credit} {t.credit === 1 ? 'nota de crédito' : 'notas de crédito'}</span></div>
+        <div className="fin-kpi"><span className="fin-kpi-label">Facturas</span><span className="fin-kpi-value">{t.count}</span><span className="fin-kpi-sub">{t.credit} {t.credit === 1 ? 'nota de crédito' : 'notas de crédito'} · {t.debit} de débito</span></div>
         <div className="fin-kpi"><span className="fin-kpi-label">Total facturado</span><span className="fin-kpi-value">{bs(t.total)}</span><span className="fin-kpi-sub">{usd(t.usd)} · neto de notas</span></div>
         <div className="fin-kpi"><span className="fin-kpi-label">Base imponible</span><span className="fin-kpi-value">{bs(t.base)}</span><span className="fin-kpi-sub">Exento {bs(t.exempt)}</span></div>
         <div className="fin-kpi"><span className="fin-kpi-label">IVA débito fiscal</span><span className="fin-kpi-value">{bs(t.iva)}</span><span className="fin-kpi-sub">Para la declaración del mes</span></div>
@@ -161,7 +161,7 @@ export default function Invoices() {
                     <td>{dayTime(i.issued_at)}</td>
                     <td><Mark text={i.customer?.name} q={q} /><div className="muted"><Mark text={i.customer?.document} q={q} /></div></td>
                     <td><StatusPill inv={i} voided={voidedIds.has(i.id)} /></td>
-                    <td className="r"><strong>{i.doc_type === 'nota_credito' ? '−' : ''}{bs(i.total_ves)}</strong><div className="muted">{usd(i.total_usd)}</div></td>
+                    <td className="r"><strong>{i.doc_type === 'nota_credito' ? '−' : i.doc_type === 'nota_debito' ? '+' : ''}{bs(i.total_ves)}</strong><div className="muted">{usd(i.total_usd)}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -170,7 +170,7 @@ export default function Invoices() {
               {page.map((i) => (
                 <Link key={i.id} to={`/invoices/${i.id}`} className="inv-card">
                   <strong>{DOC_TITLES[i.doc_type]} Nº <Mark text={invoiceNo(i.number)} q={q} /></strong>
-                  <strong className="r">{i.doc_type === 'nota_credito' ? '−' : ''}{bs(i.total_ves)}</strong>
+                  <strong className="r">{i.doc_type === 'nota_credito' ? '−' : i.doc_type === 'nota_debito' ? '+' : ''}{bs(i.total_ves)}</strong>
                   <span className="muted"><Mark text={i.customer?.name} q={q} /> · <Mark text={i.customer?.document} q={q} /></span>
                   <span className="muted r">{usd(i.total_usd)}</span>
                   <span className="muted">{dayTime(i.issued_at)}</span>

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { fetchInvoice, fetchInvoicesForOrder, issueCreditNote } from '../lib/api';
+import { fetchInvoice, fetchInvoicesForOrder, issueCreditNote, issueDebitNote } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import InvoiceDoc from '../components/InvoiceDoc';
 import { FinModal } from '../components/FinUI';
-import { DOC_TITLES, invoiceNo } from '../lib/fiscal';
+import { DOC_TITLES, invoiceNo, IVA_RATES } from '../lib/fiscal';
+import { money } from '../lib/calc';
 import '../components/invoices.css';
 import './finance.css';
 
@@ -15,6 +16,7 @@ export default function InvoiceView() {
   const [siblings, setSiblings] = useState([]);    // documentos de la misma venta
   const [error, setError] = useState(null);
   const [nc, setNc] = useState(null);              // { reason, busy, error }
+  const [nd, setNd] = useState(null);              // { reason, amount, iva, busy, error }
 
   useEffect(() => {
     let alive = true;
@@ -45,12 +47,24 @@ export default function InvoiceView() {
     } catch (err) { setNc((s) => ({ ...s, busy: false, error: err.message })); }
   }
 
+  async function onDebitNote(e) {
+    e.preventDefault();
+    setNd((s) => ({ ...s, busy: true, error: null }));
+    try {
+      const note = await issueDebitNote(inv.id, nd.reason.trim(), Number(String(nd.amount).replace(',', '.')), Number(nd.iva));
+      setSiblings((s) => [...s, note]);
+      setNd(null);
+    } catch (err) { setNd((s) => ({ ...s, busy: false, error: err.message })); }
+  }
+
   if (error) return <div className="page"><div className="form-error">{error}</div></div>;
   if (!inv) return <div className="page"><div className="empty">Cargando…</div></div>;
 
   const related = inv.related_invoice_id ? siblings.find((s) => s.id === inv.related_invoice_id) : null;
   const creditNote = inv.doc_type === 'factura' ? siblings.find((s) => s.doc_type === 'nota_credito' && s.related_invoice_id === inv.id) : null;
   const pending = inv.control_status !== 'assigned';
+  const debitNotes = inv.doc_type === 'factura' ? siblings.filter((s) => s.doc_type === 'nota_debito' && s.related_invoice_id === inv.id) : [];
+  const ndAmount = Number(String(nd?.amount || '').replace(',', '.')) || 0;
 
   return (
     <div className="page">
@@ -67,6 +81,9 @@ export default function InvoiceView() {
           {inv.order_id && <Link to={`/orders/${inv.order_id}`} className="btn ghost">Ver venta</Link>}
           {inv.doc_type === 'factura' && !creditNote && isBusinessAdmin && (
             <button type="button" className="btn ghost" onClick={() => setNc({ reason: '', busy: false, error: null })}>Nota de crédito</button>
+          )}
+          {inv.doc_type === 'factura' && !creditNote && isBusinessAdmin && (
+            <button type="button" className="btn ghost" onClick={() => setNd({ reason: '', amount: '', iva: 16, busy: false, error: null })}>Nota de débito</button>
           )}
           <button className="btn primary" onClick={() => window.print()}>Imprimir</button>
         </div>
@@ -88,7 +105,53 @@ export default function InvoiceView() {
         </div>
       )}
 
+      {debitNotes.length > 0 && (
+        <div className="inv-banner no-print inv-banner-info" role="note">
+          <p>
+            {debitNotes.length === 1 ? 'Tiene una nota de débito: ' : `Tiene ${debitNotes.length} notas de débito: `}
+            {debitNotes.map((d, k) => (
+              <span key={d.id}>{k > 0 && ' · '}<Link to={`/invoices/${d.id}`}>Nº {invoiceNo(d.number)}</Link> ({d.reason}, Bs {money(d.total_ves)})</span>
+            ))}
+          </p>
+        </div>
+      )}
+
       <InvoiceDoc inv={inv} related={related} logoUrl={business?.branding?.logo_url} />
+
+      {nd && (
+        <FinModal title="Emitir nota de débito"
+          sub={`Cargo adicional sobre la factura Nº ${invoiceNo(inv.number)} (un recargo, un ajuste de precio o un flete). Queda numerada y no se puede borrar.`}
+          onClose={() => setNd(null)} busy={nd.busy} onSubmit={onDebitNote}
+          footer={(
+            <>
+              <button type="button" className="btn ghost" onClick={() => setNd(null)}>Cancelar</button>
+              <button className="btn primary" disabled={nd.busy || !nd.reason.trim() || ndAmount <= 0}>{nd.busy ? 'Emitiendo…' : 'Emitir nota de débito'}</button>
+            </>
+          )}>
+          <label className="fm-field">
+            <span className="fm-label">Concepto</span>
+            <input value={nd.reason} onChange={(e) => setNd((s) => ({ ...s, reason: e.target.value }))}
+              placeholder="Ej.: flete de envío, diferencia de precio" required />
+          </label>
+          <div className="nd-grid">
+            <label className="fm-field">
+              <span className="fm-label">Monto en Bs (sin IVA)</span>
+              <input inputMode="decimal" value={nd.amount} placeholder="0,00"
+                onChange={(e) => setNd((s) => ({ ...s, amount: e.target.value.replace(/[^\d.,]/g, '') }))} required />
+            </label>
+            <label className="fm-field">
+              <span className="fm-label">IVA</span>
+              <select value={nd.iva} onChange={(e) => setNd((s) => ({ ...s, iva: Number(e.target.value) }))}>
+                {IVA_RATES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
+          </div>
+          {ndAmount > 0 && (
+            <p className="hint">Total de la nota: Bs {money(ndAmount * (1 + nd.iva / 100))} (IVA Bs {money(ndAmount * nd.iva / 100)}).</p>
+          )}
+          {nd.error && <div className="form-error">{nd.error}</div>}
+        </FinModal>
+      )}
 
       {nc && (
         <FinModal title="Emitir nota de crédito"

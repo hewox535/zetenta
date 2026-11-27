@@ -343,13 +343,17 @@ export default function Orders() {
   // Facturación digital: con el negocio activo, cada venta sale con factura
   // salvo que la cajera la desmarque. La factura exige cédula o RIF.
   const [fiscal, setFiscal] = useState(null);
-  const fiscalOn = fiscal?.status === 'active';
+  const fiscalOn = !!capabilities?.invoicing && fiscal?.status === 'active';
+  // IVA e IGTF opcionales al cobrar (módulo de facturación, beta).
+  const taxToggles = !!capabilities?.invoicing;
+  const [addIva, setAddIva] = useState(false);
+  const [igtfOn, setIgtfOn] = useState(false);
   const [wantInvoice, setWantInvoice] = useState(true);
   const invoicing = fiscalOn && wantInvoice;
   const [invoice, setInvoice] = useState(null);        // factura de la venta recién hecha
   const [invoiceError, setInvoiceError] = useState(null);
   const [invoiceCustomer, setInvoiceCustomer] = useState(null);
-  useEffect(() => { fetchFiscalProfile().then(setFiscal).catch(() => {}); }, []);
+  useEffect(() => { if (capabilities?.invoicing) fetchFiscalProfile().then(setFiscal).catch(() => {}); }, [capabilities?.invoicing]);
 
   const puedeCaja = capabilities.cash && (isBusinessAdmin || !!permissions?.cash);
   useEffect(() => {
@@ -425,7 +429,14 @@ export default function Orders() {
     setCart((prev) => prev.map((c) => (c.id === id ? { ...c, qty } : c)));
   };
   const cartCount = cart.reduce((s, c) => s + c.qty, 0);
-  const totalUsd = cart.reduce((s, c) => s + c.price * c.qty, 0);
+  // Con «IVA» encendido, cada línea cuesta su precio más el IVA del producto:
+  // todo lo demás (descuentos, montos, vuelto) se calcula sobre eso, igual que
+  // create_order(). baseUsd es la venta sin IVA.
+  const productsById = useMemo(() => new Map((products || []).map((p) => [p.id, p])), [products]);
+  const ivaOf = (c) => Number(productsById.get(c.productId)?.iva_rate ?? 16);
+  const lineAmt = (c) => (addIva ? round2(c.price * c.qty * (1 + ivaOf(c) / 100)) : c.price * c.qty);
+  const baseUsd = cart.reduce((s, c) => s + c.price * c.qty, 0);
+  const totalUsd = cart.reduce((s, c) => s + lineAmt(c), 0);
   const totalVes = totalUsd * rate.value;
 
   // ------- pagos (solo los métodos seleccionados) -------
@@ -441,9 +452,12 @@ export default function Orders() {
   // listUsd: lo de Cashea (a precio de lista). bsUsd: el contado en Bs, en $.
   // usdPaid: el contado en divisa.
   const toUsd = (m, amt) => (m.currency === 'USD' ? amt : (rate.value ? round2(amt / rate.value) : 0));
+  // Con IGTF, lo que se paga en divisas trae el 3 % encima: a la venta va amt / 1,03.
+  const fx = (m) => (igtfOn && m && isForeignCash(m) ? 1.03 : 1);
+  const toMerch = (m, amt) => toUsd(m, amt) / fx(m);
   const sumBy = (pred) => selectedMethods.reduce((acc, id) => {
     const m = methods.find((x) => x.id === id);
-    return m && pred(m) ? acc + toUsd(m, parseAmt(payments[id])) : acc;
+    return m && pred(m) ? acc + toMerch(m, parseAmt(payments[id])) : acc;
   }, 0);
   const listUsd = sumBy((m) => isCashea(m));
   // Con Cashea elegido la venta va a precio de lista, desde el momento en que
@@ -461,7 +475,6 @@ export default function Orders() {
   // rebaja el precio de lista con su % de Cashea. Igual que create_order().
   const promoDs = choice === 'custom' ? customDsOf(custom) : discounts.find((x) => x.id === promoId) || null;
   const promoPct = (ds, cashea) => clampPct(cashea ? ds?.cashea_percent : ds?.cash_percent);
-  const productsById = useMemo(() => new Map((products || []).map((p) => [p.id, p])), [products]);
   const qualifies = (ds, productId) => {
     const terms = ds?.term_ids || [];
     if (!terms.length) return true;
@@ -472,7 +485,7 @@ export default function Orders() {
     if (ds) {
       const pc = promoPct(ds, false); const pk = promoPct(ds, true);
       cart.forEach((c) => {
-        const amt = c.price * c.qty;
+        const amt = lineAmt(c);
         const q = qualifies(ds, c.productId);
         const lp = q ? pc : 0;
         if (q) { hits += c.qty; off += round2(amt * pk); }
@@ -516,6 +529,9 @@ export default function Orders() {
   // recibido en efectivo (Bs a USD + USD), para no mostrar "pagado 90$" cuando el
   // descuento hace que se cobren menos. Cuando está cubierto, recibido == a pagar.
   const netTotalUsd = Math.max(0, totalUsd - discountUsd);
+  // IVA de la venta (neto del descuento) e IGTF de lo pagado en divisas; igual que el servidor.
+  const ivaUsd = addIva && totalUsd > 0 ? round2((totalUsd - baseUsd) * (netTotalUsd / totalUsd)) : 0;
+  const igtfUsd = igtfOn ? round2(usdPaid * 0.03) : 0;
   const receivedUsd = vesCredit + usdPaid;
   // Lo que financia Cashea cubre la venta, pero no es plata que entre hoy:
   // en los totales va aparte para no leerlo como "ya pagó".
@@ -552,7 +568,7 @@ export default function Orders() {
       ? { tone: 'warn', label: casheaUsd > PAY_EPS ? 'Falta cobrar la inicial' : 'Falta por cobrar', usd: remainingNet }
       : changeNet > PAY_EPS
         ? { tone: 'change', label: 'Vuelto', usd: changeNet }
-        : { tone: 'ok', label: 'Cobro completo', usd: netTotalUsd };
+        : { tone: 'ok', label: 'Cobro completo', usd: netTotalUsd + igtfUsd };
 
   // Cambiar el descuento (marcar/desmarcar o el %) reescribe los montos ya
   // escritos en esa moneda para que sigan cubriendo la misma parte de la venta.
@@ -654,7 +670,7 @@ export default function Orders() {
   const fullAmountFor = (om, withCashea) => {
     const dm = withCashea ? 0 : (isForeignCash(om) ? effD : effDv);
     const net = (withCashea ? totalUsd - casheaOffFor(promoDs) : totalUsd) * (1 - dm);
-    return (om.currency === 'USD' ? net : net * rate.value).toFixed(2);
+    return (om.currency === 'USD' ? net * fx(om) : net * rate.value).toFixed(2);
   };
 
   // Al escribir un monto con dos métodos de contado elegidos, el otro se
@@ -686,11 +702,11 @@ export default function Orders() {
     const other = methods.find((x) => x.id === cashIds.find((id) => id !== m.id));
     const dmOf = (om) => (casheaSelected ? 0 : isForeignCash(om) ? effD : effDv);
     const dm = dmOf(m); const dOther = dmOf(other);
-    const thisUsd = toUsd(m, parseAmt(val));
+    const thisUsd = toMerch(m, parseAmt(val));
     const covered = dm > 0 ? thisUsd / (1 - dm) : thisUsd;
     const left = Math.max(0, dueUsd - listUsd - covered);
     const otherNet = left * (1 - dOther);
-    const otherAmt = left > PAY_EPS ? (other.currency === 'USD' ? otherNet : otherNet * rate.value).toFixed(2) : '';
+    const otherAmt = left > PAY_EPS ? (other.currency === 'USD' ? otherNet * fx(other) : otherNet * rate.value).toFixed(2) : '';
     setPayments((prev) => ({ ...prev, [m.id]: val, [other.id]: otherAmt }));
   };
 
@@ -737,13 +753,13 @@ export default function Orders() {
     const cur = parseAmt(payments[m.id]);
     // Descuento que le toca a este método: divisa d, Bs dv, Cashea ninguno.
     const dm = isCashea(m) ? 0 : isForeignCash(m) ? d : dv;
-    const curUsd = toUsd(m, cur);
+    const curUsd = toMerch(m, cur);
     const creditOfThis = dm > 0 ? curUsd / (1 - dm) : curUsd;
     const remaining = dueUsd - (paidUsd - creditOfThis);
     if (remaining <= PAY_EPS) return;
     // Se cobra el saldo con el descuento del método: remaining*(1-dm).
     const net = remaining * (1 - dm);
-    const amount = m.currency === 'USD' ? net : net * rate.value;
+    const amount = m.currency === 'USD' ? net * fx(m) : net * rate.value;
     setPayments((prev) => ({ ...prev, [m.id]: amount.toFixed(2) }));
   };
 
@@ -906,6 +922,7 @@ export default function Orders() {
 
       const created = await createOrder({
         items, payments: pays, rate: rate.value, rateSource: rate.source, customerId, customerName, branchId,
+        addIva: taxToggles && addIva, igtf: taxToggles && igtfOn,
         foreignDiscount: Math.round(baseD * 10000) / 100,
         localDiscount: Math.round(baseDv * 10000) / 100,
         discountId: promoId,
@@ -1141,6 +1158,12 @@ export default function Orders() {
 
                 {/* Desglose de totales: una línea por concepto, como en el panel */}
                 <div className="pos-ticket-sum totals">
+                  {addIva && (
+                    <>
+                      <div className="totals-row"><span className="muted">Subtotal sin IVA</span><span className="muted">{usd(baseUsd)}</span></div>
+                      <div className="totals-row"><span className="muted">IVA</span><span className="muted">{usd(totalUsd - baseUsd)}</span></div>
+                    </>
+                  )}
                   {discountUsd > 0.005 ? (
                     <>
                       <div className="totals-row"><span>Total lista</span><span>{usd(totalUsd)}</span></div>
@@ -1161,6 +1184,9 @@ export default function Orders() {
                     </>
                   ) : (
                     <div className="totals-row"><span>Pagado</span><span>{usd(receivedUsd)}</span></div>
+                  )}
+                  {igtfUsd > 0.004 && (
+                    <div className="totals-row"><span>IGTF 3 % (de lo pagado en divisas)</span><span>{usd(igtfUsd)}</span></div>
                   )}
                   {!isCovered
                     ? (
@@ -1301,6 +1327,43 @@ export default function Orders() {
                   )}
                   {/* En móvil el resumen queda tapado por esta hoja: el
                       cliente se captura aquí mismo. */}
+                  {taxToggles && (
+                    <div className="pay-taxes" role="group" aria-label="Impuestos de la venta">
+                      <button type="button" className="pay-tax" role="switch" aria-checked={addIva}
+                        onClick={() => {
+                          // Los montos ya escritos siguen cubriendo la misma parte de la venta.
+                          const next = !addIva;
+                          const withIva = cart.reduce((t, c) => t + round2(c.price * c.qty * (1 + ivaOf(c) / 100)), 0);
+                          const k = baseUsd > 0 && withIva > 0 ? (next ? withIva / baseUsd : baseUsd / withIva) : 1;
+                          setAddIva(next);
+                          setPayments((prev) => {
+                            const n = { ...prev };
+                            Object.keys(n).forEach((id) => { if (n[id]) n[id] = (parseAmt(n[id]) * k).toFixed(2); });
+                            return n;
+                          });
+                        }}>
+                        <span className={`switch sm${addIva ? ' on' : ''}`} aria-hidden="true"><span className="switch-knob" /></span>
+                        <span className="pay-tax-text"><strong>IVA</strong><small>{addIva ? `+${usd(ivaUsd)} sobre el precio` : 'Precio con IVA incluido'}</small></span>
+                      </button>
+                      <button type="button" className="pay-tax" role="switch" aria-checked={igtfOn}
+                        onClick={() => {
+                          // Los montos en divisas ya escritos se reajustan con el 3 %.
+                          const next = !igtfOn;
+                          setIgtfOn(next);
+                          setPayments((prev) => {
+                            const n = { ...prev };
+                            selectedMethods.forEach((id) => {
+                              const m = methods.find((x) => x.id === id);
+                              if (m && isForeignCash(m) && n[id]) n[id] = (parseAmt(n[id]) * (next ? 1.03 : 1 / 1.03)).toFixed(2);
+                            });
+                            return n;
+                          });
+                        }}>
+                        <span className={`switch sm${igtfOn ? ' on' : ''}`} aria-hidden="true"><span className="switch-knob" /></span>
+                        <span className="pay-tax-text"><strong>IGTF 3 %</strong><small>{igtfOn ? (igtfUsd > 0 ? `+${usd(igtfUsd)} por el pago en divisas` : 'Sobre lo que se pague en divisas') : 'Sin IGTF'}</small></span>
+                      </button>
+                    </div>
+                  )}
                   {fiscalOn && (
                     <button type="button" className="pay-invoice" role="switch" aria-checked={wantInvoice}
                       onClick={() => setWantInvoice((v) => !v)}>

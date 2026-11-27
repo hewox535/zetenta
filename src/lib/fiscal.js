@@ -110,10 +110,10 @@ export function salesBookRows(invoices, { fmtDate }) {
 
 // Totales del período (las notas de crédito restan).
 export function bookTotals(invoices) {
-  const t = { count: 0, credit: 0, total: 0, base: 0, iva: 0, exempt: 0, usd: 0 };
+  const t = { count: 0, credit: 0, debit: 0, total: 0, base: 0, iva: 0, exempt: 0, usd: 0 };
   invoices.forEach((i) => {
     const s = i.doc_type === 'nota_credito' ? -1 : 1;
-    if (i.doc_type === 'factura') t.count += 1; else if (i.doc_type === 'nota_credito') t.credit += 1;
+    if (i.doc_type === 'factura') t.count += 1; else if (i.doc_type === 'nota_credito') t.credit += 1; else t.debit += 1;
     t.total += s * i.total_ves; t.exempt += s * i.exempt_ves;
     t.base += s * (Number(i.base_g_ves) + Number(i.base_r_ves));
     t.iva += s * (Number(i.iva_g_ves) + Number(i.iva_r_ves));

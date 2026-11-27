@@ -655,7 +655,7 @@ export async function deleteCustomer(id) {
 // items: [{ variant_id, quantity }]   payments: [{ method_id, method_name, currency, amount }]
 // creditDue (yyyy-mm-dd): lo que no se cobre queda como cuenta por cobrar del
 // cliente, con ese vencimiento.
-export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note, branchId, creditDue, foreignDiscount, localDiscount, discountId, customPercent, customName }) {
+export async function createOrder({ items, payments, rate, rateSource, customerId, customerName, note, branchId, creditDue, foreignDiscount, localDiscount, discountId, customPercent, customName, addIva, igtf }) {
   return unwrap(await supabase.rpc('create_order', {
     p_items: items,
     p_payments: payments,
@@ -674,6 +674,9 @@ export async function createOrder({ items, payments, rate, rateSource, customerI
     // Descuento personalizado (si la cajera escribió un % propio)
     p_custom_percent: customPercent || null,
     p_custom_name: customName || null,
+    // Facturación (beta): IVA sumado al precio e IGTF sobre lo pagado en divisas
+    p_add_iva: !!addIva,
+    p_igtf: !!igtf,
   }));
 }
 
@@ -1110,4 +1113,9 @@ export async function fetchInvoices({ from, to, branchId } = {}) {
 
 export async function fetchCustomer(id) {
   return unwrap(await supabase.from('customers').select('*').eq('id', id).maybeSingle());
+}
+
+// Nota de débito sobre una factura: concepto, monto en Bs sin IVA y alícuota.
+export async function issueDebitNote(invoiceId, reason, amountVes, ivaRate = 16) {
+  return unwrap(await supabase.rpc('issue_debit_note', { p_invoice_id: invoiceId, p_reason: reason, p_amount_ves: amountVes, p_iva_rate: ivaRate }));
 }

@@ -63,16 +63,16 @@ export default function Shell() {
 
   const [fiscalStatus, setFiscalStatus] = useState(null);
   useEffect(() => {
-    if (!business || !capabilities.orders) return;
+    if (!business || !capabilities.invoicing) return;
     fetchFiscalProfile().then((f) => setFiscalStatus(f?.status || null)).catch(() => {});
-  }, [business, capabilities.orders, pathname === '/settings']); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [business, capabilities.invoicing, pathname === '/settings']); // eslint-disable-line react-hooks/exhaustive-deps
 
   const items = [];
   if (capabilities.orders) {
     items.push({ to: '/orders', label: 'Ventas', icon: Icon.cart });
   }
   // Facturas: solo con la facturación digital activa.
-  if (capabilities.orders && fiscalStatus === 'active') {
+  if (capabilities.orders && capabilities.invoicing && fiscalStatus === 'active') {
     items.push({ to: '/invoices', label: 'Facturas', icon: Icon.invoice });
   }
   // Módulos de administración del negocio: para el admin, o para la vendedora
