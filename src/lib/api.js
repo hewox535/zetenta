@@ -624,9 +624,9 @@ function customerResult(res) {
   return unwrap(res);
 }
 
-export async function createCustomer(businessId, { name, document, phone, email }) {
+export async function createCustomer(businessId, { name, document, phone, email, address }) {
   return customerResult(await supabase.from('customers')
-    .insert({ business_id: businessId, name, document: document || '', phone: phone || '', email: email || '' })
+    .insert({ business_id: businessId, name, document: document || '', phone: phone || '', email: email || '', address: address || '' })
     .select().single());
 }
 
@@ -1036,4 +1036,78 @@ export async function fetchSalesTotal(fromISO, toISO, branchId) {
     return q;
   });
   return rows.reduce((s, o) => s + Number(o.total_usd) - Number(o.discount_usd || 0), 0);
+}
+
+// ---------- Facturación digital ----------
+// Perfil fiscal del negocio (la solicitud de activación). null si aún no empezó.
+export async function fetchFiscalProfile() {
+  return unwrap(await supabase.from('fiscal_profiles').select('*').maybeSingle());
+}
+
+// Guarda el avance del asistente (solo los campos que vengan).
+export async function saveFiscalProfile(patch) {
+  return unwrap(await supabase.rpc('save_fiscal_profile', { p: patch }));
+}
+
+export async function submitFiscalProfile() {
+  return unwrap(await supabase.rpc('submit_fiscal_profile'));
+}
+
+// Documentos de la solicitud: bucket privado, carpeta = negocio.
+export async function uploadFiscalDoc(businessId, key, file) {
+  const ext = (file.name?.split('.').pop() || (file.type === 'application/pdf' ? 'pdf' : 'png')).toLowerCase();
+  const path = `${businessId}/${key}-${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from('fiscal-docs')
+    .upload(path, file, { contentType: file.type || undefined, upsert: false });
+  if (error) throw new Error(error.message);
+  return { path, name: file.name || `${key}.${ext}`, uploaded_at: new Date().toISOString() };
+}
+
+export async function fiscalDocUrl(path) {
+  const { data, error } = await supabase.storage.from('fiscal-docs').createSignedUrl(path, 300);
+  if (error) throw new Error(error.message);
+  return data.signedUrl;
+}
+
+// Administración de la plataforma: solicitudes con el nombre del negocio.
+export async function fetchFiscalRequests() {
+  return unwrap(await supabase.from('fiscal_profiles')
+    .select('*, businesses(name, slug)').neq('status', 'draft').order('submitted_at', { ascending: false }));
+}
+
+export async function setFiscalStatus(businessId, status, note = '') {
+  return unwrap(await supabase.rpc('set_fiscal_status', { p_business_id: businessId, p_status: status, p_note: note }));
+}
+
+// customer: { name, document, address, phone, email }
+export async function issueInvoice(orderId, customer) {
+  return unwrap(await supabase.rpc('issue_invoice', { p_order_id: orderId, p_customer: customer }));
+}
+
+export async function issueCreditNote(invoiceId, reason) {
+  return unwrap(await supabase.rpc('issue_credit_note', { p_invoice_id: invoiceId, p_reason: reason }));
+}
+
+export async function fetchInvoice(id) {
+  return unwrap(await supabase.from('invoices').select('*').eq('id', id).single());
+}
+
+// Facturas y notas de una venta (la factura y, si se anuló, su nota de crédito).
+export async function fetchInvoicesForOrder(orderId) {
+  return unwrap(await supabase.from('invoices').select('*').eq('order_id', orderId).order('issued_at'));
+}
+
+// Documentos de un período (yyyy-mm-dd, ambos incluidos), en páginas de 1.000.
+export async function fetchInvoices({ from, to, branchId } = {}) {
+  return fetchAllPages(() => {
+    let q = supabase.from('invoices').select('*');
+    if (from) q = q.gte('issued_at', `${from}T00:00:00-04:00`);
+    if (to) q = q.lte('issued_at', `${to}T23:59:59.999-04:00`);
+    if (branchId) q = q.eq('branch_id', branchId);
+    return q.order('issued_at', { ascending: false }).order('id');
+  });
+}
+
+export async function fetchCustomer(id) {
+  return unwrap(await supabase.from('customers').select('*').eq('id', id).maybeSingle());
 }

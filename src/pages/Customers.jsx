@@ -6,7 +6,7 @@ import {
 import { useConfirm } from '../components/Confirm';
 import { normalizeDoc, findByDoc } from '../lib/customerDoc';
 
-const EMPTY = { name: '', document: '', phone: '', email: '' };
+const EMPTY = { name: '', document: '', phone: '', email: '', address: '' };
 
 const ICON = {
   edit: <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16v4z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M13.5 6.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.6"/></svg>,
@@ -137,7 +137,7 @@ export default function Customers() {
     setError(null); setBusy(true);
     const patch = {
       name: form.name.trim(), document: normalizeDoc(form.document),
-      phone: form.phone.trim(), email: form.email.trim(),
+      phone: form.phone.trim(), email: form.email.trim(), address: form.address.trim(),
     };
     // El documento es único por negocio.
     const dup = findByDoc(rows, patch.document, editing);
@@ -160,7 +160,7 @@ export default function Customers() {
 
   function startEdit(c) {
     setEditing(c.id);
-    setForm({ name: c.name, document: c.document || '', phone: c.phone || '', email: c.email || '' });
+    setForm({ name: c.name, document: c.document || '', phone: c.phone || '', email: c.email || '', address: c.address || '' });
   }
   function cancel() { setEditing(null); setForm(EMPTY); }
 
@@ -284,6 +284,7 @@ export default function Customers() {
             <label>Documento (opcional)<input value={form.document} onChange={set('document')} placeholder="V-12345678" /></label>
             <label>Teléfono (opcional)<input value={form.phone} onChange={set('phone')} inputMode="tel" placeholder="0412-1234567" /></label>
             <label>Correo (opcional)<input value={form.email} onChange={set('email')} type="email" placeholder="ana@correo.com" /></label>
+            <label>Domicilio fiscal (opcional)<input value={form.address} onChange={set('address')} placeholder="Para facturar a empresas (RIF J o G)" /></label>
             <div className="inline-form-actions">
               <button className="btn primary" disabled={busy}>{editing ? 'Guardar' : 'Agregar'}</button>
               {editing && <button type="button" className="btn ghost" onClick={cancel}>Cancelar</button>}

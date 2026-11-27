@@ -5,10 +5,13 @@ import { useBranch } from '../context/BranchContext';
 import {
   fetchProducts, fetchTaxonomies, fetchBankAccounts, fetchCustomers,
   createCustomer, createOrder, fetchOrder, mediaUrl, fetchOpenCashSession, fetchDiscounts,
+  fetchFiscalProfile, issueInvoice,
 } from '../lib/api';
 import { discountStatus, todayVE } from '../lib/discounts';
 import { fetchBcvRates, resolveRate } from '../lib/rates';
 import { notifySale } from '../lib/push';
+import { invoiceNo } from '../lib/fiscal';
+import '../components/invoices.css';
 import { usd, bs, money, variantLabel, offerPrice, hasOffer, offerTag } from '../lib/calc';
 import OrderReceipt from '../components/OrderReceipt';
 import { STORE } from '../components/BranchPicker';
@@ -17,9 +20,11 @@ import { CASH_EVENT, notifyCashChanged } from '../lib/cashEvents';
 import { FinModal } from '../components/FinUI';
 import { findByDoc } from '../lib/customerDoc';
 
-const EMPTY_CUST = { name: '', docType: 'V', document: '', phone: '', email: '' };
+const EMPTY_CUST = { name: '', docType: 'V', document: '', phone: '', email: '', address: '' };
 // Cédula/RIF: V (venezolano), J (jurídico), E (extranjero) + solo números.
-const DOC_TYPES = [['V', 'Venezolano'], ['J', 'Jurídico'], ['E', 'Extranjero']];
+const DOC_TYPES = [['V', 'Venezolano'], ['J', 'Jurídico'], ['E', 'Extranjero'], ['G', 'Gobierno']];
+// Documentos de empresa: la factura exige además su domicilio fiscal.
+const isCompanyDoc = (doc) => /^[JGC]/i.test(doc || '');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const docOf = (c) => (c.document.trim() ? `${c.docType}-${c.document.trim()}` : '');
 
@@ -27,11 +32,11 @@ const docOf = (c) => (c.document.trim() ? `${c.docType}-${c.document.trim()}` : 
 // veces (resumen desktop y hoja de pago móvil) compartiendo el mismo estado.
 function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCustomer,
   showNewCust, setShowNewCust, newCust, setNew, setNewCust, custSearch, setCustSearch,
-  custMatches, pickCustomer, issue, dupCustomer }) {
+  custMatches, pickCustomer, issue, dupCustomer, invoicing }) {
   const emailBad = !!newCust.email.trim() && !EMAIL_RE.test(newCust.email.trim());
   return (
     <div className={`order-customer-block${desktop ? '' : ' oc-mobile'}`}>
-      <div className="oc-label">Cliente{required ? '' : ' (opcional)'}</div>
+      <div className="oc-label">Cliente{required || invoicing ? '' : ' (opcional)'}</div>
       {selectedCustomer ? (
         <div className="oc-selected">
           <div>
@@ -48,10 +53,13 @@ function CustomerBlock({ desktop, required, fieldReq, selectedCustomer, resetCus
               onChange={(e) => setNewCust((f) => ({ ...f, docType: e.target.value }))}>
               {DOC_TYPES.map(([k, l]) => <option key={k} value={k} title={l}>{k}</option>)}
             </select>
-            <input placeholder={`Cédula o RIF${fieldReq('document') ? '' : ' (opcional)'}`} inputMode="numeric"
+            <input placeholder={`Cédula o RIF${fieldReq('document') || invoicing ? '' : ' (opcional)'}`} inputMode="numeric"
               value={newCust.document} aria-label="Número de documento"
               onChange={(e) => setNewCust((f) => ({ ...f, document: e.target.value.replace(/\D/g, '') }))} />
           </div>
+          {invoicing && isCompanyDoc(newCust.docType) && (
+            <input placeholder="Domicilio fiscal (sale en la factura)" value={newCust.address} onChange={setNew('address')} />
+          )}
           <input placeholder={`Teléfono${fieldReq('phone') ? '' : ' (opcional)'}`}
             value={newCust.phone} onChange={setNew('phone')} inputMode="tel" />
           <input placeholder="Correo (opcional)" value={newCust.email} onChange={setNew('email')} type="email"
@@ -332,6 +340,16 @@ export default function Orders() {
   const casheaDefault = Number(business?.cashea_initial_percent) || 40;
   const [busy, setBusy] = useState(false);
   const [finished, setFinished] = useState(null);      // pedido guardado (con ítems/pagos)
+  // Facturación digital: con el negocio activo, cada venta sale con factura
+  // salvo que la cajera la desmarque. La factura exige cédula o RIF.
+  const [fiscal, setFiscal] = useState(null);
+  const fiscalOn = fiscal?.status === 'active';
+  const [wantInvoice, setWantInvoice] = useState(true);
+  const invoicing = fiscalOn && wantInvoice;
+  const [invoice, setInvoice] = useState(null);        // factura de la venta recién hecha
+  const [invoiceError, setInvoiceError] = useState(null);
+  const [invoiceCustomer, setInvoiceCustomer] = useState(null);
+  useEffect(() => { fetchFiscalProfile().then(setFiscal).catch(() => {}); }, []);
 
   const puedeCaja = capabilities.cash && (isBusinessAdmin || !!permissions?.cash);
   useEffect(() => {
@@ -802,6 +820,18 @@ export default function Orders() {
     }
     if (custRequired && !selectedCustomer) return 'Este negocio requiere el cliente: búscalo o toca «Nuevo cliente» para registrarlo.';
     return null;
+  })() || (() => {
+    // Lo que además pide la factura.
+    if (!invoicing) return null;
+    if (selectedCustomer) {
+      if (!selectedCustomer.document) return `${selectedCustomer.name} no tiene cédula ni RIF: elige otro cliente o desmarca «Factura fiscal».`;
+      if (isCompanyDoc(selectedCustomer.document) && !(selectedCustomer.address || '').trim()) return `Falta el domicilio fiscal de ${selectedCustomer.name} (agrégalo en Clientes) o desmarca «Factura fiscal».`;
+      return null;
+    }
+    if (!showNewCust || !newCust.name.trim()) return 'Para facturar, busca al cliente o regístralo con su cédula o RIF.';
+    if (!newCust.document.trim()) return 'La factura necesita la cédula o RIF del cliente.';
+    if (isCompanyDoc(newCust.docType) && !newCust.address.trim()) return 'Para facturar a una empresa escribe su domicilio fiscal.';
+    return null;
   })();
 
   // Props compartidas del bloque de cliente: se renderiza en el resumen
@@ -812,6 +842,7 @@ export default function Orders() {
     selectedCustomer, resetCustomer, showNewCust, setShowNewCust,
     newCust, setNew, setNewCust, custSearch, setCustSearch, custMatches, pickCustomer, dupCustomer,
     issue: stage === 'pay' ? custIssue : null,
+    invoicing,
   };
 
   // ------- categorías / filtros -------
@@ -847,15 +878,17 @@ export default function Orders() {
       // Resuelve el cliente: existente, nuevo (se crea) o ninguno.
       let customerId = selectedCustomer?.id || null;
       let customerName = selectedCustomer?.name || '';
+      let cust = selectedCustomer;
       if (creatingCustNow) {
         const created = await createCustomer(business.id, {
           name: newCust.name.trim(), document: docOf(newCust),
-          phone: newCust.phone.trim(), email: newCust.email.trim(),
+          phone: newCust.phone.trim(), email: newCust.email.trim(), address: newCust.address.trim(),
         });
         setCustomers((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
         // Queda seleccionado: si la venta falla y se reintenta, no se vuelve a crear.
         setSelectedCustomer(created); setShowNewCust(false); setNewCust(EMPTY_CUST);
         customerId = created.id; customerName = created.name;
+        cust = created;
       }
 
       const items = cart.map((c) => ({ variant_id: c.id, quantity: c.qty }));
@@ -880,6 +913,14 @@ export default function Orders() {
         customName: choice === 'custom' ? custom.name.trim() : null,
       });
       notifySale(created.id); // push a los admins del negocio (fuego y olvido)
+      // La factura va aparte: si falla, la venta ya quedó y se puede emitir luego.
+      setInvoice(null); setInvoiceError(null); setInvoiceCustomer(null);
+      if (invoicing && cust) {
+        const fc = { name: cust.name, document: cust.document, address: cust.address || '', phone: cust.phone || '', email: cust.email || '' };
+        setInvoiceCustomer(fc);
+        try { setInvoice(await issueInvoice(created.id, fc)); }
+        catch (e) { setInvoiceError(e.message); }
+      }
       const full = await fetchOrder(created.id);
       setFinished(full);
       setStage('done');
@@ -893,6 +934,7 @@ export default function Orders() {
 
   function newOrder() {
     setFinished(null); setStage('shop'); setSearch(''); setFilters({});
+    setInvoice(null); setInvoiceError(null); setInvoiceCustomer(null); setWantInvoice(true);
   }
 
   // ============ Confirmación ============
@@ -906,9 +948,27 @@ export default function Orders() {
           </div>
           <div className="page-actions">
             <button className="btn ghost" onClick={newOrder}>Nueva venta</button>
-            <button className="btn primary" onClick={() => window.print()}>Imprimir venta</button>
+            {invoice
+              ? <Link className="btn primary" to={`/invoices/${invoice.id}`}>Ver factura Nº {invoiceNo(invoice.number)}</Link>
+              : <button className="btn primary" onClick={() => window.print()}>Imprimir venta</button>}
           </div>
         </header>
+        {invoice && (
+          <div className="form-ok no-print">
+            Factura Nº {invoiceNo(invoice.number)} emitida a {invoice.customer?.name}. El número de control queda pendiente hasta conectar la imprenta digital.
+          </div>
+        )}
+        {invoiceError && (
+          <div className="form-error no-print inv-retry">
+            <span>La venta quedó registrada, pero la factura no se emitió: {invoiceError}</span>
+            {invoiceCustomer && (
+              <button type="button" className="btn sm" onClick={async () => {
+                try { setInvoice(await issueInvoice(finished.id, invoiceCustomer)); setInvoiceError(null); }
+                catch (e) { setInvoiceError(e.message); }
+              }}>Reintentar</button>
+            )}
+          </div>
+        )}
         <div className="receipt-wrap">
           <OrderReceipt business={business} order={finished} />
         </div>
@@ -1241,6 +1301,16 @@ export default function Orders() {
                   )}
                   {/* En móvil el resumen queda tapado por esta hoja: el
                       cliente se captura aquí mismo. */}
+                  {fiscalOn && (
+                    <button type="button" className="pay-invoice" role="switch" aria-checked={wantInvoice}
+                      onClick={() => setWantInvoice((v) => !v)}>
+                      <span className="pay-invoice-text">
+                        <strong>Factura fiscal</strong>
+                        <small>{wantInvoice ? 'Se emite al finalizar, con la cédula o RIF del cliente.' : 'Esta venta sale solo con el recibo.'}</small>
+                      </span>
+                      <span className={`switch${wantInvoice ? ' on' : ''}`} aria-hidden="true"><span className="switch-knob" /></span>
+                    </button>
+                  )}
                   <CustomerBlock {...customerBlockProps} />
                 </>
               )}
