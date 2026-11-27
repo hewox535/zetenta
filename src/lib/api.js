@@ -1031,14 +1031,15 @@ export async function expenseReceiptUrl(path) {
 export async function fetchSalesTotal(fromISO, toISO, branchId) {
   const rows = await fetchAllPages(() => {
     let q = supabase.from('orders')
-      .select('id, total_usd, discount_usd, created_at')
+      .select('id, total_usd, discount_usd, iva_usd, created_at')
       .is('cancelled_at', null)
       .gte('created_at', fromISO).lt('created_at', toISO)
       .order('created_at').order('id');
     if (branchId) q = q.eq('branch_id', branchId);
     return q;
   });
-  return rows.reduce((s, o) => s + Number(o.total_usd) - Number(o.discount_usd || 0), 0);
+  // Sin el IVA que se sumó al cobrar (no es venta).
+  return rows.reduce((s, o) => s + Number(o.total_usd) - Number(o.discount_usd || 0) - Number(o.iva_usd || 0), 0);
 }
 
 // ---------- Facturación digital ----------
@@ -1118,4 +1119,12 @@ export async function fetchCustomer(id) {
 // Nota de débito sobre una factura: concepto, monto en Bs sin IVA y alícuota.
 export async function issueDebitNote(invoiceId, reason, amountVes, ivaRate = 16) {
   return unwrap(await supabase.rpc('issue_debit_note', { p_invoice_id: invoiceId, p_reason: reason, p_amount_ves: amountVes, p_iva_rate: ivaRate }));
+}
+
+// IVA e IGTF cobrados en un turno de caja (para el arqueo): están en el dinero
+// contado, pero son del SENIAT.
+export async function fetchSessionTaxes(sessionId) {
+  const rows = unwrap(await supabase.from('orders').select('iva_usd, igtf_usd')
+    .eq('cash_session_id', sessionId).is('cancelled_at', null).or('iva_usd.gt.0,igtf_usd.gt.0'));
+  return rows.reduce((t, o) => ({ iva: t.iva + Number(o.iva_usd || 0), igtf: t.igtf + Number(o.igtf_usd || 0) }), { iva: 0, igtf: 0 });
 }

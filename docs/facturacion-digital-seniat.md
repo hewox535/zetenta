@@ -102,6 +102,16 @@ Ninguna fuente transcribe el artículo de contenido. Según facturas de ejemplo 
 
 ## 5. ¿Hay que integrarse con el Seniat?
 
+### La herramienta gratuita del SENIAT («Moda Seniat»)
+
+- **Qué es:** el SENIAT anunció en octubre y noviembre de 2026 un portal web y una app móvil gratuitos para emitir facturas electrónicas, dirigidos a pequeños negocios, emprendedores y personas naturales. Reportan que permitiría facturar sin conexión y sincronizar después, ver el RIF y declarar impuestos.
+- **Estado al 27-nov-2026:** **todavía no está disponible**. Se anunció para diciembre de 2026, sin fecha exacta.
+- **Sin API:** según los reportes, la carga es manual (cliente, productos y alícuotas a mano). No sirve para que un sistema como Zetenta emita automáticamente: para eso sigue haciendo falta una imprenta digital.
+- **Qué hacer cuando salga:**
+  - revisarla con un usuario real del SENIAT (el dueño del negocio inicia sesión él mismo);
+  - ver si exporta las facturas o si se puede usar como respaldo de contingencia.
+
+
 - **No.** No se encontró ninguna API pública del Seniat para facturar. Su portal y su app gratuitos son de uso manual.
 - **La integración es con una imprenta digital autorizada.** Cada imprenta tiene su propia API; no hay un estándar común.
 - **Alternativa no recomendada para empezar:** que Zetenta sea imprenta digital. Exige:
@@ -155,15 +165,18 @@ Migraciones `20261202120000_fiscal_invoicing.sql` y `20261203120000_iva_igtf_deb
 
 1. **Conexión con la imprenta digital** (el paso que da validez fiscal): enviar cada documento al emitir, guardar `control_number`, `control_status = 'assigned'` y el PDF/XML en `provider_payload`, con reintentos idempotentes y `control_status = 'error'` si falla.
 2. **Contingencia:** registrar las facturas hechas en talonario cuando no hay sistema y reportarlas.
-3. **Estadísticas sin impuestos:** hoy «ventas netas» incluye el IVA cuando se sumó al cobrar (y el IGTF no se cuenta como venta). Hay que separar IVA e IGTF de la venta en Estadísticas, el cierre del día y los reportes.
-4. **IGTF:**
-   - si se paga de más en divisas (con vuelto), el 3 % se calcula sobre todo lo recibido en divisas, no solo sobre lo que se queda;
-   - falta decidir con un contador si debe encenderse solo para contribuyentes especiales (agentes de percepción) y si va por defecto.
-5. **Valores por defecto:** los interruptores de IVA e IGTF arrancan apagados en cada venta. Falta una configuración por negocio («siempre sumar IVA»).
-6. **Cashea con IVA:** se probó el contado; falta probar Cashea con el IVA sumado.
-7. **Entrega por correo o WhatsApp** del PDF de la imprenta.
-8. **Credenciales de la imprenta por negocio** (**por decidir:** cada negocio contrata la suya o Zetenta revende folios).
-9. **Validación legal:** el borrador de la solicitud, la lista de campos y el IGTF, con un contador, contra las Gacetas 43.032 y 43.484.
+3. **IGTF:** falta decidir con un contador si debe encenderse solo para contribuyentes especiales (agentes de percepción) y si va encendido por defecto.
+4. **Valores por defecto:** los interruptores de IVA e IGTF arrancan apagados en cada venta. Falta una configuración por negocio («siempre sumar IVA»).
+5. **Entrega por correo o WhatsApp** del PDF de la imprenta.
+6. **Credenciales de la imprenta por negocio** (**por decidir:** cada negocio contrata la suya o Zetenta revende folios).
+7. **Validación legal:** el borrador de la solicitud, la lista de campos y el IGTF, con un contador, contra las Gacetas 43.032 y 43.484.
+
+### Resuelto después
+
+- **Estadísticas sin impuestos:** las ventas netas, el estado de resultados, el gráfico por sucursal y el total contra gastos ya no cuentan el IVA sumado al cobrar; «Cómo se cobró» muestra el IVA y el IGTF cobrados aparte («es del SENIAT»).
+- **Cierre del día:** el arqueo muestra cuánto del dinero del turno es IVA e IGTF (se cuenta igual, pero no es venta).
+- **IGTF con vuelto:** el 3 % se calcula solo sobre lo pagado en divisas que se queda en la venta. Ejemplo: venta de $32,48 pagada con un billete de $50 → IGTF $0,97 (no $1,46) y vuelto $16,55. Migración `20261204120000_igtf_sin_vuelto.sql`.
+- **Cashea con IVA:** probado. $32,48 con IVA = $19,49 financiados + $12,99 de inicial; con IGTF, la inicial en dólares sale en $13,38 y el IGTF es $0,39. La factura cuadra (Bs 13.148 a 400 Bs/$).
 
 ### Próximos pasos
 

@@ -1807,3 +1807,8 @@ table.sheet td.s-firma { font-size: 12px; font-weight: 700; }
   .adm-main { flex-basis: calc(100% - 54px); }
   .adm-actions { flex-basis: 100%; justify-content: flex-start; padding-left: 54px; }
 }
+/* Arqueo: IVA e IGTF cobrados en el turno (facturación beta) */
+.cash-taxes { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bg); font-size: 13px; }
+.cash-taxes strong { flex: 1 1 100%; font-size: 13px; }
+.cash-taxes span { font-weight: 600; font-variant-numeric: tabular-nums; }
+.cash-taxes small { flex: 1 1 100%; color: var(--text-2); }

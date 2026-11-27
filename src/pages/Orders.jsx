@@ -513,6 +513,8 @@ export default function Orders() {
   const isCovered = cart.length > 0 && rawRemaining <= PAY_EPS;
   // Descuento concedido: Cashea primero, luego Bs, luego divisa (igual que el servidor).
   let discountUsd = casheaOff;
+  // Lo que queda por cubrir con divisas (para el IGTF: el vuelto no lo paga).
+  let usdNeeded = 0;
   {
     let pending = dueUsd - listUsd;
     if (pending > 0 && bsUsd > 0) {
@@ -522,6 +524,7 @@ export default function Orders() {
     if (pending > 0 && usdPaid > 0) {
       discountUsd += usdPaid + PAY_EPS >= round2(pending * (1 - d)) ? pending * d : (usdPaid * d) / (1 - d);
     }
+    usdNeeded = pending > 0 ? round2(pending * (1 - d)) : 0;
   }
   const promoOn = promo.hits > 0 && promoPct(promoDs, casheaSelected) > 0;
   const discountLabel = promoOn ? promoDs.name : d > 0 && dv > 0 ? 'Descuento de contado' : dv > 0 ? 'Descuento en bolívares' : 'Descuento por divisa';
@@ -531,8 +534,12 @@ export default function Orders() {
   const netTotalUsd = Math.max(0, totalUsd - discountUsd);
   // IVA de la venta (neto del descuento) e IGTF de lo pagado en divisas; igual que el servidor.
   const ivaUsd = addIva && totalUsd > 0 ? round2((totalUsd - baseUsd) * (netTotalUsd / totalUsd)) : 0;
-  const igtfUsd = igtfOn ? round2(usdPaid * 0.03) : 0;
-  const receivedUsd = vesCredit + usdPaid;
+  // IGTF: 3 % de lo pagado en divisas que se queda en la venta (igual que el servidor).
+  const igtfUsd = igtfOn ? round2(Math.min(usdPaid, usdNeeded) * 0.03) : 0;
+  // Lo pagado en divisas tal cual (con el IGTF adentro), para el vuelto.
+  const usdRaw = igtfOn ? round2(usdPaid * 1.03) : usdPaid;
+  // Lo recibido para la venta: Bs + divisas, sin el IGTF (que es aparte).
+  const receivedUsd = igtfOn ? vesCredit + usdRaw - igtfUsd : vesCredit + usdPaid;
   // Lo que financia Cashea cubre la venta, pero no es plata que entre hoy:
   // en los totales va aparte para no leerlo como "ya pagó".
   const casheaUsd = selectedMethods.reduce((s, id) => {
@@ -682,7 +689,7 @@ export default function Orders() {
     const casheaM = methods.find((x) => selectedMethods.includes(x.id) && isCashea(x));
     if (casheaM && !isCashea(m) && cashIds.length === 1 && rate.value && dueUsd > 0) {
       const amt = parseAmt(val);
-      const initialUsd = m.currency === 'USD' ? amt : amt / rate.value;
+      const initialUsd = toMerch(m, amt);
       if (initialUsd > 0 && initialUsd < dueUsd - PAY_EPS) {
         const financedUsd = dueUsd - initialUsd;
         const pct = Math.round((initialUsd / dueUsd) * 10000) / 100;
@@ -792,7 +799,8 @@ export default function Orders() {
       const n = { ...prev, [m.id]: amount.toFixed(2) };
       if (others.length === 1) {
         const om = methods.find((x) => x.id === others[0]);
-        n[om.id] = (om.currency === 'USD' ? initialUsd : initialUsd * rate.value).toFixed(2);
+        // Con IGTF, la inicial en divisas trae el 3 % encima.
+        n[om.id] = (om.currency === 'USD' ? initialUsd * fx(om) : initialUsd * rate.value).toFixed(2);
       }
       return n;
     });
@@ -1183,7 +1191,7 @@ export default function Orders() {
                       <div className="totals-row"><span className="muted">Financia Cashea</span><span className="muted">{usd(casheaUsd)}</span></div>
                     </>
                   ) : (
-                    <div className="totals-row"><span>Pagado</span><span>{usd(receivedUsd)}</span></div>
+                    <div className="totals-row"><span>Pagado</span><span>{usd(igtfOn ? vesCredit + usdRaw : receivedUsd)}</span></div>
                   )}
                   {igtfUsd > 0.004 && (
                     <div className="totals-row"><span>IGTF 3 % (de lo pagado en divisas)</span><span>{usd(igtfUsd)}</span></div>
